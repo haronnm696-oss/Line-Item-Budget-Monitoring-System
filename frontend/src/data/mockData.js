@@ -54,10 +54,10 @@ export const monthlyExpensesChart = [
 ];
 
 export const projects = [
-  { id: 1, code: 'MOST-RD-2026-001', title: 'Enhancing Urban Mobility', agency: 'MOST-BARMM', implementing_agency: 'MSU-Marawi', project_leader: 'Prof. Mudzna M. Asakil', budget: 3178376, spent: 1730000, counterpart: 1178376, funding: 2000000, period: 'Jan – Dec 2026', status: 'Ongoing' },
-  { id: 2, code: 'RP-2026-009', title: 'Halal Goat Value Chain Development, Lanao del Sur', agency: 'DOST-PCAARRD', budget: 1870000, spent: 1514700, period: 'Mar 2026 – Feb 2027', status: 'Ongoing', leader: 'Dr. S. Mangondaya' },
-  { id: 3, code: 'RP-2025-031', title: 'Meranaw Weaving Heritage Digital Archive', agency: 'CHED', budget: 940000, spent: 927780, period: 'Jun 2025 – May 2026', status: 'Completed', leader: 'Dr. N. Guro' },
-  { id: 4, code: 'RP-2026-021', title: 'Community Nutrition Surveillance, Marawi Resettlement Sites', agency: 'DOST-PCHRD', budget: 1210000, spent: 148830, period: 'Aug 2026 – Jul 2027', status: 'Planning', leader: 'Dr. F. Alonto' },
+  { id: 1, code: 'MOST-RD-2026-001', title: 'Enhancing Urban Mobility', agency: 'MOST-BARMM', implementing_agency: 'MSU-Marawi', project_leader: 'Prof. Mudzna M. Asakil', program: 'Urban Mobility Program', budget: 3178376, spent: 1730000, counterpart: 1178376, funding: 2000000, period: 'Jan – Dec 2026', status: 'Ongoing' },
+  { id: 2, code: 'RP-2026-009', title: 'Halal Goat Value Chain Development, Lanao del Sur', agency: 'DOST-PCAARRD', project_leader: 'Dr. S. Mangondaya', program: 'Halal Goat Value Chain Program', budget: 1870000, spent: 1514700, period: 'Mar 2026 – Feb 2027', status: 'Ongoing' },
+  { id: 3, code: 'RP-2025-031', title: 'Meranaw Weaving Heritage Digital Archive', agency: 'CHED', project_leader: 'Dr. N. Guro', program: 'Cultural Heritage Program', budget: 940000, spent: 927780, period: 'Jun 2025 – May 2026', status: 'Completed' },
+  { id: 4, code: 'RP-2026-021', title: 'Community Nutrition Surveillance, Marawi Resettlement Sites', agency: 'DOST-PCHRD', project_leader: 'Dr. F. Alonto', program: 'Community Nutrition Program', budget: 1210000, spent: 148830, period: 'Aug 2026 – Jul 2027', status: 'Planning' },
 ];
 
 export const libCategoriesPS = [
@@ -76,12 +76,18 @@ export const libCategoriesMOOE = [
 ];
 
 export const expenses = [
-  { id: 388, date: 'Sep 14', ref: 'OR-2841', desc: 'Water sampling reagents — 3rd batch', category: 'Supplies & Materials', amount: 18450, status: 'Pending' },
-  { id: 382, date: 'Sep 09', ref: 'TV-0917', desc: 'Field travel — Marawi to Binidayan station', category: 'Travel Expenses', amount: 7860, status: 'Verified' },
-  { id: 381, date: 'Sep 05', ref: 'BI-1130', desc: 'Laboratory analysis fee — MSU-NSRC', category: 'Other Services', amount: 24000, status: 'Verified' },
-  { id: 379, date: 'Sep 02', ref: 'OR-2790', desc: 'Reproduction of survey forms', category: 'Supplies & Materials', amount: 1120, status: 'Rejected' },
-  { id: 376, date: 'Aug 28', ref: 'OR-2765', desc: 'GPS unit battery replacements', category: 'Supplies & Materials', amount: 3540, status: 'Verified' },
-  { id: 371, date: 'Aug 21', ref: 'TV-0902', desc: 'Boat rental — sampling stations 4–6', category: 'Travel Expenses', amount: 9500, status: 'Verified' },
+  { id: 388, date: '2026-09-14', ref: 'OR-2841', desc: 'Water sampling reagents — 3rd batch', category: 'Supplies & Materials (IoT Sensors, Laptops)', amount: 18450, status: 'Pending', recorded_by: 'Norjannah Haron', verified_by: null },
+  { id: 382, date: '2026-09-09', ref: 'TV-0917', desc: 'Field travel — Marawi to Binidayan station', category: 'Traveling Expenses', amount: 7860, status: 'Verified', recorded_by: 'Norjannah Haron', verified_by: 'Faisal Sarip' },
+  { id: 381, date: '2026-09-05', ref: 'BI-1130', desc: 'Laboratory analysis fee — MSU-NSRC', category: 'Professional Services (Programmers/Enumerators)', amount: 24000, status: 'Verified', recorded_by: 'Norjannah Haron', verified_by: 'Faisal Sarip' },
+  { id: 379, date: '2026-09-02', ref: 'OR-2790', desc: 'Reproduction of survey forms', category: 'Supplies & Materials (IoT Sensors, Laptops)', amount: 1120, status: 'Rejected', recorded_by: 'Norjannah Haron', verified_by: null },
+  { id: 376, date: '2026-08-28', ref: 'OR-2765', desc: 'GPS unit battery replacements', category: 'Supplies & Materials (IoT Sensors, Laptops)', amount: 3540, status: 'Verified', recorded_by: 'Norjannah Haron', verified_by: 'Faisal Sarip' },
+  { id: 371, date: '2026-08-21', ref: 'TV-0902', desc: 'Boat rental — sampling stations 4–6', category: 'Traveling Expenses', amount: 9500, status: 'Verified', recorded_by: 'Norjannah Haron', verified_by: 'Faisal Sarip' },
+  { id: 370, date: '2026-08-15', ref: 'OR-2750', desc: 'Internet subscription — September', category: 'Communication Expenses', amount: 10500, status: 'Verified', recorded_by: 'Faisal Sarip', verified_by: 'Faisal Sarip' },
+  { id: 369, date: '2026-08-10', ref: 'TV-0895', desc: 'Field travel — Marawi to Balo-i station', category: 'Traveling Expenses', amount: 6200, status: 'Verified', recorded_by: 'Norjannah Haron', verified_by: 'Faisal Sarip' },
+  { id: 368, date: '2026-08-05', ref: 'PR-2026-08', desc: 'Enumerators honoraria — Q2 field work', category: 'Professional Services (Programmers/Enumerators)', amount: 45000, status: 'Verified', recorded_by: 'Faisal Sarip', verified_by: 'Faisal Sarip' },
+  { id: 367, date: '2026-07-30', ref: 'SV-2026-07', desc: 'Cloud server rent — AWS July', category: 'Cloud/Server Rent', amount: 12000, status: 'Verified', recorded_by: 'Faisal Sarip', verified_by: 'Faisal Sarip' },
+  { id: 366, date: '2026-07-25', ref: 'OR-2710', desc: 'Office supplies — printing and binding', category: 'Supplies & Materials (IoT Sensors, Laptops)', amount: 8300, status: 'Verified', recorded_by: 'Norjannah Haron', verified_by: 'Faisal Sarip' },
+  { id: 365, date: '2026-07-15', ref: 'UT-2026-07', desc: 'Electricity — project office July', category: 'Utilities', amount: 9800, status: 'Verified', recorded_by: 'Faisal Sarip', verified_by: 'Faisal Sarip' },
 ];
 
 export const payrollRun = {
@@ -101,12 +107,22 @@ export const payrollRun = {
 };
 
 export const auditLog = [
-  { id: 1, ts: 'Sep 15 · 16:42', user: 'N. Haron', action: 'created', record: 'Payroll #214', change: 'Sep 2026 · S. Dimaporo · net ₱16,674.00', ip: '203.87.141.22' },
-  { id: 2, ts: 'Sep 14 · 10:05', user: 'N. Haron', action: 'created', record: 'Expense #388', change: 'OR-2841 · ₱18,450.00 · Supplies & Materials', ip: '203.87.141.22' },
-  { id: 3, ts: 'Sep 09 · 14:31', user: 'F. Sarip', action: 'verified', record: 'Expense #382', change: 'status: pending → verified', ip: '203.87.140.8' },
-  { id: 4, ts: 'Sep 02 · 09:12', user: 'F. Sarip', action: 'rejected', record: 'Expense #379', change: 'status: pending → rejected · "duplicate of OR-2781"', ip: '203.87.140.8' },
-  { id: 5, ts: 'Sep 01 · 08:57', user: 'Dr. A. Macarambon', action: 'approved', record: 'Payroll · Aug 2026', change: '4 records · total net ₱64,199.25', ip: '203.87.139.4' },
-  { id: 6, ts: 'Aug 30 · 11:20', user: 'R. Bayabao', action: 'updated', record: 'LibCategory #6', change: 'allocated_amount: ₱800,000 → ₱860,000', ip: '203.87.141.19' },
+  { id: 1, ts: '2026-09-15 16:42:00', date: '2026-09-15', user: 'Norjannah Haron', action: 'created', record: 'Payroll #214', recordType: 'Payroll', change: 'Sep 2026 · S. Dimaporo · net ₱16,674.00', ip: '203.87.141.22' },
+  { id: 2, ts: '2026-09-14 10:05:00', date: '2026-09-14', user: 'Norjannah Haron', action: 'created', record: 'Expense #388', recordType: 'Expense', change: 'OR-2841 · ₱18,450.00 · Supplies & Materials', ip: '203.87.141.22' },
+  { id: 3, ts: '2026-09-09 14:31:00', date: '2026-09-09', user: 'Faisal Sarip', action: 'verified', record: 'Expense #382', recordType: 'Expense', change: 'status: pending → verified', ip: '203.87.140.8' },
+  { id: 4, ts: '2026-09-02 09:12:00', date: '2026-09-02', user: 'Faisal Sarip', action: 'rejected', record: 'Expense #379', recordType: 'Expense', change: 'status: pending → rejected · "duplicate of OR-2781"', ip: '203.87.140.8' },
+  { id: 5, ts: '2026-09-01 08:57:00', date: '2026-09-01', user: 'Dr. Aminah Macarambon', action: 'approved', record: 'Payroll · Aug 2026', recordType: 'Payroll', change: '4 records · total net ₱64,199.25', ip: '203.87.139.4' },
+  { id: 6, ts: '2026-08-30 11:20:00', date: '2026-08-30', user: 'Dr. Rahana Bayabao', action: 'updated', record: 'LibCategory #6', recordType: 'LibCategory', change: 'allocated_amount: ₱800,000 → ₱860,000', ip: '203.87.141.19' },
+  { id: 7, ts: '2026-08-28 15:30:00', date: '2026-08-28', user: 'Norjannah Haron', action: 'created', record: 'Expense #376', recordType: 'Expense', change: 'OR-2765 · GPS unit battery replacements · ₱3,540.00', ip: '203.87.141.22' },
+  { id: 8, ts: '2026-08-25 09:00:00', date: '2026-08-25', user: 'Faisal Sarip', action: 'verified', record: 'Expense #376', recordType: 'Expense', change: 'status: pending → verified', ip: '203.87.140.8' },
+  { id: 9, ts: '2026-08-21 10:15:00', date: '2026-08-21', user: 'Norjannah Haron', action: 'created', record: 'Expense #371', recordType: 'Expense', change: 'TV-0902 · Boat rental — sampling stations 4–6 · ₱9,500.00', ip: '203.87.141.22' },
+  { id: 10, ts: '2026-08-15 16:20:00', date: '2026-08-15', user: 'Faisal Sarip', action: 'verified', record: 'Expense #370', recordType: 'Expense', change: 'OR-2750 · Internet subscription — September · ₱10,500.00', ip: '203.87.140.8' },
+  { id: 11, ts: '2026-08-10 11:05:00', date: '2026-08-10', user: 'Norjannah Haron', action: 'created', record: 'Expense #369', recordType: 'Expense', change: 'TV-0895 · Field travel — Marawi to Balo-i station · ₱6,200.00', ip: '203.87.141.22' },
+  { id: 12, ts: '2026-08-05 14:00:00', date: '2026-08-05', user: 'Faisal Sarip', action: 'verified', record: 'Expense #368', recordType: 'Expense', change: 'PR-2026-08 · Enumerators honoraria — Q2 field work · ₱45,000.00', ip: '203.87.140.8' },
+  { id: 13, ts: '2026-07-30 09:45:00', date: '2026-07-30', user: 'Faisal Sarip', action: 'verified', record: 'Expense #367', recordType: 'Expense', change: 'SV-2026-07 · Cloud server rent — AWS July · ₱12,000.00', ip: '203.87.140.8' },
+  { id: 14, ts: '2026-07-25 10:30:00', date: '2026-07-25', user: 'Norjannah Haron', action: 'created', record: 'Expense #366', recordType: 'Expense', change: 'OR-2710 · Office supplies — printing and binding · ₱8,300.00', ip: '203.87.141.22' },
+  { id: 15, ts: '2026-07-15 11:15:00', date: '2026-07-15', user: 'Faisal Sarip', action: 'verified', record: 'Expense #365', recordType: 'Expense', change: 'UT-2026-07 · Electricity — project office July · ₱9,800.00', ip: '203.87.140.8' },
+  { id: 16, ts: '2026-07-10 08:30:00', date: '2026-07-10', user: 'Dr. Rahana Bayabao', action: 'updated', record: 'Project #1', recordType: 'Project', change: 'budget: ₱3,178,376.00 → ₱3,278,376.00', ip: '203.87.141.19' },
 ];
 
 export const team = [
@@ -115,6 +131,71 @@ export const team = [
   { name: 'Norjannah Haron', email: 'n.haron@msumain.edu.ph', empId: 'MSU-09214', position: 'Research Assistant', role: 'Research Assistant', assigned: 'Jan 10, 2026', status: 'Active' },
   { name: 'Faisal Sarip', email: 'f.sarip@msumain.edu.ph', empId: 'MSU-03327', position: 'Admin Officer IV, OVCRE', role: 'Finance/Admin Staff', assigned: 'Jan 10, 2026', status: 'Active' },
   { name: 'Sittie Dimaporo', email: 's.dimaporo@msumain.edu.ph', empId: 'MSU-11048', position: 'Research Aide I', role: 'Researcher', assigned: 'Feb 01, 2026', status: 'Inactive' },
+];
+
+// Master system user registry — every registered account in the database.
+export const systemUsers = [
+  {
+    id: 1,
+    name: 'Dr. Aminah Macarambon',
+    email: 'a.macarambon@msumain.edu.ph',
+    empId: 'MSU-04182',
+    position: 'Professor VI, CNSM',
+    role: 'Project Leader',
+    status: 'Active',
+    joined: 'Jan 06, 2026',
+  },
+  {
+    id: 2,
+    name: 'Dr. Rahana Bayabao',
+    email: 'r.bayabao@msumain.edu.ph',
+    empId: 'MSU-05561',
+    position: 'Associate Professor, CICS',
+    role: 'Program Leader',
+    status: 'Active',
+    joined: 'Jan 06, 2026',
+  },
+  {
+    id: 3,
+    name: 'Norjannah Haron',
+    email: 'n.haron@msumain.edu.ph',
+    empId: 'MSU-09214',
+    position: 'Research Assistant',
+    role: 'Research Assistant',
+    status: 'Active',
+    joined: 'Jan 10, 2026',
+  },
+  {
+    id: 4,
+    name: 'Faisal Sarip',
+    email: 'f.sarip@msumain.edu.ph',
+    empId: 'MSU-03327',
+    position: 'Admin Officer IV, OVCRE',
+    role: 'Finance/Admin Staff',
+    status: 'Active',
+    joined: 'Jan 10, 2026',
+  },
+  {
+    id: 5,
+    name: 'Sittie Dimaporo',
+    email: 's.dimaporo@msumain.edu.ph',
+    empId: 'MSU-11048',
+    position: 'Research Aide I',
+    role: 'Researcher',
+    status: 'Inactive',
+    joined: 'Feb 01, 2026',
+  },
+];
+
+// Project assignments — which user is on which project, with their role on that project.
+export const projectAssignments = [
+  { userId: 1, projectId: 1, role: 'Project Leader', assigned: 'Jan 06, 2026' },
+  { userId: 2, projectId: 1, role: 'Program Leader', assigned: 'Jan 06, 2026' },
+  { userId: 3, projectId: 1, role: 'Research Assistant', assigned: 'Jan 10, 2026' },
+  { userId: 4, projectId: 1, role: 'Finance/Admin Staff', assigned: 'Jan 10, 2026' },
+  { userId: 5, projectId: 1, role: 'Researcher', assigned: 'Feb 01, 2026' },
+  { userId: 1, projectId: 2, role: 'Project Leader', assigned: 'Mar 01, 2026' },
+  { userId: 3, projectId: 3, role: 'Researcher', assigned: 'Jun 01, 2025' },
 ];
 
 export const researchSubmissions = [
