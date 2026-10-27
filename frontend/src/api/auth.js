@@ -77,12 +77,14 @@ export async function login(email, password) {
   }
 }
 
-export async function register({ name, email, password, role }) {
+export async function register({ name: _name, email, password, role, first_name, last_name, employee_id, contact_number, college, department } = {}) {
   const cleanEmail = normalizeEmail(email);
-  const cleanName = (name || '').trim();
+  const cleanFirstName = (first_name || '').trim();
+  const cleanLastName = (last_name || '').trim();
+  const cleanName = [cleanFirstName, cleanLastName].filter(Boolean).join(' ').trim();
 
-  if (!cleanName) {
-    throw new Error('Full name is required.');
+  if (!cleanFirstName || !cleanLastName) {
+    throw new Error('First and last name are required.');
   }
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
     throw new Error('Enter a valid Gmail address.');
@@ -118,9 +120,14 @@ export async function register({ name, email, password, role }) {
   try {
     await client.get(ENDPOINTS.csrf); // prime the XSRF cookie for Sanctum SPA auth
     const res = await client.post(ENDPOINTS.register, {
-      name: cleanName,
+      first_name: cleanFirstName,
+      last_name: cleanLastName,
       email: cleanEmail,
       password,
+      employee_id: employee_id || undefined,
+      contact_number: contact_number || undefined,
+      college: college || undefined,
+      department: department || undefined,
       role,
     });
     const user = res.data.user;

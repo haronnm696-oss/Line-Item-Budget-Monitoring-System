@@ -16,5 +16,6 @@ class DatabaseSeeder extends Seeder
         $this->call(DemoUsersSeeder::class);
         $this->call(ProjectsSeeder::class);
         $this->call(LibCategoriesSeeder::class);
+        $this->call(DashboardDemoSeeder::class);
     }
 }
