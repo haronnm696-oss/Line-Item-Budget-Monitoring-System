@@ -11,13 +11,16 @@ class Project extends Model
 
     protected $fillable = [
         'code', 'title', 'description', 'funding_agency_id',
-        'total_approved_budget', 'start_date', 'end_date', 'status',
+        'total_approved_budget', 'implementing_agency_counterpart',
+        'funding_agency_amount', 'start_date', 'end_date', 'status',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
         'total_approved_budget' => 'decimal:2',
+        'implementing_agency_counterpart' => 'decimal:2',
+        'funding_agency_amount' => 'decimal:2',
     ];
 
     public function fundingAgency()
@@ -51,6 +54,16 @@ class Project extends Model
     public function payrolls()
     {
         return $this->hasMany(Payroll::class);
+    }
+
+    public function tranches()
+    {
+        return $this->hasMany(ProjectTranche::class)->orderBy('sequence');
+    }
+
+    public function approvalRequests()
+    {
+        return $this->hasMany(ApprovalRequest::class);
     }
 
     /** Users holding a specific role slug on this project (e.g. all Project Leaders). */

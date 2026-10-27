@@ -4,7 +4,7 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
+import Register from './pages/Register';
 import ProgramLeaderDashboard from './pages/dashboards/ProgramLeaderDashboard';
 import ProjectLeaderDashboard from './pages/dashboards/ProjectLeaderDashboard';
 import ResearcherDashboard from './pages/dashboards/ResearcherDashboard';
@@ -24,12 +24,20 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard" element={<ProgramLeaderDashboard />} />
+              <Route path="/program-leader-dashboard" element={<ProgramLeaderDashboard />} />
               <Route path="/dashboard/program-leader" element={<ProgramLeaderDashboard />} />
+              <Route path="/project-leader-dashboard" element={<ProjectLeaderDashboard />} />
+              <Route path="/dashboard/project-leader" element={<ProjectLeaderDashboard />} />
+              <Route path="/research-assistant-dashboard" element={<ResearchAssistantDashboard />} />
+              <Route path="/dashboard/research-assistant" element={<ResearchAssistantDashboard />} />
+              <Route path="/researcher-dashboard" element={<ResearcherDashboard />} />
+              <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
               <Route path="/dashboard/project-leader" element={<ProjectLeaderDashboard />} />
               <Route path="/dashboard/research-assistant" element={<ResearchAssistantDashboard />} />
               <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />

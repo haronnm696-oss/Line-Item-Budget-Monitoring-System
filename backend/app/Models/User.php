@@ -12,8 +12,8 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'name', 'employee_id', 'email', 'password', 'role_id',
-        'position', 'college_department', 'is_active',
+        'name', 'first_name', 'last_name', 'email', 'password', 'employee_id', 'contact_number', 'college', 'department', 'role_id',
+        'position', 'email_verified_at', 'is_active',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -21,7 +21,6 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'is_active' => 'boolean',
-        'password' => 'hashed',
     ];
 
     // Projects this user is attached to, with role pivot data

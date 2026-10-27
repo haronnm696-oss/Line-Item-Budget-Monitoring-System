@@ -1,331 +1,424 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ROUTE_BY_ROLE } from './Dashboard';
+import { ROLE_MAP, normalizeRole } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
-import { isValidEmail, normalizeEmail } from '../api/auth';
 
-const ROLE_OPTIONS = [
-  { label: 'Program Leader', slug: 'program-leader' },
-  { label: 'Project Leader', slug: 'project-leader' },
-  { label: 'Research Assistant', slug: 'research-assistant' },
-  { label: 'Researcher', slug: 'researcher' },
-];
+// All assignable roles, derived from the canonical ROLE_MAP so the login
+// selector and post-login routing always stay in sync.
+const ALL_ROLES = Object.entries(ROLE_MAP).map(([code, info]) => ({
+  code,
+  label: info.label,
+  path: ROUTE_BY_ROLE[code] || '/dashboard',
+}));
 
-const DEMO_PASSWORD = 'Password123!';
+const DEFAULT_ROLE = 'PRG';
 
-const DEMO_ACCOUNTS = [
-  { role: 'Program Leader', email: 'ilham.gaml@msumain.edu.ph', slug: 'program-leader' },
-  { role: 'Project Leader', email: 'project.leader@msumain.edu.ph', slug: 'project-leader' },
-  { role: 'Research Assistant', email: 'ra.sample@msumain.edu.ph', slug: 'research-assistant' },
-  { role: 'Researcher', email: 'researcher.sample@msumain.edu.ph', slug: 'researcher' },
+// Map a role (code or label-ish value) to its dashboard URL.
+function getDashboardPath(roleCode) {
+  const code = normalizeRole({ role: roleCode }) || DEFAULT_ROLE;
+  return ROUTE_BY_ROLE[code] || '/dashboard';
+}
+
+// Mock Google OAuth accounts offered in the "Continue with Google" picker,
+// each pre-assigned to the dashboard they should land on.
+const GOOGLE_ACCOUNTS = [
+  { email: 'r.bayabao@msumain.edu.ph', name: 'Dr. Rahana Bayabao', initials: 'RB', role: 'PRG' },
+  { email: 'a.macarambon@msumain.edu.ph', name: 'Dr. Aminah Macarambon', initials: 'AM', role: 'PL' },
 ];
 
 export default function Login() {
-  // ---------- Login state ----------
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('macadaub.jnnh@msumain.edu.ph');
+  const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('user') || '{}');
+      return normalizeRole(raw) || DEFAULT_ROLE;
+    } catch {
+      return DEFAULT_ROLE;
+    }
+  });
+
+  const { signIn } = useAuth();
   const [submitting, setSubmitting] = useState(false);
 
-  // ---------- Registration state ----------
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regRole, setRegRole] = useState('');
-  const [regError, setRegError] = useState('');
-  const [registering, setRegistering] = useState(false);
-
-  // ---------- Forgot password state ----------
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotError, setForgotError] = useState('');
-  const [forgotStatus, setForgotStatus] = useState(''); // '' | 'sent'
-  const [resetting, setResetting] = useState(false);
-
-  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
-
-  const { signIn, signUp, requestPasswordReset } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // ---------- Login ----------
-  const cleanEmail = normalizeEmail(email);
-  const emailOk = !cleanEmail || isValidEmail(cleanEmail);
-  const passwordOk = !password || password.length >= 8;
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const clean = normalizeEmail(email);
-    if (!isValidEmail(clean)) {
-      setError('Enter a valid Gmail address.');
-      return;
-    }
-    if (!password || password.length < 8) {
-      setError('Password must be at least 8 characters.');
+  const handleLogin = async (e) => {
+    e?.preventDefault();
+    if (!email || !password) {
+      setError('Please fill in all fields.');
       return;
     }
     setSubmitting(true);
     setError('');
     try {
-      await signIn(clean, password);
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
+      // Sign in through the Laravel API (axios -> Sanctum session -> MySQL)
+      const user = await signIn(email, password);
+      // Route to the dashboard mapped to the user's role
+      const path = getDashboardPath(user?.role);
+      navigate(path, { replace: true });
     } catch (err) {
-      setError(err.message || 'Invalid email or password.');
+      setError(err?.message || 'Sign in failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
-  }
+  };
 
-  // ---------- Register ----------
-  async function handleRegister(e) {
-    e.preventDefault();
-    const clean = normalizeEmail(regEmail);
-    setRegError('');
-    if (!regName) {
-      setRegError('Full name is required.');
-      return;
-    }
-    if (!isValidEmail(clean)) {
-      setRegError('Enter a valid Gmail address.');
-      return;
-    }
-    if (!regPassword || regPassword.length < 8) {
-      setRegError('Password must be at least 8 characters.');
-      return;
-    }
-    if (!regRole) {
-      setRegError('Please select a role.');
-      return;
-    }
-    setRegistering(true);
-    try {
-      await signUp({ name: regName, email: clean, password: regPassword, role: regRole });
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
-    } catch (err) {
-      setRegError(err.message || 'Registration failed. Please try again.');
-    } finally {
-      setRegistering(false);
-    }
-  }
-
-  // ---------- Forgot password ----------
-  async function handleForgot(e) {
-    e.preventDefault();
-    const clean = normalizeEmail(forgotEmail);
-    setForgotError('');
-    setForgotStatus('');
-    if (!isValidEmail(clean)) {
-      setForgotError('Enter a valid Gmail address.');
-      return;
-    }
-    setResetting(true);
-    try {
-      await requestPasswordReset(clean);
-      setForgotStatus('sent');
-    } catch (err) {
-      setForgotError(err.message || 'Unable to process your request. Please try again.');
-    } finally {
-      setResetting(false);
-    }
-  }
-
-  // ---------- Demo credentials ----------
-  function fillDemo(email, password) {
-    setEmail(email);
-    setPassword(password);
-    setError('');
-  }
-
-  const linkBtn = (onClick, children) => (
-    <button type="button" onClick={onClick} className="link-btn" aria-label={children}>
-      {children}
-    </button>
-  );
+  const handleGoogleSelect = (userEmail) => {
+    const account = GOOGLE_ACCOUNTS.find((a) => a.email === userEmail);
+    const roleCode = account?.role || selectedRole;
+    localStorage.setItem('user', JSON.stringify({ email: userEmail, role: roleCode }));
+    setIsGoogleModalOpen(false);
+    navigate(getDashboardPath(roleCode), { replace: true });
+  };
 
   return (
-    <div className="login-screen">
-      <div className="login-card">
-        <div className="login-brand">
-          <div className="seal">MSU</div>
-          <h2>LIB Monitoring System</h2>
-          <p>Externally Funded Research Projects · Mindanao State University–Main Campus</p>
+    <div 
+      style={{
+        minHeight: '100vh',
+        width: '100%',
+        background: 'radial-gradient(circle at top left, #5a061c, #26020b, #110005)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '32px 16px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        boxSizing: 'border-box'
+      }}
+    >
+      {/* Outer Main Container Card */}
+      <div 
+        style={{
+          width: '100%',
+          maxWidth: '1000px',
+          minHeight: '580px',
+          borderRadius: '24px',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          background: 'rgba(20, 2, 7, 0.45)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          overflow: 'hidden',
+          position: 'relative'
+        }}
+      >
+        {/* Left Hero Section (Branding & Info) */}
+        <div 
+          style={{
+            flex: '1 1 500px',
+            padding: '48px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div>
+            {/* Logo Badge */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '32px' }}>
+              <div 
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  backgroundColor: '#f59e0b',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: '900',
+                  color: '#26020b',
+                  fontSize: '14px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)'
+                }}
+              >
+                M
+              </div>
+              <span style={{ color: '#ffffff', fontWeight: '800', fontSize: '13px', letterSpacing: '1px' }}>
+                MSU-MAIN
+              </span>
+            </div>
+
+            {/* Title */}
+            <h1 style={{ fontSize: '48px', fontWeight: '900', color: '#ffffff', margin: '0 0 16px 0', tracking: '-1px' }}>
+              Welcome<span style={{ color: '#fbbf24' }}>!</span>
+            </h1>
+
+            <div style={{ width: '60px', height: '4px', background: 'linear-gradient(to right, #fbbf24, #f43f5e)', borderRadius: '2px', marginBottom: '24px' }} />
+
+            <p style={{ color: 'rgba(254, 205, 211, 0.8)', fontSize: '15px', lineHeight: '1.6', maxWidth: '400px', margin: '0 0 24px 0' }}>
+              LIB Monitoring System for Externally Funded Research Projects at Mindanao State University – Main Campus.
+            </p>
+
+            <div 
+              style={{
+                display: 'inline-block',
+                padding: '6px 14px',
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: '9999px',
+                color: '#fcd34d',
+                fontSize: '11px',
+                fontWeight: '700',
+                letterSpacing: '0.5px'
+              }}
+            >
+              EXTERNALLY FUNDED RESEARCH
+            </div>
+          </div>
+
+          <div style={{ fontSize: '11px', color: 'rgba(254, 205, 211, 0.4)', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '32px' }}>
+            MSU-MAIN CAMPUS · EXTERNALLY FUNDED RESEARCH
+          </div>
         </div>
 
-        {/* ---------- LOGIN ---------- */}
-        {mode === 'login' && (
-          <>
-            <form className="login-body" onSubmit={handleSubmit} noValidate>
-              <div className="field">
-                <label htmlFor="email">Gmail</label>
+        {/* Right Section - Floating Glassmorphic Sign-In Box */}
+        <div 
+          style={{
+            flex: '1 1 400px',
+            padding: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            style={{
+              width: '100%',
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '20px',
+              padding: '32px',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div style={{ marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
+                Sign <span style={{ borderBottom: '3px solid #fbbf24', paddingBottom: '2px' }}>in</span>
+              </h2>
+              <p style={{ fontSize: '12px', color: 'rgba(254, 205, 211, 0.7)', marginTop: '6px' }}>
+                Sign in to continue to your research dashboard.
+              </p>
+            </div>
+
+            {error && (
+              <div style={{ padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '10px', color: '#fecdd3', fontSize: '12px', marginBottom: '16px' }}>
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'rgba(254, 205, 211, 0.9)', marginBottom: '6px' }}>
+                  Email address
+                </label>
                 <input
-                  id="email"
                   type="email"
-                  autoComplete="username"
-                  placeholder="e.g. project.leader@gmail.com or ilham.gaml@msumain.edu.ph"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  aria-invalid={cleanEmail && !emailOk ? 'true' : undefined}
+                  placeholder="name@msumain.edu.ph"
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#ffffff',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                  required
                 />
-                {cleanEmail && !emailOk && (
-                  <div className="role-preview err">Enter a valid email address.</div>
-                )}
               </div>
-              <div className="field">
-                <label htmlFor="pw">Password</label>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(254, 205, 211, 0.9)' }}>
+                    Password
+                  </label>
+                  <a href="#forgot" style={{ fontSize: '11px', color: '#fbbf24', textDecoration: 'none' }}>
+                    Forgot password?
+                  </a>
+                </div>
                 <div style={{ position: 'relative' }}>
                   <input
-                    id="pw"
                     type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    aria-invalid={password && !passwordOk ? 'true' : undefined}
+                    placeholder="••••••••"
+                    style={{
+                      width: '100%',
+                      backgroundColor: 'rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      color: '#ffffff',
+                      borderRadius: '10px',
+                      padding: '12px 40px 12px 14px',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                    required
                   />
                   <button
                     type="button"
-                    className="icon-btn"
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
-                    onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255,255,255,0.6)',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
                   >
-                    {showPassword ? '🙈' : '👁'}
+                    {showPassword ? '🙈' : '👁️'}
                   </button>
                 </div>
-                {password && !passwordOk && (
-                  <div className="role-preview err">Password must be at least 8 characters.</div>
-                )}
               </div>
-              {error && <div className="banner over">{error}</div>}
-              <button className="btn primary" type="submit" disabled={submitting}>
-                {submitting && <span className="spin" />}Sign in
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'rgba(254, 205, 211, 0.9)', marginBottom: '6px' }}>
+                  Role
+                </label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#ffffff',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    fontSize: '13px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  {ALL_ROLES.map(({ code, label }) => (
+                    <option key={code} value={code}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                style={{
+                  width: '100%',
+                  marginTop: '8px',
+                  background: 'linear-gradient(to right, #f59e0b, #e11d48)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  boxShadow: '0 10px 15px -3px rgba(225, 29, 72, 0.3)'
+                }}
+              >
+                Sign In
               </button>
-              <div className="login-foot">
-                Sign in with your Gmail. You are sent straight to your role&apos;s dashboard.
-                <br />
-                Don&apos;t have an account?{' '}
-                {linkBtn(() => setMode('register'), 'Sign Up')}
-                &nbsp;|&nbsp;
-                {linkBtn(() => setMode('forgot'), 'Forgot Password?')}
-              </div>
             </form>
 
-            {/* ---------- DEMO CREDENTIALS ---------- */}
-            <div className="demo-credentials">
-              <h3>Demo Credentials</h3>
-              <p className="demo-hint">One-click to fill the login form for testing. Default password: <b>{DEMO_PASSWORD}</b></p>
-              <div className="demo-grid">
-                {DEMO_ACCOUNTS.map((acct) => (
-                  <button
-                    key={acct.email}
-                    type="button"
-                    className="btn demo-btn"
-                    onClick={() => fillDemo(acct.email, DEMO_PASSWORD)}
-                  >
-                    <span className="demo-role">{acct.role}</span>
-                    <span className="demo-email">{acct.email}</span>
-                  </button>
-                ))}
-              </div>
+            <div style={{ position: 'relative', margin: '20px 0', textAlign: 'center' }}>
+              <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.15)', width: '100%' }} />
+              <span style={{ position: 'absolute', top: '-8px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#2d040f', padding: '0 8px', color: 'rgba(254, 205, 211, 0.5)', fontSize: '10px', fontWeight: '700' }}>
+                OR
+              </span>
             </div>
-          </>
-        )}
 
-        {/* ---------- REGISTER ---------- */}
-        {mode === 'register' && (
-          <form className="login-body" onSubmit={handleRegister} noValidate>
-            <div className="field">
-              <label htmlFor="reg-name">Full Name</label>
-              <input
-                id="reg-name"
-                type="text"
-                autoComplete="name"
-                placeholder="e.g. Juan Dela Cruz"
-                value={regName}
-                onChange={(e) => setRegName(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="reg-email">Gmail Address</label>
-              <input
-                id="reg-email"
-                type="email"
-                autoComplete="email"
-                placeholder="e.g. jane.doe@gmail.com"
-                value={regEmail}
-                onChange={(e) => setRegEmail(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="reg-pw">Password</label>
-              <input
-                id="reg-pw"
-                type="password"
-                autoComplete="new-password"
-                placeholder="••••••••"
-                value={regPassword}
-                onChange={(e) => setRegPassword(e.target.value)}
-              />
-              {regPassword && regPassword.length < 8 && (
-                <div className="role-preview err">Password must be at least 8 characters.</div>
-              )}
-            </div>
-            <div className="field">
-              <label htmlFor="reg-role">Role</label>
-              <select
-                id="reg-role"
-                value={regRole}
-                onChange={(e) => setRegRole(e.target.value)}
-                autoComplete="off"
-              >
-                <option value="">Select a role</option>
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r.slug} value={r.slug}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-            {regError && <div className="banner over">{regError}</div>}
-            <button className="btn primary" type="submit" disabled={registering}>
-              {registering && <span className="spin" />}Create account
+            <button
+              type="button"
+              onClick={() => setIsGoogleModalOpen(true)}
+              style={{
+                width: '100%',
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                color: '#ffffff',
+                fontSize: '12px',
+                fontWeight: '600',
+                padding: '10px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <svg style={{ width: '16px', height: '16px' }} viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.1 9 5 12 5z" />
+                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
+                <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z" />
+                <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.1-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z" />
+              </svg>
+              Continue with Google
             </button>
-            <div className="login-foot">
-              Already have an account?{' '}
-              {linkBtn(() => setMode('login'), 'Sign in')}
-            </div>
-          </form>
-        )}
 
-        {/* ---------- FORGOT PASSWORD ---------- */}
-        {mode === 'forgot' && (
-          <form className="login-body" onSubmit={handleForgot} noValidate>
-            <div className="field">
-              <label htmlFor="forgot-email">Registered Gmail Address</label>
-              <input
-                id="forgot-email"
-                type="email"
-                autoComplete="email"
-                placeholder="e.g. jane.doe@gmail.com"
-                value={forgotEmail}
-                onChange={(e) => setForgotEmail(e.target.value)}
-              />
-            </div>
-            {forgotError && <div className="banner over">{forgotError}</div>}
-            {forgotStatus === 'sent' && (
-              <div className="banner ok">
-                If an account exists for that address, a password reset link has been sent.
-              </div>
-            )}
-            <button className="btn primary" type="submit" disabled={resetting}>
-              {resetting && <span className="spin" />}Send reset link
-            </button>
-            <div className="login-foot">
-              Remember your password?{' '}
-              {linkBtn(() => setMode('login'), 'Sign in')}
-            </div>
-          </form>
-        )}
+            <p style={{ textAlign: 'center', fontSize: '12px', color: 'rgba(254, 205, 211, 0.6)', marginTop: '16px' }}>
+              Don't have an account?{' '}
+              <Link to="/register" style={{ color: '#fbbf24', fontWeight: '600', textDecoration: 'underline' }}>
+                Register here
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
+
+      {/* Google Modal */}
+      {isGoogleModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ backgroundColor: '#1e030b', border: '1px solid rgba(255,255,255,0.2)', width: '100%', maxWidth: '360px', borderRadius: '16px', padding: '24px', color: '#fff' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 4px 0' }}>Choose an Account</h3>
+            <p style={{ fontSize: '12px', color: 'rgba(254,205,211,0.6)', margin: '0 0 16px 0' }}>to continue to MSU LIB Monitoring</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+              <button
+                onClick={() => handleGoogleSelect('r.bayabao@msumain.edu.ph')}
+                style={{ textAlign: 'left', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: '#fff' }}
+              >
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '12px', color: '#000' }}>RB</div>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '600' }}>Dr. Rahana Bayabao</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(254,205,211,0.6)' }}>r.bayabao@msumain.edu.ph</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleGoogleSelect('a.macarambon@msumain.edu.ph')}
+                style={{ textAlign: 'left', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: '#fff' }}
+              >
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#f43f5e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '12px', color: '#fff' }}>AM</div>
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: '600' }}>Dr. Aminah Macarambon</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(254,205,211,0.6)' }}>a.macarambon@msumain.edu.ph</div>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setIsGoogleModalOpen(false)}
+              style={{ width: '100%', fontSize: '12px', color: 'rgba(254,205,211,0.5)', background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

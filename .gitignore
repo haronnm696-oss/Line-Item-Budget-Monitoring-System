@@ -1,0 +1,21 @@
+# Local secrets and deployment backups
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+backups/
+tmp_*
+.superpowers/
+
+# Runtime/cache files
+backend/bootstrap/cache/*.php
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+
+# OS/editor
+.DS_Store
+Thumbs.db

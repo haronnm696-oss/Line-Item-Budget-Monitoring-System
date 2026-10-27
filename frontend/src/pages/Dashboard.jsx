@@ -5,7 +5,7 @@ import { normalizeRole } from '../data/mockData';
 
 // Post-login role routing. Each role lands on its own dashboard URL so the
 // address bar (and direct links) reflect the user's module.
-const ROUTE_BY_ROLE = {
+export const ROUTE_BY_ROLE = {
   PRG: '/dashboard/program-leader',    // Program Dashboard
   PL:  '/dashboard/project-leader',    // Project Budget Dashboard
   RA:  '/dashboard/research-assistant',// Data Entry / Payroll Module

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -15,11 +16,6 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    /**
-     * Backend slug -> frontend role code.
-     * Frontend codes (PRG/PL/RES/RA/FIN) drive dashboard routing,
-     * sidebar visibility, and page guards.
-     */
     public const SLUG_TO_CODE = [
         'program-leader' => 'PRG',
         'project-leader' => 'PL',
@@ -40,7 +36,7 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'employee_id' => $user->employee_id,
-            'role' => $code, // frontend code: PRG | PL | RES | RA | FIN
+            'role' => $code,
             'role_slug' => $slug,
             'roleLabel' => $label,
             'avatar_initials' => self::initials($user->name),
@@ -65,16 +61,13 @@ class AuthController extends Controller
 
         $email = strtolower(trim($data['email']));
 
-        // Give deactivated accounts a distinct 403 instead of lumping them
-        // into "Invalid email or password."
         $user = User::where('email', $email)->first();
-        if ($user && !$user->is_active) {
+        if ($user && ! $user->is_active) {
             return response()->json([
                 'message' => 'This account is deactivated. Contact your administrator.',
             ], 403);
         }
 
-        // Laravel's built-in hashed-password verification via Auth::attempt.
         if (! Auth::attempt(['email' => $email, 'password' => $data['password']])) {
             throw ValidationException::withMessages([
                 'email' => ['Invalid email or password.'],
@@ -86,29 +79,56 @@ class AuthController extends Controller
         return response()->json(['user' => self::toUserPayload($request->user())]);
     }
 
-    /**
-     * Public registration. Creates a new Gmail user, hashes the password,
-     * assigns the selected role, and returns the same payload shape as login
-     * so the frontend can sign the user in immediately.
-     */
     public function register(Request $request)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email', 'regex:/@(gmail\.com|msumain\.edu\.ph)$/i'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|msumain\.edu\.ph)$/i'],
             'password' => ['required', 'string', 'min:8'],
-            'role' => ['required', 'string', 'in:program-leader,project-leader,research-assistant,researcher'],
+            'employee_id' => ['nullable', 'string', 'max:255', 'unique:users,employee_id'],
+            'contact_number' => ['nullable', 'string', 'max:20'],
+            'college' => ['nullable', 'string', 'max:255'],
+            'department' => ['nullable', 'string', 'max:255'],
+            'role' => ['required', 'string', 'in:program-leader,project-leader,research-assistant,researcher,finance-admin'],
         ]);
 
         $email = strtolower(trim($data['email']));
 
+        // The employee ID is its own field and must never be derived from the
+        // email address (or any other input).
+        $employeeId = isset($data['employee_id']) ? trim($data['employee_id']) : null;
+        $employeeId = $employeeId === '' ? null : $employeeId;
+
+        if ($employeeId !== null && strcasecmp($employeeId, $email) === 0) {
+            throw ValidationException::withMessages([
+                'employee_id' => ['The employee ID cannot be the same as the email address.'],
+            ]);
+        }
+
         $role = Role::where('slug', $data['role'])->firstOrFail();
 
+        $positionMap = [
+            'program-leader' => 'Program Leader',
+            'project-leader' => 'Project Leader',
+            'research-assistant' => 'Research Assistant',
+            'researcher' => 'Researcher',
+            'finance-admin' => 'Finance Officer',
+        ];
+
         $user = User::create([
-            'name' => trim($data['name']),
+            'name' => trim($data['first_name'] . ' ' . $data['last_name']),
+            'first_name' => $data['first_name'],
+            'last_name' => $data['last_name'],
+            'employee_id' => $employeeId,
             'email' => $email,
             'password' => Hash::make($data['password']),
+            'contact_number' => $data['contact_number'] ?? null,
+            'college' => $data['college'] ?? null,
+            'department' => $data['department'] ?? null,
             'role_id' => $role->id,
+            'position' => $positionMap[$data['role']] ?? 'Research Assistant',
+            'email_verified_at' => now(),
             'is_active' => true,
         ]);
 
@@ -134,11 +154,6 @@ class AuthController extends Controller
         return response()->json(null, 204);
     }
 
-    /**
-     * Kicks off a password-reset flow for a registered Gmail address.
-     * Always returns a generic success so the endpoint cannot be used to
-     * enumerate whether an email address is registered.
-     */
     public function forgotPassword(Request $request)
     {
         $data = $request->validate([
@@ -175,9 +190,6 @@ class AuthController extends Controller
         ], 202);
     }
 
-    /**
-     * Resets a user's password using a valid, unexpired reset token.
-     */
     public function resetPassword(Request $request)
     {
         $data = $request->validate([

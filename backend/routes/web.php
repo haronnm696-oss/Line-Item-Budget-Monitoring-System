@@ -16,3 +16,13 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('welcome');
 });
+
+/* Health check used by Render: proves PHP + database are reachable. */
+Route::get('/up', function () {
+    try {
+        \Illuminate\Support\Facades\DB::connection()->getPdo()->query('SELECT 1');
+        return response('ok', 200, ['Content-Type' => 'text/plain']);
+    } catch (\Throwable $e) {
+        return response('db error: ' . $e->getMessage(), 500, ['Content-Type' => 'text/plain']);
+    }
+});
