@@ -3,7 +3,7 @@ import axios from 'axios';
 // Laravel Sanctum SPA auth needs credentials sent on every request and the
 // XSRF cookie set before the first POST. baseURL comes from .env (see .env.example).
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL ?? '',
   withCredentials: true,
   withXSRFToken: true,
   headers: { Accept: 'application/json' },
