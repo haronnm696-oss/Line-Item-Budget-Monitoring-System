@@ -93,7 +93,8 @@ DB_DATABASE=lib_monitoring_system
 DB_USERNAME=<aiven-user>
 DB_PASSWORD=<aiven-password>
 
-# Aiven TLS. Paste the base64-encoded ca.pem here.
+# Aiven TLS. Optional: a CA certificate is already bundled with the image.
+# Override it by pasting the base64-encoded ca.pem here.
 AIVEN_CA_CERT_BASE64=<base64 of ca.pem>
 
 SESSION_DRIVER=database
@@ -131,7 +132,8 @@ base64 -w 0 ca.pem
 The container entrypoint will:
 
 - Bind Apache to Render's `$PORT`.
-- Decode the Aiven CA certificate from `AIVEN_CA_CERT_BASE64`.
+- Resolve a usable Aiven CA certificate (from `MYSQL_ATTR_SSL_CA`, the decoded
+  `AIVEN_CA_CERT_BASE64`, or the certificate bundled with the image).
 - Run `php artisan migrate --force` (with a short retry loop for Aiven idle
   power-off), creating the `sessions` table.
 - Start Apache.
