@@ -73,14 +73,23 @@ export function buildMockDashboard() {
     },
   ];
 
-  const trancheItems = trancheDefs.map((tranche) => ({
-    id: tranche.sequence,
-    ...tranche,
-    amount: Math.round(totalAllocated * (tranche.percentage / 100) * 100) / 100,
-    percentage: tranche.percentage,
-    display_status: tranche.status,
-    is_released: tranche.status === 'released',
-  }));
+  const trancheItems = trancheDefs.map((tranche) => {
+    const planned = tranche.planned_release_date
+      ? new Date(`${tranche.planned_release_date}T00:00:00`)
+      : null;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const isOverdue = tranche.status !== 'released' && planned && planned < todayStart;
+
+    return {
+      id: tranche.sequence,
+      ...tranche,
+      amount: Math.round(totalAllocated * (tranche.percentage / 100) * 100) / 100,
+      percentage: tranche.percentage,
+      display_status: isOverdue ? 'overdue' : tranche.status,
+      is_released: tranche.status === 'released',
+    };
+  });
   const releasedAmount = trancheItems
     .filter((tranche) => tranche.is_released)
     .reduce((sum, tranche) => sum + tranche.amount, 0);
@@ -114,16 +123,16 @@ export function buildMockDashboard() {
   const approvals = pendingApprovals.map((approval, index) => ({
     id: 900 + index,
     project_id: CURRENT_PROJECT.id,
-    project_tranche_id: index === 0 ? null : 3,
-    tranche_name: index === 0 ? null : 'Tranche 3 — Field Validation',
-    type: index === 0 ? 'payroll' : 'budget_realignment',
-    type_label: index === 0 ? 'Payroll' : 'Budget Realignment',
+    project_tranche_id: index === 0 ? 3 : null,
+    tranche_name: index === 0 ? 'Tranche 3 — Field Validation' : null,
+    type: index === 0 ? 'disbursement' : 'budget_realignment',
+    type_label: index === 0 ? 'Fund Release' : 'Budget Realignment',
     title: approval.title,
     description: approval.detail,
-    amount: index === 0 ? 70475 : 40000,
+    amount: index === 0 ? 635675.2 : 40000,
     status: 'pending',
     payload: {},
-    requested_by: 'Norjannah Haron',
+    requested_by: 'Prof. Mudzna M. Asakil',
     created_at: new Date().toISOString(),
   }));
 

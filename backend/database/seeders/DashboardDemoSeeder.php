@@ -140,7 +140,7 @@ class DashboardDemoSeeder extends Seeder
             return;
         }
 
-        // Amounts are chosen to produce a realistic ~54% utilization and a
+        // Amounts are chosen to produce a realistic ~42.8% utilization and a
         // 70% receipt compliance score for the demo dashboard.
         $expenses = [
             ['PS-01', 260000.00, '2026-02-15', 'verified', true, 'Project Leader honoraria, Q1-Q3'],

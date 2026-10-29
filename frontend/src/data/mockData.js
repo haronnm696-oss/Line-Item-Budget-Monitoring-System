@@ -64,13 +64,13 @@ export const libCategoriesPS = [
   { name: 'Project Leader Honoraria (Prof. Mudzna M. Asakil)', allocated: 400000, spent: 260000 },
   { name: 'Research Assistant Honoraria (2 personnel)', allocated: 360000, spent: 240000 },
   { name: 'Researcher Honoraria', allocated: 240000, spent: 160000 },
-  { name: 'Program Leader Indirect Honoraria', allocated: 200000, spent: 120000 },
+  { name: 'Program Leader Indirect Honoraria', allocated: 200000, spent: 0 },
 ];
 export const libCategoriesMOOE = [
   { name: 'Traveling Expenses', allocated: 350000, spent: 180000 },
   { name: 'Supplies & Materials (IoT Sensors, Laptops)', allocated: 600000, spent: 320000 },
   { name: 'Communication Expenses', allocated: 120000, spent: 65000 },
-  { name: 'Professional Services (Programmers/Enumerators)', allocated: 500000, spent: 250000 },
+  { name: 'Professional Services (Programmers/Enumerators)', allocated: 500000, spent: 0 },
   { name: 'Cloud/Server Rent', allocated: 200000, spent: 90000 },
   { name: 'Utilities', allocated: 208376, spent: 45000 },
 ];
@@ -226,13 +226,13 @@ export const raUploads = [
 ];
 
 export const allProjectsForProgram = [
-  { name: 'Enhancing Urban Mobility', leader: 'Prof. Mudzna M. Asakil', budget: 3178376, pct: 54.4, counterpart: 1178376, funding: 2000000 },
+  { name: 'Enhancing Urban Mobility', leader: 'Prof. Mudzna M. Asakil', budget: 3178376, pct: 42.8, counterpart: 1178376, funding: 2000000 },
   { name: 'Halal Goat Value Chain Development', leader: 'Dr. S. Mangondaya', budget: 1870000, pct: 81.0 },
   { name: 'Community Nutrition Surveillance', leader: 'Dr. F. Alonto', budget: 1210000, pct: 12.3 },
   { name: 'Meranaw Weaving Heritage Archive', leader: 'Dr. N. Guro', budget: 940000, pct: 98.7 },
 ];
 
 export const pendingApprovals = [
-  { title: 'Payroll · September 2026', detail: '4 personnel · gross ₱70,475.00 · computed by N. Haron' },
-  { title: 'Line item revision request', detail: 'Move ₱40,000 from Other Services to Travel Expenses' },
+  { title: 'Release Tranche 3 — Field Validation', detail: 'Third milestone release for field validation and data collection.' },
+  { title: 'Realign ₱40,000 from Professional Services to Travel', detail: 'Move unused professional services allocation to cover additional field travel.' },
 ];

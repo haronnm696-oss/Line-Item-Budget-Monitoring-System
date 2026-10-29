@@ -136,10 +136,10 @@ class DashboardService
         $items = $project->tranches
             ->map(function (ProjectTranche $tranche) use ($today) {
                 $displayStatus = $tranche->status;
-                if ($tranche->status === 'upcoming'
+                if ($tranche->status !== 'released'
                     && $tranche->planned_release_date
                     && $tranche->planned_release_date->lt($today)) {
-                    $displayStatus = 'due';
+                    $displayStatus = 'overdue';
                 }
 
                 return [

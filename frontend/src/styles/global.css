@@ -73,7 +73,7 @@ a{color:inherit;text-decoration:none}
 .topbar .spacer{flex:1}
 .role-chip{background:var(--gold-soft);color:var(--ink);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600}
 .icon-btn{border:1px solid var(--line-strong);background:var(--panel);border-radius:6px;width:32px;height:32px}
-.content{padding:24px 26px 60px;max-width:1180px;width:100%}
+.content{padding:24px 26px 60px;max-width:1320px;width:100%;margin-inline:auto}
 
 /* ---------- Generic pieces ---------- */
 .page-head{display:flex;align-items:flex-end;gap:16px;margin-bottom:18px;flex-wrap:wrap}
@@ -124,7 +124,7 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
 .util.over .fill{background:var(--over)}
 .util small{font-size:11px;color:var(--muted)}
 
-.stat{padding:16px;display:flex;flex-direction:column;gap:6px}
+.stat{padding:16px;display:flex;flex-direction:column;gap:6px;height:100%}
 .stat .label{font-size:12.5px;color:var(--muted)}
 .stat .value{font-size:24px;font-weight:800;letter-spacing:-.01em}
 .stat .sub{font-size:12px;color:var(--muted)}
@@ -326,6 +326,7 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
 .burn-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
 .burn-body .over{color:var(--over)}
 .burn-body .ok{color:var(--ok)}
+.burn-body .warn{color:var(--warn)}
 
 /* Receipt compliance */
 .compliance-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px}
@@ -371,6 +372,50 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
 .export-actions .btn{flex:1;min-width:120px}
 .export-note{font-size:11px;color:var(--muted);margin:0;line-height:1.45}
 
+/* Action-first summary band */
+.action-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:24px}
+.dashboard [id]{scroll-margin-top:80px}
+.action-card{display:flex;flex-direction:column;gap:6px;text-align:left;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line-strong);border-radius:8px;padding:14px 16px;box-shadow:var(--shadow);min-height:138px;height:100%;color:var(--ink);font:inherit}
+.action-card:hover{background:color-mix(in srgb,var(--gold) 5%,var(--panel));border-color:var(--line-strong)}
+.action-card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.action-card.warn{border-left-color:var(--warn)}
+.action-card.over{border-left-color:var(--over)}
+.action-card.ok{border-left-color:var(--ok)}
+.ac-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ac-label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.ac-value{font-size:23px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.action-card.warn .ac-value{color:var(--warn)}
+.action-card.over .ac-value{color:var(--over)}
+.ac-sub{font-size:11.5px;color:var(--muted);line-height:1.45}
+.ac-link{margin-top:auto;font-size:12px;font-weight:700;color:var(--maroon-soft)}
+:root[data-theme="dark"] .ac-link{color:var(--gold)}
+
+/* Right-hand attention rail */
+.attention-body{display:flex;flex-direction:column}
+.attention-item{display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+.attention-item:last-child{border-bottom:none}
+.attention-item .alert-dot{margin-top:6px}
+.attention-item .ai-main{flex:1;min-width:0}
+.attention-item b{display:block;font-size:13px}
+.attention-item small{display:block;color:var(--muted);font-size:11.5px;line-height:1.4}
+.attention-item .btn{flex-shrink:0}
+
+/* Approve confirmation */
+.confirm-card{border:1px solid var(--line-strong);border-radius:8px;padding:12px 14px;background:var(--paper)}
+.confirm-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.confirm-amount{font-size:17px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* Tranche status details */
+.tranche-sub{display:block;font-size:11px;color:var(--muted);line-height:1.4;max-width:260px}
+.tranche-date.over{color:var(--over);font-weight:600}
+.tranche-card.is-overdue{border-left-color:var(--over)}
+.tranche-card.is-overdue .tranche-amount{color:var(--over)}
+
+/* Chart legend */
+.chart-legend{margin-bottom:10px}
+.chart-legend i{width:16px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.line-chart svg{display:block}
+
 /* ---------- Misc ---------- */
 .wide-scroll{overflow-x:auto}
 .banner{border-radius:6px;padding:9px 12px;font-size:12.5px;margin-bottom:12px}
@@ -390,6 +435,7 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
   .nav button.active,.nav a.active{border-left:none;border-bottom-color:var(--gold)}
   .side-user{display:none}
   .grid.c4,.grid.c3,.grid.c2,.grid.c2-1,.report-opts{grid-template-columns:1fr}
+  .action-strip{grid-template-columns:1fr}
   .content{padding:16px 14px 50px}
   .topbar{padding:8px 14px;flex-wrap:wrap}
   .wide-scroll table{min-width:680px}

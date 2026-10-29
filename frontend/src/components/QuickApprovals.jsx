@@ -17,6 +17,8 @@ function formatWhen(value) {
 }
 
 export default function QuickApprovals({ approvals, busyId, onApprove, onReject }) {
+  const [approveTarget, setApproveTarget] = useState(null);
+  const [confirming, setConfirming] = useState(false);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [reason, setReason] = useState('');
   const items = Array.isArray(approvals) ? approvals : [];
@@ -26,6 +28,22 @@ export default function QuickApprovals({ approvals, busyId, onApprove, onReject 
     setReason('');
   }
 
+  function closeApprove() {
+    if (confirming) return;
+    setApproveTarget(null);
+  }
+
+  async function submitApprove() {
+    if (!approveTarget || confirming) return;
+    setConfirming(true);
+    try {
+      await onApprove(approveTarget.id);
+    } finally {
+      setConfirming(false);
+      setApproveTarget(null);
+    }
+  }
+
   function submitReject(event) {
     event.preventDefault();
     if (!rejectTarget) return;
@@ -33,12 +51,16 @@ export default function QuickApprovals({ approvals, busyId, onApprove, onReject 
     closeReject();
   }
 
+  const approveAmount = Number(approveTarget?.amount) || 0;
+  const needsStrongWarning = approveTarget?.type === 'disbursement' || approveAmount >= 100000;
+
   return (
     <>
       <Panel
         title="Quick Approvals"
         hint="Pending fund releases and budget realignments"
         action={<Chip tone="warn">{items.length} pending</Chip>}
+        style={{ height: '100%' }}
       >
         {items.length === 0 ? (
           <div className="empty-state">All caught up — no pending approvals.</div>
@@ -69,9 +91,9 @@ export default function QuickApprovals({ approvals, busyId, onApprove, onReject 
                     type="button"
                     className="btn sm approve"
                     disabled={busyId === approval.id}
-                    onClick={() => onApprove(approval.id)}
+                    onClick={() => setApproveTarget(approval)}
                   >
-                    {busyId === approval.id ? 'Working…' : 'Approve'}
+                    Approve
                   </button>
                   <button
                     type="button"
@@ -90,6 +112,65 @@ export default function QuickApprovals({ approvals, busyId, onApprove, onReject 
           </div>
         )}
       </Panel>
+
+      {approveTarget && (
+        <div
+          className="modal-overlay"
+          onClick={closeApprove}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-approve-title"
+        >
+          <div
+            className="modal-panel"
+            style={{ maxWidth: 520 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h3 id="confirm-approve-title">Are you sure?</h3>
+              <button type="button" className="modal-close" onClick={closeApprove} aria-label="Close" disabled={confirming}>×</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)' }}>
+                You are about to approve this request:
+              </p>
+              <div className="confirm-card">
+                <div className="approval-title-row">
+                  <b>{approveTarget.title}</b>
+                  <Chip tone={approveTarget.type === 'budget_realignment' ? 'warn' : 'brand'}>
+                    {approveTarget.type_label}
+                  </Chip>
+                </div>
+                {approveTarget.description && (
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.45 }}>
+                    {approveTarget.description}
+                  </p>
+                )}
+                <div className="confirm-meta">
+                  {approveTarget.amount != null && (
+                    <span className="confirm-amount">{peso(approveTarget.amount)}</span>
+                  )}
+                  {approveTarget.requested_by && <span>Requested by {approveTarget.requested_by}</span>}
+                  {approveTarget.tranche_name && <span>{approveTarget.tranche_name}</span>}
+                </div>
+              </div>
+
+              {needsStrongWarning && (
+                <div className="banner over" style={{ margin: '14px 0 0' }}>
+                  This releases <b>{peso(approveAmount)}</b>
+                  {approveTarget.tranche_name ? ` for ${approveTarget.tranche_name}` : ''} and cannot be undone.
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 20px 20px' }}>
+              <button type="button" className="btn" onClick={closeApprove} disabled={confirming}>Cancel</button>
+              <button type="button" className="btn approve" onClick={submitApprove} disabled={confirming}>
+                {confirming ? 'Approving…' : 'Yes, approve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rejectTarget && (
         <div
