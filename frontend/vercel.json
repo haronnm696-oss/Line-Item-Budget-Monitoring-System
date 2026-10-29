@@ -6,15 +6,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://lib-monitoring-api.onrender.com/api/:path*"
+      "destination": "https://line-item-budget-monitoring-system.onrender.com/api/:path*"
     },
     {
       "source": "/sanctum/:path*",
-      "destination": "https://lib-monitoring-api.onrender.com/sanctum/:path*"
+      "destination": "https://line-item-budget-monitoring-system.onrender.com/sanctum/:path*"
     },
     {
       "source": "/storage/:path*",
-      "destination": "https://lib-monitoring-api.onrender.com/storage/:path*"
+      "destination": "https://line-item-budget-monitoring-system.onrender.com/storage/:path*"
     },
     {
       "source": "/(.*)",
