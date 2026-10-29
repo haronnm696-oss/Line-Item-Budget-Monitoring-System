@@ -15,6 +15,7 @@ import {
 } from '../../api/dashboard';
 import StatCard from '../../components/StatCard';
 import Panel from '../../components/Panel';
+import Chip from '../../components/Chip';
 import LineChart from '../../components/charts/LineChart';
 import DonutChart from '../../components/charts/DonutChart';
 import PrintableFormB from '../../components/PrintableFormB';
@@ -24,6 +25,7 @@ import QuickApprovals from '../../components/QuickApprovals';
 import ComplianceTracker from '../../components/ComplianceTracker';
 import ExportShortcuts from '../../components/ExportShortcuts';
 import { PrinterIcon } from '../../components/AuthIcons';
+import { formatPct, signedPct, utilizationTone } from '../../components/money';
 
 function formatMoney(amount) {
   return new Intl.NumberFormat('en-PH', {
@@ -35,7 +37,20 @@ function formatMoney(amount) {
 
 function pct(part, whole) {
   if (!whole) return 0;
-  return Math.round((part / whole) * 100);
+  return Math.round((part / whole) * 1000) / 10;
+}
+
+function toneVar(tone) {
+  return `var(--${tone})`;
+}
+
+function formatShortDate(value) {
+  if (!value) return '—';
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 export default function ProgramLeaderDashboard() {
@@ -78,6 +93,61 @@ export default function ProgramLeaderDashboard() {
   const psCategories = summary.categories?.ps ?? [];
   const mooeCategories = summary.categories?.mooe ?? [];
   const approvals = summary.approvals ?? [];
+  const tranches = summary.tranches ?? { items: [], summary: {} };
+  const compliance = summary.compliance ?? {};
+  const burnRate = summary.burn_rate ?? {};
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const overdueTranche = (tranches.items ?? []).find(
+    (tranche) =>
+      !tranche.is_released &&
+      tranche.planned_release_date &&
+      new Date(`${tranche.planned_release_date}T00:00:00`) < todayStart
+  );
+  const overdueDays = overdueTranche?.planned_release_date
+    ? Math.max(
+        1,
+        Math.round(
+          (todayStart - new Date(`${overdueTranche.planned_release_date}T00:00:00`)) / 86400000
+        )
+      )
+    : 0;
+  const missingReceipts = Number(compliance.missing_receipt ?? 0);
+  const variance = Number(burnRate.variance_pct ?? 0);
+  const varianceRisk = variance < -5;
+
+  const alerts = [];
+  if (overdueTranche) {
+    alerts.push({
+      id: 'tranches',
+      tone: 'over',
+      title: `${overdueTranche.name} is overdue`,
+      detail: `Target ${formatShortDate(overdueTranche.planned_release_date)} · ${overdueDays} day${overdueDays === 1 ? '' : 's'} late · ${formatMoney(overdueTranche.amount)} not yet released.`,
+    });
+  }
+  if (missingReceipts > 0) {
+    alerts.push({
+      id: 'compliance',
+      tone: 'warn',
+      title: `${missingReceipts} missing receipt${missingReceipts === 1 ? '' : 's'}`,
+      detail: 'Expenses without supporting documents are not audit-ready.',
+    });
+  }
+  if (varianceRisk) {
+    alerts.push({
+      id: 'burn',
+      tone: 'warn',
+      title: `Under-spending ${signedPct(variance)}`,
+      detail: `Spent ${formatPct(burnRate.spent_pct)} of the budget against ${formatPct(burnRate.elapsed_pct)} of project time elapsed.`,
+    });
+  }
+
+  function scrollToId(id) {
+    if (typeof document === 'undefined') return;
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
 
   const psAllocated = psCategories.reduce((sum, category) => sum + Number(category.allocated || 0), 0);
   const psSpent = psCategories.reduce((sum, category) => sum + Number(category.spent || 0), 0);
@@ -86,6 +156,8 @@ export default function ProgramLeaderDashboard() {
   const totalAllocated = Number(summary.kpis?.total_budget ?? psAllocated + mooeAllocated);
   const totalSpent = Number(summary.kpis?.total_spent ?? psSpent + mooeSpent);
   const remaining = Number(summary.kpis?.remaining ?? totalAllocated - totalSpent);
+  const utilizationPct = Number(summary.kpis?.utilization_pct ?? pct(totalSpent, totalAllocated));
+  const remainingPct = pct(remaining, totalAllocated);
 
   const greetingName = user?.name || project.project_leader || 'Program Leader';
   const roleLabel = user?.roleLabel || 'Program Leader';
@@ -145,11 +217,13 @@ export default function ProgramLeaderDashboard() {
       });
       showFeedback('ok', 'Approval recorded. Related records were updated.');
       refreshLiveSummary();
+      return true;
     } catch (error) {
       showFeedback(
         'over',
         error.response?.data?.message || 'Unable to approve this request. Please try again.'
       );
+      return false;
     } finally {
       setBusyApprovalId(null);
     }
@@ -197,7 +271,7 @@ export default function ProgramLeaderDashboard() {
   }
 
   return (
-    <div className="dashboard program-leader-dashboard" style={{ padding: '24px 26px 60px', maxWidth: '1180px', width: '100%' }}>
+    <div className="dashboard program-leader-dashboard">
       {/* ---------- Header & Project Metadata ---------- */}
       <div className="panel" style={{ marginBottom: 24 }}>
         <div className="panel-head" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -241,8 +315,104 @@ export default function ProgramLeaderDashboard() {
 
       {feedback && <div className={`banner ${feedback.tone}`}>{feedback.text}</div>}
 
+      {/* ---------- Action required ---------- */}
+      <div className="section-head">
+        <h3>Action required</h3>
+        <span>What needs your decision or follow-up first</span>
+      </div>
+      <div className="action-strip">
+        <button
+          type="button"
+          className={`action-card ${approvals.length ? 'warn' : 'ok'}`}
+          onClick={() => scrollToId('quick-approvals')}
+        >
+          <div className="ac-top">
+            <span className="ac-label">Pending approvals</span>
+            <Chip tone={approvals.length ? 'warn' : 'ok'}>{approvals.length ? 'Action' : 'Clear'}</Chip>
+          </div>
+          <div className="ac-value">{approvals.length}</div>
+          <div className="ac-sub">Fund releases and realignments waiting on your decision.</div>
+          <span className="ac-link">Review approvals →</span>
+        </button>
+
+        <button
+          type="button"
+          className={`action-card ${overdueTranche ? 'over' : 'ok'}`}
+          onClick={() => scrollToId('tranches')}
+        >
+          <div className="ac-top">
+            <span className="ac-label">Fund release</span>
+            <Chip tone={overdueTranche ? 'over' : 'ok'}>{overdueTranche ? 'Overdue' : 'On schedule'}</Chip>
+          </div>
+          <div className="ac-value">{overdueTranche ? formatMoney(overdueTranche.amount) : '—'}</div>
+          <div className="ac-sub">
+            {overdueTranche
+              ? `${overdueTranche.name} · target ${formatShortDate(overdueTranche.planned_release_date)} (${overdueDays} day${overdueDays === 1 ? '' : 's'} late).`
+              : 'No tranche is past its target date.'}
+          </div>
+          <span className="ac-link">Open tranche tracker →</span>
+        </button>
+
+        <button
+          type="button"
+          className={`action-card ${missingReceipts > 0 ? 'warn' : 'ok'}`}
+          onClick={() => scrollToId('compliance')}
+        >
+          <div className="ac-top">
+            <span className="ac-label">Receipt compliance</span>
+            <Chip tone={missingReceipts > 0 ? 'warn' : 'ok'}>{formatPct(compliance.compliance_pct)}</Chip>
+          </div>
+          <div className="ac-value">{missingReceipts}</div>
+          <div className="ac-sub">
+            Expense{missingReceipts === 1 ? '' : 's'} missing supporting documents.
+          </div>
+          <span className="ac-link">Review receipts →</span>
+        </button>
+      </div>
+
+      {/* ---------- Quick approvals + attention rail ---------- */}
+      <div className="grid c2-1" style={{ marginBottom: 24, gap: 14, alignItems: 'stretch' }}>
+        <div id="quick-approvals" style={{ height: '100%' }}>
+          <QuickApprovals
+            approvals={approvals}
+            busyId={busyApprovalId}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+        </div>
+        <Panel
+          title="Needs attention"
+          hint="Risks to resolve this week"
+          action={
+            <Chip tone={alerts.some((alert) => alert.tone === 'over') ? 'over' : alerts.length ? 'warn' : 'ok'}>
+              {alerts.length}
+            </Chip>
+          }
+          style={{ height: '100%' }}
+        >
+          <div className="attention-body">
+            {alerts.length === 0 ? (
+              <div className="empty-state">Nothing needs attention right now.</div>
+            ) : (
+              alerts.map((alert) => (
+                <div className="attention-item" key={alert.id}>
+                  <span className="alert-dot" style={{ background: toneVar(alert.tone) }} />
+                  <div className="ai-main">
+                    <b>{alert.title}</b>
+                    <small>{alert.detail}</small>
+                  </div>
+                  <button type="button" className="btn sm" onClick={() => scrollToId(alert.id)}>
+                    Review
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </Panel>
+      </div>
+
       {/* ---------- Top KPI Summary Cards ---------- */}
-      <div className="grid c4" style={{ marginBottom: 24, gap: 14 }}>
+      <div className="grid c4" style={{ marginBottom: 24, gap: 14, alignItems: 'stretch' }}>
         <StatCard
           label="Total MOST Funding"
           value={formatMoney(project.funding_budget)}
@@ -256,48 +426,47 @@ export default function ProgramLeaderDashboard() {
         <StatCard
           label="Total Disbursed"
           value={formatMoney(totalSpent)}
-          sub={`${summary.kpis?.utilization_pct ?? pct(totalSpent, totalAllocated)}% of total budget`}
+          sub={`${formatPct(utilizationPct)} of ${formatMoney(totalAllocated)} total budget`}
         />
         <StatCard
           label="Remaining Balance"
           value={formatMoney(remaining)}
-          sub={`${pct(remaining, totalAllocated)}% unspent`}
+          sub={`${formatPct(remainingPct)} unspent`}
         />
       </div>
 
       {/* ---------- Feature 1: Tranche / Fund Release Tracker ---------- */}
-      <TrancheTimeline tranches={summary.tranches} />
+      <div id="tranches">
+        <TrancheTimeline
+          tranches={summary.tranches}
+          totalBudget={totalAllocated}
+          counterpartBudget={project.counterpart_budget}
+        />
+      </div>
 
       {/* ---------- Features 2 & 4: Burn Rate + Receipt Compliance ---------- */}
       <div className="grid c2" style={{ marginBottom: 24, gap: 14, alignItems: 'stretch' }}>
-        <BurnRateCard burnRate={summary.burn_rate} />
-        <ComplianceTracker compliance={summary.compliance} />
-      </div>
-
-      {/* ---------- Features 3 & 5: Quick Approvals + Export Shortcuts ---------- */}
-      <div className="grid c2" style={{ marginBottom: 24, gap: 14, alignItems: 'start' }}>
-        <QuickApprovals
-          approvals={approvals}
-          busyId={busyApprovalId}
-          onApprove={handleApprove}
-          onReject={handleReject}
-        />
-        <ExportShortcuts
-          downloading={downloadingReport}
-          onDownload={handleDownload}
-          onPrintFormB={() => setFormBOpen(true)}
-        />
+        <div id="burn" style={{ height: '100%' }}>
+          <BurnRateCard burnRate={summary.burn_rate} />
+        </div>
+        <div id="compliance" style={{ height: '100%' }}>
+          <ComplianceTracker compliance={summary.compliance} />
+        </div>
       </div>
 
       {/* ---------- Interactive Charts ---------- */}
-      <div className="grid c2-1" style={{ marginBottom: 24, gap: 14, alignItems: 'start' }}>
-        <Panel title="Monthly Expenditure Trend" hint="Personnel Services (PS) vs Maintenance & Other Operating Expenses (MOOE) spending over time">
+      <div className="grid c2-1" style={{ marginBottom: 24, gap: 14, alignItems: 'stretch' }}>
+        <Panel
+          title="Monthly Expenditure Trend"
+          hint="Personnel Services (PS) vs Maintenance & Other Operating Expenses (MOOE) spending over time"
+          style={{ height: '100%' }}
+        >
           <div style={{ padding: '18px 20px' }}>
-            <LineChart data={monthlyExpenses} ariaLabel="Monthly expenditure trend: Personnel Services vs MOOE" />
+            <LineChart data={monthlyExpenses} ariaLabel="Monthly expenditure trend: Personnel Services vs MOOE, in thousands of pesos" />
           </div>
         </Panel>
 
-        <Panel title="Budget Distribution" hint="PS spent, MOOE spent, and remaining balance">
+        <Panel title="Budget Distribution" hint="PS spent, MOOE spent, and remaining balance" style={{ height: '100%' }}>
           <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             <DonutChart psLength={donutPsLength} mooeLength={donutMooeLength} totalPct={donutTotalPct} />
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5 }}>
@@ -327,32 +496,43 @@ export default function ProgramLeaderDashboard() {
         </Panel>
       </div>
 
-      {/* ---------- Project Budget Utilization List ---------- */}
-      <Panel title="Project Budget Utilization" hint="Spent vs approved budget per project" style={{ marginBottom: 24 }}>
-        <div style={{ padding: '8px 20px 16px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {programProjects.map((item) => (
-              <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 0', borderBottom: '1px solid var(--line)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, marginBottom: 5 }}>
-                    <b style={{ color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</b>
-                    <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{item.pct}%</span>
-                  </div>
-                  <div className="util">
-                    <div className="track">
-                      <div className="fill" style={{ width: `${Math.max(0, Math.min(100, Number(item.pct) || 0))}%` }} />
+      {/* ---------- Project Budget Utilization List + Exports ---------- */}
+      <div className="grid c2-1" style={{ marginBottom: 24, gap: 14, alignItems: 'stretch' }}>
+        <Panel title="Project Budget Utilization" hint="Spent vs approved budget per project" style={{ height: '100%' }}>
+          <div style={{ padding: '8px 20px 16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {programProjects.map((item) => {
+                const itemTone = utilizationTone(item.pct);
+                return (
+                  <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 0', borderBottom: '1px solid var(--line)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, marginBottom: 5 }}>
+                        <b style={{ color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</b>
+                        <span style={{ fontWeight: 700, color: toneVar(itemTone) }}>{formatPct(item.pct)}</span>
+                      </div>
+                      <div className="util">
+                        <div className="track">
+                          <div className={`fill ${itemTone}`} style={{ width: `${Math.max(0, Math.min(100, Number(item.pct) || 0))}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: 12, minWidth: 170 }}>
+                      <div>Spent / Approved</div>
+                      <b className="num">{formatMoney(item.spent ?? 0)} / {formatMoney(item.budget)}</b>
                     </div>
                   </div>
-                </div>
-                <div style={{ textAlign: 'right', fontSize: 12, minWidth: 170 }}>
-                  <div>Spent / Approved</div>
-                  <b className="num">{formatMoney(item.spent ?? 0)} / {formatMoney(item.budget)}</b>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </Panel>
+        </Panel>
+
+        <ExportShortcuts
+          downloading={downloadingReport}
+          onDownload={handleDownload}
+          onPrintFormB={() => setFormBOpen(true)}
+        />
+      </div>
 
       {/* ---------- Dual-Funding Structure ---------- */}
       <div className="panel" style={{ marginBottom: 24 }}>
@@ -389,7 +569,7 @@ export default function ProgramLeaderDashboard() {
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--muted)', textAlign: 'right' }}>
               PS + MOOE combined<br />
-              {pct(totalSpent, totalAllocated)}% utilized
+              {formatPct(pct(totalSpent, totalAllocated))} utilized
             </div>
           </div>
         </div>
@@ -409,19 +589,23 @@ export default function ProgramLeaderDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {psCategories.map((category) => (
-                  <tr key={category.id ?? category.name} style={{ borderBottom: '1px solid var(--line)' }}>
-                    <td style={{ padding: '8px 10px', color: 'var(--ink)' }}>{category.name}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.allocated)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.spent)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--ok)', fontWeight: 600, textAlign: 'right' }}>{category.utilization_pct ?? pct(category.spent, category.allocated)}%</td>
-                  </tr>
-                ))}
+                {psCategories.map((category) => {
+                  const value = Number(category.utilization_pct ?? pct(category.spent, category.allocated));
+                  const tone = utilizationTone(value);
+                  return (
+                    <tr key={category.id ?? category.name} style={{ borderBottom: '1px solid var(--line)' }}>
+                      <td style={{ padding: '8px 10px', color: 'var(--ink)' }}>{category.name}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.allocated)}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.spent)}</td>
+                      <td style={{ padding: '8px 10px', color: toneVar(tone), fontWeight: 600, textAlign: 'right' }}>{formatPct(value)}</td>
+                    </tr>
+                  );
+                })}
                 <tr style={{ borderTop: '2px solid var(--ink)', fontWeight: 700 }}>
                   <td style={{ padding: '10px', color: 'var(--ink)' }}>PS Subtotal</td>
                   <td style={{ padding: '10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(psAllocated)}</td>
                   <td style={{ padding: '10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(psSpent)}</td>
-                  <td style={{ padding: '10px', color: 'var(--ok)', textAlign: 'right' }}>{pct(psSpent, psAllocated)}%</td>
+                  <td style={{ padding: '10px', color: toneVar(utilizationTone(pct(psSpent, psAllocated))), textAlign: 'right' }}>{formatPct(pct(psSpent, psAllocated))}</td>
                 </tr>
               </tbody>
             </table>
@@ -440,19 +624,23 @@ export default function ProgramLeaderDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {mooeCategories.map((category) => (
-                  <tr key={category.id ?? category.name} style={{ borderBottom: '1px solid var(--line)' }}>
-                    <td style={{ padding: '8px 10px', color: 'var(--ink)' }}>{category.name}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.allocated)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.spent)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--warn)', fontWeight: 600, textAlign: 'right' }}>{category.utilization_pct ?? pct(category.spent, category.allocated)}%</td>
-                  </tr>
-                ))}
+                {mooeCategories.map((category) => {
+                  const value = Number(category.utilization_pct ?? pct(category.spent, category.allocated));
+                  const tone = utilizationTone(value);
+                  return (
+                    <tr key={category.id ?? category.name} style={{ borderBottom: '1px solid var(--line)' }}>
+                      <td style={{ padding: '8px 10px', color: 'var(--ink)' }}>{category.name}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.allocated)}</td>
+                      <td style={{ padding: '8px 10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(category.spent)}</td>
+                      <td style={{ padding: '8px 10px', color: toneVar(tone), fontWeight: 600, textAlign: 'right' }}>{formatPct(value)}</td>
+                    </tr>
+                  );
+                })}
                 <tr style={{ borderTop: '2px solid var(--ink)', fontWeight: 700 }}>
                   <td style={{ padding: '10px', color: 'var(--ink)' }}>MOOE Subtotal</td>
                   <td style={{ padding: '10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(mooeAllocated)}</td>
                   <td style={{ padding: '10px', color: 'var(--ink)', textAlign: 'right' }}>{formatMoney(mooeSpent)}</td>
-                  <td style={{ padding: '10px', color: 'var(--warn)', textAlign: 'right' }}>{pct(mooeSpent, mooeAllocated)}%</td>
+                  <td style={{ padding: '10px', color: toneVar(utilizationTone(pct(mooeSpent, mooeAllocated))), textAlign: 'right' }}>{formatPct(pct(mooeSpent, mooeAllocated))}</td>
                 </tr>
               </tbody>
             </table>

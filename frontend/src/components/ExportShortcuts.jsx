@@ -25,6 +25,7 @@ export default function ExportShortcuts({ downloading, onDownload, onPrintFormB 
       title="Quick Export & Compliance Filters"
       hint="Generate official monitoring reports"
       action={<span className="chip brand">Forms B &amp; C</span>}
+      style={{ height: '100%' }}
     >
       <div className="export-body">
         <div className="field">

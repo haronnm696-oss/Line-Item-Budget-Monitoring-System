@@ -1,6 +1,6 @@
 import Panel from './Panel';
 import Chip from './Chip';
-import { peso } from './money';
+import { peso, formatPct } from './money';
 
 const RING_COLOR = {
   ok: 'var(--ok)',
@@ -39,10 +39,10 @@ export default function ComplianceTracker({ compliance }) {
             className="compliance-ring"
             style={{ background: `conic-gradient(${RING_COLOR[tone] || RING_COLOR.neutral} ${pct * 3.6}deg, var(--line) 0)` }}
             role="img"
-            aria-label={`${pct}% of expenses have digitized receipts`}
+            aria-label={`${formatPct(pct)} of expenses have digitized receipts`}
           >
             <div className="compliance-ring-inner">
-              <b>{pct}%</b>
+              <b>{formatPct(pct)}</b>
               <span>with receipts</span>
             </div>
           </div>

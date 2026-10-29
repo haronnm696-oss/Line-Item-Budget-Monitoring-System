@@ -1,6 +1,6 @@
 import Panel from './Panel';
 import Chip from './Chip';
-import { peso } from './money';
+import { peso, formatPct, signedPct, varianceTone } from './money';
 
 const clamp = (value) => Math.max(0, Math.min(100, Number(value) || 0));
 
@@ -9,11 +9,21 @@ function signedPeso(amount) {
   return `${value > 0 ? '+' : value < 0 ? '−' : ''}${peso(Math.abs(value))}`;
 }
 
+/** Under-spending is a delivery risk, so it gets a warning tone, not green. */
+function forecastTone(variance, budget) {
+  const amount = Number(variance) || 0;
+  const size = Number(budget) || 0;
+  if (amount > 0) return 'over';
+  if (size > 0 && Math.abs(amount) / size > 0.05) return 'warn';
+  return 'ok';
+}
+
 export default function BurnRateCard({ burnRate }) {
   if (!burnRate) return null;
 
   const tone = burnRate.tone || 'neutral';
-  const forecastTone = Number(burnRate.forecast_variance) > 0 ? 'over' : 'ok';
+  const spendTone = varianceTone(burnRate.variance_pct);
+  const forecast = forecastTone(burnRate.forecast_variance, burnRate.budget);
 
   return (
     <Panel
@@ -29,7 +39,7 @@ export default function BurnRateCard({ burnRate }) {
           <div>
             <div className="burn-label">
               <span>Time elapsed</span>
-              <b>{burnRate.elapsed_pct}%</b>
+              <b>{formatPct(burnRate.elapsed_pct)}</b>
             </div>
             <div className="util">
               <div className="track">
@@ -40,11 +50,11 @@ export default function BurnRateCard({ burnRate }) {
           <div>
             <div className="burn-label">
               <span>Budget spent</span>
-              <b>{burnRate.spent_pct}%</b>
+              <b>{formatPct(burnRate.spent_pct)}</b>
             </div>
             <div className="util">
               <div className="track">
-                <div className={`fill ${tone}`} style={{ width: `${clamp(burnRate.spent_pct)}%` }} />
+                <div className={`fill ${spendTone}`} style={{ width: `${clamp(burnRate.spent_pct)}%` }} />
               </div>
             </div>
           </div>
@@ -61,8 +71,8 @@ export default function BurnRateCard({ burnRate }) {
           </div>
           <div>
             <span>Time/budget variance</span>
-            <b className={burnRate.variance_pct > 0 ? 'over' : 'ok'}>
-              {burnRate.variance_pct > 0 ? '+' : ''}{burnRate.variance_pct}%
+            <b className={spendTone}>
+              {signedPct(burnRate.variance_pct)}
             </b>
           </div>
           <div>
@@ -76,7 +86,7 @@ export default function BurnRateCard({ burnRate }) {
             {burnRate.months_elapsed} months elapsed of {Math.max(1, Math.round(burnRate.total_days / 30.44))}
           </span>
           <span>
-            Forecast vs budget: <b className={forecastTone}>{signedPeso(burnRate.forecast_variance)}</b>
+            Forecast vs budget: <b className={forecast}>{signedPeso(burnRate.forecast_variance)}</b>
           </span>
         </div>
       </div>
