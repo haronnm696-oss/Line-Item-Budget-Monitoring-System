@@ -114,6 +114,7 @@ class ProgramDashboardSeeder extends Seeder
         $this->seedGoat($goat, $recorder, $verifier, $requester);
         $this->seedNutrition($nutrition, $recorder, $verifier, $requester);
         $this->seedWeaving($weaving, $recorder, $verifier);
+        $this->seedUrban($urban, $recorder, $verifier, $requester);
         $this->seedUrbanReportsAndLiquidations($urban, $requester);
         $this->seedUrbanApprovalDates($urban);
     }
@@ -412,6 +413,138 @@ class ProgramDashboardSeeder extends Seeder
         );
     }
 
+    protected function seedUrban(Project $project, User $recorder, ?User $verifier, User $requester): void
+    {
+        $dash = "\u{2014}";
+        $peso = "\u{20B1}";
+
+        $categories = [
+            ['PS-01', 'PS', 'Project Leader Honoraria (Prof. Mudzna M. Asakil)', 400000],
+            ['PS-02', 'PS', 'Research Assistant Honoraria (2 personnel)', 360000],
+            ['PS-03', 'PS', 'Researcher Honoraria', 240000],
+            ['PS-04', 'PS', 'Program Leader Indirect Honoraria', 200000],
+            ['MOOE-01', 'MOOE', 'Traveling Expenses', 350000],
+            ['MOOE-02', 'MOOE', 'Supplies & Materials (IoT Sensors, Laptops)', 600000],
+            ['MOOE-03', 'MOOE', 'Communication Expenses', 120000],
+            ['MOOE-04', 'MOOE', 'Professional Services (Programmers/Enumerators)', 500000],
+            ['MOOE-05', 'MOOE', 'Cloud/Server Rent', 200000],
+            ['MOOE-06', 'MOOE', 'Utilities', 208376],
+        ];
+        $this->seedCategories($project, $categories);
+
+        $expenses = [
+            ['ref' => 'DEMO-PS-01', 'category' => 'PS-01', 'amount' => 260000.00, 'date' => '2026-02-15', 'receipt' => true, 'status' => 'verified', 'description' => 'Project Leader honoraria, Q1-Q3'],
+            ['ref' => 'DEMO-PS-02', 'category' => 'PS-02', 'amount' => 240000.00, 'date' => '2026-03-15', 'receipt' => true, 'status' => 'verified', 'description' => 'Research Assistant honoraria'],
+            ['ref' => 'DEMO-PS-03', 'category' => 'PS-03', 'amount' => 160000.00, 'date' => '2026-04-15', 'receipt' => false, 'status' => 'verified', 'description' => 'Researcher honoraria'],
+            ['ref' => 'DEMO-PS-04', 'category' => 'PS-04', 'amount' => 120000.00, 'date' => '2026-09-15', 'receipt' => true, 'status' => 'pending', 'description' => 'Program Leader indirect honoraria'],
+            ['ref' => 'DEMO-MOOE-01', 'category' => 'MOOE-01', 'amount' => 180000.00, 'date' => '2026-05-20', 'receipt' => true, 'status' => 'verified', 'description' => 'Field travel and validation activities'],
+            ['ref' => 'DEMO-MOOE-02', 'category' => 'MOOE-02', 'amount' => 320000.00, 'date' => '2026-06-10', 'receipt' => true, 'status' => 'verified', 'description' => 'IoT sensors, laptops, and supplies'],
+            ['ref' => 'DEMO-MOOE-03', 'category' => 'MOOE-03', 'amount' => 65000.00, 'date' => '2026-07-05', 'receipt' => false, 'status' => 'verified', 'description' => 'Connectivity and communication expenses'],
+            ['ref' => 'DEMO-MOOE-04', 'category' => 'MOOE-04', 'amount' => 250000.00, 'date' => '2026-08-12', 'receipt' => false, 'status' => 'pending', 'description' => 'Programmers and enumerators'],
+            ['ref' => 'DEMO-MOOE-05', 'category' => 'MOOE-05', 'amount' => 90000.00, 'date' => '2026-08-30', 'receipt' => true, 'status' => 'verified', 'description' => 'Cloud/server rent'],
+            ['ref' => 'DEMO-MOOE-06', 'category' => 'MOOE-06', 'amount' => 45000.00, 'date' => '2026-09-20', 'receipt' => true, 'status' => 'verified', 'description' => 'Utilities and office overhead'],
+        ];
+        $this->seedExpenses($project, $expenses, $recorder, $verifier);
+
+        $tranches = [
+            1 => [
+                'name' => "Tranche 1 {$dash} Project Mobilization",
+                'percentage' => 40,
+                'status' => 'released',
+                'planned_release_date' => '2026-01-15',
+                'released_at' => '2026-01-20',
+                'notes' => 'Initial release covering personnel services and startup procurement.',
+                'amount' => 1271350.40,
+            ],
+            2 => [
+                'name' => "Tranche 2 {$dash} Mid-year Milestone",
+                'percentage' => 30,
+                'status' => 'released',
+                'planned_release_date' => '2026-05-15',
+                'released_at' => '2026-06-02',
+                'notes' => 'Released after the first progress report and financial liquidation.',
+                'amount' => 953512.80,
+            ],
+            3 => [
+                'name' => "Tranche 3 {$dash} Field Validation",
+                'percentage' => 20,
+                'status' => 'due',
+                'planned_release_date' => '2026-09-30',
+                'released_at' => null,
+                'notes' => 'Pending Program Leader approval of the field validation milestone.',
+                'amount' => 635675.20,
+            ],
+            4 => [
+                'name' => "Tranche 4 {$dash} Final Report & Closeout",
+                'percentage' => 10,
+                'status' => 'upcoming',
+                'planned_release_date' => '2026-12-15',
+                'released_at' => null,
+                'notes' => 'Final release upon acceptance of the terminal report.',
+                'amount' => 317837.60,
+            ],
+        ];
+
+        $models = [];
+        foreach ($tranches as $sequence => $tranche) {
+            $models[$sequence] = ProjectTranche::updateOrCreate(
+                ['project_id' => $project->id, 'sequence' => $sequence],
+                array_merge($tranche, ['project_id' => $project->id])
+            );
+        }
+
+        $trancheThree = $models[3];
+        $trancheApproval = ApprovalRequest::updateOrCreate(
+            [
+                'project_id' => $project->id,
+                'project_tranche_id' => $trancheThree->id,
+                'type' => 'disbursement',
+            ],
+            [
+                'title' => "Release Tranche 3 {$dash} Field Validation",
+                'description' => 'Request for the third milestone release to fund field validation and data collection.',
+                'amount' => 635675.20,
+                'payload' => ['milestone' => 'Field Validation'],
+                'requested_by' => $requester->id,
+                'status' => 'pending',
+                'reviewed_by' => null,
+                'review_notes' => null,
+                'reviewed_at' => null,
+            ]
+        );
+        $trancheApproval->created_at = now()->subDays(8);
+        $trancheApproval->updated_at = now()->subDays(8);
+        $trancheApproval->saveQuietly();
+
+        $travel = LibCategory::where('project_id', $project->id)->where('line_item_code', 'MOOE-01')->first();
+        $professional = LibCategory::where('project_id', $project->id)->where('line_item_code', 'MOOE-04')->first();
+
+        if ($travel && $professional) {
+            $realignment = ApprovalRequest::updateOrCreate(
+                ['project_id' => $project->id, 'type' => 'budget_realignment'],
+                [
+                    'project_tranche_id' => null,
+                    'title' => "Realign {$peso}50,000 from Professional Services to Travel",
+                    'description' => 'Move unused professional services allocation to cover additional field travel.',
+                    'amount' => 50000.00,
+                    'payload' => [
+                        'from_lib_category_id' => $professional->id,
+                        'to_lib_category_id' => $travel->id,
+                        'amount' => 50000.00,
+                    ],
+                    'requested_by' => $requester->id,
+                    'status' => 'pending',
+                    'reviewed_by' => null,
+                    'review_notes' => null,
+                    'reviewed_at' => null,
+                ]
+            );
+            $realignment->created_at = now()->subDays(8);
+            $realignment->updated_at = now()->subDays(8);
+            $realignment->saveQuietly();
+        }
+    }
+
     protected function seedUrbanReportsAndLiquidations(Project $project, User $requester): void
     {
         ProjectReport::updateOrCreate(
@@ -467,18 +600,15 @@ class ProgramDashboardSeeder extends Seeder
             return;
         }
 
-        // The base demo asks for ₱40,000, which is only 8% of the ₱500,000
-        // Professional Services line. Lift it to exactly 10% so the demo
-        // exercises the "realignments above threshold" control.
-        if ((float) $realignment->amount < 50000) {
-            $payload = $realignment->payload ?? [];
-            $payload['amount'] = 50000;
+        // Keep the demo's control threshold at exactly 10% of the
+        // ₱500,000 Professional Services line, and repair older titles that
+        // were stored with question marks by a non-utf8mb4 connection.
+        $payload = $realignment->payload ?? [];
+        $payload['amount'] = 50000;
 
-            $realignment->title = 'Realign ₱50,000 from Professional Services to Travel';
-            $realignment->amount = 50000;
-            $realignment->payload = $payload;
-        }
-
+        $realignment->title = "Realign \u{20B1}50,000 from Professional Services to Travel";
+        $realignment->amount = 50000;
+        $realignment->payload = $payload;
         $realignment->created_at = now()->subDays(8);
         $realignment->updated_at = now()->subDays(8);
         $realignment->saveQuietly();
@@ -518,6 +648,8 @@ class ProgramDashboardSeeder extends Seeder
                 continue;
             }
 
+            $status = $expense['status'] ?? 'verified';
+
             Expense::updateOrCreate(
                 [
                     'project_id' => $project->id,
@@ -526,18 +658,18 @@ class ProgramDashboardSeeder extends Seeder
                 [
                     'lib_category_id' => $category->id,
                     'recorded_by' => $recorder->id,
-                    'verified_by' => $verifier?->id,
+                    'verified_by' => $status === 'verified' ? $verifier?->id : null,
                     'description' => $expense['description'],
                     'amount' => $expense['amount'],
                     'expense_date' => $expense['date'],
                     'attachment_path' => $expense['receipt']
                         ? 'receipts/' . $expense['ref'] . '.pdf'
                         : null,
-                    'status' => 'verified',
+                    'status' => $status,
                     'remarks' => $expense['receipt']
                         ? 'Digitized receipt on file.'
                         : 'Supporting document pending upload.',
-                    'verified_at' => now(),
+                    'verified_at' => $status === 'verified' ? now() : null,
                 ]
             );
         }

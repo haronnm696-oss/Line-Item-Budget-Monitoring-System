@@ -38,11 +38,11 @@ export default function App() {
               />
               <Route
                 path="/program-leader-dashboard"
-                element={<RoleRoute allow={['PRG']}><ProgramLeaderDashboard /></RoleRoute>}
+                element={<Navigate to="/program-dashboard" replace />}
               />
               <Route
                 path="/dashboard/program-leader"
-                element={<RoleRoute allow={['PRG']}><ProgramLeaderDashboard /></RoleRoute>}
+                element={<Navigate to="/program-dashboard" replace />}
               />
               <Route path="/project-leader-dashboard" element={<ProjectLeaderDashboard />} />
               <Route path="/dashboard/project-leader" element={<ProjectLeaderDashboard />} />
