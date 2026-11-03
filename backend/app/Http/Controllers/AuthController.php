@@ -81,10 +81,16 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
+        // Normalize before validation so the unique rule also catches
+        // case-only duplicates and the stored address is always lowercase.
+        $request->merge([
+            'email' => strtolower(trim((string) $request->input('email'))),
+        ]);
+
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|msumain\.edu\.ph)$/i'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|msumain\.edu\.ph)$/i', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'employee_id' => ['nullable', 'string', 'max:255', 'unique:users,employee_id'],
             'contact_number' => ['nullable', 'string', 'max:20'],
@@ -93,7 +99,7 @@ class AuthController extends Controller
             'role' => ['required', 'string', 'in:program-leader,project-leader,research-assistant,researcher,finance-admin'],
         ]);
 
-        $email = strtolower(trim($data['email']));
+        $email = $data['email'];
 
         // The employee ID is its own field and must never be derived from the
         // email address (or any other input).
@@ -131,6 +137,9 @@ class AuthController extends Controller
             'email_verified_at' => now(),
             'is_active' => true,
         ]);
+
+        Auth::login($user);
+        $request->session()->regenerate();
 
         return response()->json(['user' => self::toUserPayload($user)], 201);
     }
