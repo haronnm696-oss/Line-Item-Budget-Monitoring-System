@@ -1,22 +1,27 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-// Which roles see each nav item — mirrors the capability matrix on the
+// Which roles see each nav item - mirrors the capability matrix on the
 // Users & roles screen. Keep these two in sync if roles change.
 const NAV = [
   { section: 'Monitor', items: [
-    { to: '/dashboard', icon: '▦', label: 'Dashboard', roles: ['PRG', 'PL', 'RES', 'RA', 'FIN'] },
-    { to: '/program-dashboard', icon: '◫', label: 'Program overview', roles: ['PRG'] },
-    { to: '/projects', icon: '▤', label: 'Projects', roles: ['PRG', 'PL', 'RES', 'FIN'] },
+    {
+      key: 'dashboard',
+      to: (role) => (role === 'PRG' ? '/program-dashboard' : '/dashboard'),
+      icon: '▦',
+      label: 'Dashboard',
+      roles: ['PRG', 'PL', 'RES', 'RA', 'FIN'],
+    },
+    { key: 'projects', to: '/projects', icon: '▤', label: 'Projects', roles: ['PRG', 'PL', 'RES', 'FIN'] },
   ]},
   { section: 'Transactions', items: [
-    { to: '/expenses', icon: '₱', label: 'Expenses', roles: ['RA', 'PL', 'FIN'] },
-    { to: '/payroll', icon: '▥', label: 'Payroll', roles: ['RA', 'PL', 'FIN'] },
+    { key: 'expenses', to: '/expenses', icon: '₱', label: 'Expenses', roles: ['RA', 'PL', 'FIN'] },
+    { key: 'payroll', to: '/payroll', icon: '▥', label: 'Payroll', roles: ['RA', 'PL', 'FIN'] },
   ]},
   { section: 'Oversight', items: [
-    { to: '/reports', icon: '▨', label: 'Reports', roles: ['PRG', 'PL', 'RES', 'FIN'] },
-    { to: '/audit', icon: '≡', label: 'Audit trail', roles: ['PRG', 'PL', 'FIN'] },
-    { to: '/users', icon: '◉', label: 'Users & roles', roles: ['PRG', 'PL'] },
+    { key: 'reports', to: '/reports', icon: '▨', label: 'Reports', roles: ['PRG', 'PL', 'RES', 'FIN'] },
+    { key: 'audit', to: '/audit', icon: '≡', label: 'Audit trail', roles: ['PRG', 'PL', 'FIN'] },
+    { key: 'users', to: '/users', icon: '◉', label: 'Users & roles', roles: ['PRG', 'PL'] },
   ]},
 ];
 
@@ -30,7 +35,7 @@ export default function Sidebar() {
       <div className="brand">
         <span className="seal">MSU</span>
         <h1>LIB Monitoring System</h1>
-        <p>MSU–Main Campus</p>
+        <p>MSU-Main Campus</p>
       </div>
       <nav className="nav" aria-label="Main navigation">
         {NAV.map((group) => {
@@ -39,11 +44,14 @@ export default function Sidebar() {
           return (
             <div key={group.section}>
               <h2>{group.section}</h2>
-              {visible.map((item) => (
-                <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'active' : '')}>
-                  <span className="ic">{item.icon}</span>{item.label}
-                </NavLink>
-              ))}
+              {visible.map((item) => {
+                const to = typeof item.to === 'function' ? item.to(user.role) : item.to;
+                return (
+                  <NavLink key={item.key} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
+                    <span className="ic">{item.icon}</span>{item.label}
+                  </NavLink>
+                );
+              })}
             </div>
           );
         })}

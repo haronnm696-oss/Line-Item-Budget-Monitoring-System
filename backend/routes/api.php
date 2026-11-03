@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProgramDashboardController;
+use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportController;
 
 /*
@@ -32,6 +33,8 @@ Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
 // Dashboard analytics & quick actions.
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard/program-leader', [DashboardController::class, 'programLeader']);
+    Route::get('/projects', [ProjectController::class, 'index']);
+    Route::get('/projects/{project}', [ProjectController::class, 'show']);
     Route::get('/projects/{project}/tranches', [DashboardController::class, 'tranches']);
     Route::get('/projects/{project}/burn-rate', [DashboardController::class, 'burnRate']);
     Route::get('/projects/{project}/compliance', [DashboardController::class, 'compliance']);

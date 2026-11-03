@@ -23,11 +23,11 @@ export default function Projects() {
     getWithFallback(ENDPOINTS.projects, mockProjects).then(setProjects);
   }, []);
 
-  const agencies = ['All', ...new Set(mockProjects.map((p) => p.agency))];
+  const agencies = ['All', ...new Set(projects.map((p) => p.agency).filter(Boolean))];
   const statuses = ['All', 'Planning', 'Ongoing', 'Completed', 'Terminated'];
   const programs = [
     'All Projects — MSU–Main Campus',
-    ...new Set(mockProjects.map((p) => p.program).filter(Boolean)),
+    ...new Set(projects.map((p) => p.program).filter(Boolean)),
   ];
 
   const filtered = projects.filter((p) => {
@@ -112,7 +112,7 @@ export default function Projects() {
                 <td>{p.program || '—'}</td>
                 <td>{p.agency}</td>
                 <td className="r num">{peso(p.budget)}</td>
-                <td><UtilBar pct={(p.spent / p.budget) * 100} /></td>
+                <td><UtilBar pct={p.utilization_pct ?? (p.budget > 0 ? (p.spent / p.budget) * 100 : 0)} /></td>
                 <td className="num">{p.period}</td>
                 <td><Chip tone={statusTone(p.status)}>{p.status}</Chip></td>
               </tr>
