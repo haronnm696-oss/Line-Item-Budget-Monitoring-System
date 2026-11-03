@@ -66,6 +66,8 @@ export const ENDPOINTS = {
   dashboard: (role) => `/api/dashboard/${role}`,
   programLeaderDashboard: (projectId) =>
     `/api/dashboard/program-leader${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`,
+  programOverview: '/api/program/overview',
+  programDecision: (id) => `/api/program/approvals/${id}/decision`,
   projectTranches: (projectId) => `/api/projects/${projectId}/tranches`,
   projectBurnRate: (projectId) => `/api/projects/${projectId}/burn-rate`,
   projectCompliance: (projectId) => `/api/projects/${projectId}/compliance`,

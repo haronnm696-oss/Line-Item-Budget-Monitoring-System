@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 const NAV = [
   { section: 'Monitor', items: [
     { to: '/dashboard', icon: '▦', label: 'Dashboard', roles: ['PRG', 'PL', 'RES', 'RA', 'FIN'] },
+    { to: '/program-dashboard', icon: '◫', label: 'Program overview', roles: ['PRG'] },
     { to: '/projects', icon: '▤', label: 'Projects', roles: ['PRG', 'PL', 'RES', 'FIN'] },
   ]},
   { section: 'Transactions', items: [
