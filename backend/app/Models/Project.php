@@ -66,6 +66,16 @@ class Project extends Model
         return $this->hasMany(ApprovalRequest::class);
     }
 
+    public function liquidations()
+    {
+        return $this->hasMany(Liquidation::class);
+    }
+
+    public function reports()
+    {
+        return $this->hasMany(ProjectReport::class);
+    }
+
     /** Users holding a specific role slug on this project (e.g. all Project Leaders). */
     public function usersWithRole(string $roleSlug)
     {

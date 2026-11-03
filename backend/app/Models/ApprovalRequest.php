@@ -11,10 +11,11 @@ class ApprovalRequest extends Model
         'disbursement' => 'Fund Release',
         'budget_realignment' => 'Budget Realignment',
         'payroll' => 'Payroll',
+        'liquidation' => 'Liquidation',
     ];
 
     protected $fillable = [
-        'project_id', 'project_tranche_id', 'type', 'title', 'description',
+        'project_id', 'project_tranche_id', 'liquidation_id', 'type', 'title', 'description',
         'amount', 'payload', 'requested_by', 'reviewed_by', 'status',
         'review_notes', 'reviewed_at',
     ];
@@ -33,6 +34,11 @@ class ApprovalRequest extends Model
     public function tranche(): BelongsTo
     {
         return $this->belongsTo(ProjectTranche::class, 'project_tranche_id');
+    }
+
+    public function liquidation(): BelongsTo
+    {
+        return $this->belongsTo(Liquidation::class);
     }
 
     public function requestedBy(): BelongsTo
