@@ -2,6 +2,15 @@ export function peso(amount) {
   return '₱' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Short peso label for chart axes and compact cards. */
+export function compactPeso(amount) {
+  const n = Number(amount) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `₱${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `₱${Math.round(n / 1_000)}k`;
+  return peso(n);
+}
+
 /** One decimal everywhere so 42.8% never drifts to 43%. */
 export function formatPct(value) {
   return `${(Number(value) || 0).toFixed(1)}%`;

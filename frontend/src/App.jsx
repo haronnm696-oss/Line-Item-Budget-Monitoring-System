@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
+import RoleRoute from './routes/RoleRoute';
 import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
 import ProgramLeaderDashboard from './pages/dashboards/ProgramLeaderDashboard';
 import ProjectLeaderDashboard from './pages/dashboards/ProjectLeaderDashboard';
 import ResearcherDashboard from './pages/dashboards/ResearcherDashboard';
@@ -29,9 +31,19 @@ export default function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route path="/dashboard" element={<ProgramLeaderDashboard />} />
-              <Route path="/program-leader-dashboard" element={<ProgramLeaderDashboard />} />
-              <Route path="/dashboard/program-leader" element={<ProgramLeaderDashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route
+                path="/program-dashboard"
+                element={<RoleRoute allow={['PRG']}><ProgramLeaderDashboard /></RoleRoute>}
+              />
+              <Route
+                path="/program-leader-dashboard"
+                element={<RoleRoute allow={['PRG']}><ProgramLeaderDashboard /></RoleRoute>}
+              />
+              <Route
+                path="/dashboard/program-leader"
+                element={<RoleRoute allow={['PRG']}><ProgramLeaderDashboard /></RoleRoute>}
+              />
               <Route path="/project-leader-dashboard" element={<ProjectLeaderDashboard />} />
               <Route path="/dashboard/project-leader" element={<ProjectLeaderDashboard />} />
               <Route path="/research-assistant-dashboard" element={<ResearchAssistantDashboard />} />
