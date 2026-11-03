@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ReportController;
 
 /*
@@ -40,6 +41,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/approvals/{approval}/reject', [ApprovalController::class, 'reject']);
 
     Route::get('/projects/{project}/reports/{type}', [ReportController::class, 'export']);
+
+    // Program-wide dashboard: all projects visible to a Program Leader.
+    Route::middleware('role.program-leader')->group(function () {
+        Route::get('/program/overview', [ProgramDashboardController::class, 'overview']);
+        Route::post('/program/approvals/{approval}/decision', [ProgramDashboardController::class, 'decision']);
+    });
 });
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
