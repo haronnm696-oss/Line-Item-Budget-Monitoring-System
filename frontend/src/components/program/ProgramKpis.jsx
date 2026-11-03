@@ -26,8 +26,10 @@ export default function ProgramKpis({ kpis }) {
       </div>
 
       <div className="panel pd-kpi">
-        <span className="pd-kpi-label">Avg receipt compliance</span>
-        <b className="pd-kpi-value">{formatPct(kpis?.avg_receipt_compliance ?? 0)}</b>
+        <span className="pd-kpi-label">Portfolio receipt compliance</span>
+        <b className="pd-kpi-value">
+          {kpis?.avg_receipt_compliance == null ? '—' : formatPct(kpis.avg_receipt_compliance)}
+        </b>
         <span className="pd-kpi-sub">Expenses with a digitized receipt on file</span>
       </div>
     </div>
