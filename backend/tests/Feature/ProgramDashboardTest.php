@@ -108,6 +108,19 @@ class ProgramDashboardTest extends TestCase
         $this->assertCount(1, $filtered->json('funding_sources'));
     }
 
+    public function test_decision_is_forbidden_for_non_program_leaders(): void
+    {
+        $approval = $this->approvalFor($this->project($this->funder(), []), 'budget_realignment');
+
+        $this->actingAs($this->userWithRole('project-leader'))
+            ->postJson("/api/program/approvals/{$approval->id}/decision", [
+                'decision' => 'approved',
+            ])
+            ->assertForbidden();
+
+        $this->assertSame('pending', $approval->fresh()->status);
+    }
+
     public function test_rejecting_requires_remarks(): void
     {
         $programLeader = $this->userWithRole('program-leader');

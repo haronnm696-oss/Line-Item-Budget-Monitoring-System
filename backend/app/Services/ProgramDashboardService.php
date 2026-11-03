@@ -181,7 +181,7 @@ class ProgramDashboardService
             ? round(($withReceipt / $expenseCount) * 100, 1)
             : 100.0;
 
-        $tranche = $this->trancheMetric($project, $today);
+        $tranche = $this->trancheMetric($project, $today, $spentPct);
         $report = $this->reportMetric($project, $today);
         [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct);
 
@@ -243,9 +243,21 @@ class ProgramDashboardService
     /**
      * @return array{status: string, overdue: bool}
      */
-    protected function trancheMetric(Project $project, Carbon $today): array
+    protected function trancheMetric(Project $project, Carbon $today, float $spentPct): array
     {
         $tranches = $project->tranches->sortBy('sequence')->values();
+        $last = $tranches->last();
+        $earlierReleased = $last
+            ? $tranches->where('sequence', '<', $last->sequence)
+                ->every(fn (ProjectTranche $tranche) => $tranche->status === 'released')
+            : false;
+
+        // A closeout tranche is expected to stay pending while the project is
+        // nearly fully spent. Treat it as "Final pending" rather than overdue
+        // so the health reason matches the real risk (budget depletion).
+        if ($last && $last->status !== 'released' && $earlierReleased && $spentPct >= 95) {
+            return ['status' => 'Final pending', 'overdue' => false];
+        }
 
         $overdue = $tranches->contains(function (ProjectTranche $tranche) use ($today) {
             return $tranche->status !== 'released'
@@ -255,16 +267,6 @@ class ProgramDashboardService
 
         if ($overdue) {
             return ['status' => 'Overdue', 'overdue' => true];
-        }
-
-        $last = $tranches->last();
-        $earlierReleased = $last
-            ? $tranches->where('sequence', '<', $last->sequence)
-                ->every(fn (ProjectTranche $tranche) => $tranche->status === 'released')
-            : false;
-
-        if ($last && $last->status !== 'released' && $earlierReleased) {
-            return ['status' => 'Final pending', 'overdue' => false];
         }
 
         return ['status' => 'On track', 'overdue' => false];
@@ -621,7 +623,7 @@ class ProgramDashboardService
                 }
 
                 $threshold = (float) $source->allocated_amount * 0.10;
-                if ($amount > $threshold) {
+                if ($amount >= $threshold) {
                     $realignments->push([
                         'id' => $approval->id,
                         'project' => $project->title,

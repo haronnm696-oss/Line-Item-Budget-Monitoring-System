@@ -220,17 +220,18 @@ class DashboardDemoSeeder extends Seeder
             ApprovalRequest::updateOrCreate(
                 [
                     'project_id' => $project->id,
-                    'title' => 'Realign ₱40,000 from Professional Services to Travel',
+                    'type' => 'budget_realignment',
                 ],
                 [
                     'project_tranche_id' => null,
+                    'title' => 'Realign ₱50,000 from Professional Services to Travel',
                     'type' => 'budget_realignment',
                     'description' => 'Move unused professional services allocation to cover additional field travel.',
-                    'amount' => 40000.00,
+                    'amount' => 50000.00,
                     'payload' => [
                         'from_lib_category_id' => $professional->id,
                         'to_lib_category_id' => $travel->id,
-                        'amount' => 40000.00,
+                        'amount' => 50000.00,
                     ],
                     'requested_by' => $requester?->id,
                     'status' => 'pending',
