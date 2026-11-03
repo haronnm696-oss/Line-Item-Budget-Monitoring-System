@@ -506,6 +506,11 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
 .pd-forecast-label{font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap}
 .pd-forecast-foot{display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid var(--line);margin-top:12px;padding:11px 18px 14px;font-size:10.5px;color:var(--muted)}
 .pd-forecast-foot b{font-size:11.5px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pd-forecast-current{max-height:92px;overflow:auto;border-top:1px solid var(--line);margin-top:10px;padding:9px 18px 0}
+.pd-forecast-current-title{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:800;margin-bottom:4px}
+.pd-forecast-release{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;padding:3px 0;color:var(--ink)}
+.pd-forecast-release span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-forecast-release b{white-space:nowrap;font-variant-numeric:tabular-nums}
 
 /* Health matrix */
 .pd-matrix{min-width:900px}

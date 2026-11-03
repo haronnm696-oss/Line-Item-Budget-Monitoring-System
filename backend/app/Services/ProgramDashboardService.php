@@ -31,6 +31,8 @@ class ProgramDashboardService
             ->values();
 
         $approvals = $this->approvalRows($projects, $today);
+        $expenseCount = (int) $rows->sum('expenses_count');
+        $receiptCount = (int) $rows->sum('receipts_count');
 
         return [
             'meta' => [
@@ -47,7 +49,9 @@ class ProgramDashboardService
                     'watch' => $rows->where('health', 'Watch')->count(),
                     'at_risk' => $rows->where('health', 'At risk')->count(),
                 ],
-                'avg_receipt_compliance' => round((float) ($rows->avg('receipt_compliance_pct') ?? 0), 1),
+                'avg_receipt_compliance' => $expenseCount > 0
+                    ? round(($receiptCount / $expenseCount) * 100, 1)
+                    : null,
                 'pending_approvals' => $approvals->count(),
             ],
             'projects' => $rows->all(),
@@ -179,11 +183,13 @@ class ProgramDashboardService
         $withReceipt = (int) ($project->expenses_with_receipt_count ?? 0);
         $receiptPct = $expenseCount > 0
             ? round(($withReceipt / $expenseCount) * 100, 1)
-            : 100.0;
+            : null;
 
         $tranche = $this->trancheMetric($project, $today, $spentPct);
         $report = $this->reportMetric($project, $today);
-        [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct);
+        $closed = $project->status === 'completed'
+            || ($project->end_date && $project->end_date->lt($today));
+        [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct, $closed);
 
         return [
             'id' => $project->id,
@@ -306,10 +312,21 @@ class ProgramDashboardService
     /**
      * @return array{0: string, 1: string}
      */
-    protected function health(bool $overdue, float $spentPct, float $gap, float $receiptPct): array
+    protected function health(bool $overdue, float $spentPct, float $gap, ?float $receiptPct, bool $closed): array
     {
         if ($overdue) {
             return ['At risk', 'Tranche release overdue'];
+        }
+
+        // Completed projects and projects past their end date cannot be
+        // "under-spending" risks: the timeline is over. Receipt problems
+        // still matter, but normal end-of-project depletion is not a risk.
+        if ($closed) {
+            if ($receiptPct !== null && $receiptPct < 80) {
+                return ['Watch', 'Receipt compliance at ' . $receiptPct . '%'];
+            }
+
+            return ['Healthy', 'Project completed or past end date'];
         }
 
         if ($spentPct >= 95) {
@@ -324,7 +341,7 @@ class ProgramDashboardService
             return ['Watch', 'Under-spending vs timeline by ' . abs($gap) . ' pts'];
         }
 
-        if ($receiptPct < 80) {
+        if ($receiptPct !== null && $receiptPct < 80) {
             return ['Watch', 'Receipt compliance at ' . $receiptPct . '%'];
         }
 
@@ -387,6 +404,9 @@ class ProgramDashboardService
         $totals = $months
             ->mapWithKeys(fn (Carbon $month) => [$month->format('Y-m') => 0.0])
             ->all();
+        $releases = $months
+            ->mapWithKeys(fn (Carbon $month) => [$month->format('Y-m') => []])
+            ->all();
 
         foreach ($projects as $project) {
             foreach ($project->tranches as $tranche) {
@@ -394,14 +414,25 @@ class ProgramDashboardService
                     continue;
                 }
 
+                $overdue = $tranche->planned_release_date
+                    && $tranche->planned_release_date->lt($today->copy()->startOfMonth());
                 $month = $tranche->planned_release_date
-                    && $tranche->planned_release_date->greaterThanOrEqualTo($today->copy()->startOfMonth())
+                    && ! $overdue
                     ? $tranche->planned_release_date->copy()->startOfMonth()
                     : $today->copy()->startOfMonth();
 
                 $key = $month->format('Y-m');
                 if (array_key_exists($key, $totals)) {
                     $totals[$key] += (float) $tranche->amount;
+                    $releases[$key][] = [
+                        'id' => $tranche->id,
+                        'name' => $tranche->name,
+                        'project' => $project->title,
+                        'project_code' => $project->code,
+                        'amount' => round((float) $tranche->amount, 2),
+                        'planned_release_date' => $tranche->planned_release_date?->toDateString(),
+                        'overdue' => $overdue,
+                    ];
                 }
             }
         }
@@ -410,6 +441,7 @@ class ProgramDashboardService
             'month' => $month->format('Y-m'),
             'label' => $month->format('M'),
             'amount' => round($totals[$month->format('Y-m')], 2),
+            'releases' => $releases[$month->format('Y-m')],
         ])->all();
     }
 

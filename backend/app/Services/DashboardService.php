@@ -32,6 +32,60 @@ class DashboardService
     }
 
     /**
+     * Project list rows for the Projects page. Uses the same verified
+     * expenses + approved/released payroll source as the Program dashboard.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function projectSummaries(): array
+    {
+        return Project::query()
+            ->with('fundingAgency')
+            ->withSum(['expenses as verified_expense_total' => function ($query) {
+                $query->where('status', 'verified');
+            }], 'amount')
+            ->withSum(['payrolls as payroll_total' => function ($query) {
+                $query->whereIn('status', ['approved', 'released']);
+            }], 'net_pay')
+            ->withCount('expenses')
+            ->orderBy('code')
+            ->get()
+            ->map(function (Project $project) {
+                $budget = (float) $project->total_approved_budget;
+                if ($budget <= 0) {
+                    $budget = $project->totalAllocated();
+                }
+
+                $spent = (float) ($project->verified_expense_total ?? 0)
+                    + (float) ($project->payroll_total ?? 0);
+
+                return [
+                    'id' => $project->id,
+                    'code' => $project->code,
+                    'title' => $project->title,
+                    'description' => $project->description,
+                    'agency' => $project->fundingAgency
+                        ? ($project->fundingAgency->acronym ?: $project->fundingAgency->name)
+                        : 'Unassigned funder',
+                    'funding_agency_id' => $project->funding_agency_id,
+                    'budget' => round($budget, 2),
+                    'spent' => round($spent, 2),
+                    'remaining' => round($budget - $spent, 2),
+                    'utilization_pct' => $this->pct($spent, $budget),
+                    'period' => $this->period($project),
+                    'status' => ucfirst($project->status),
+                    'status_key' => $project->status,
+                    'start_date' => $project->start_date?->toDateString(),
+                    'end_date' => $project->end_date?->toDateString(),
+                    'program' => null,
+                    'expenses_count' => (int) ($project->expenses_count ?? 0),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
      * Full payload consumed by the Program Leader dashboard.
      */
     public function build(Project $project): array
