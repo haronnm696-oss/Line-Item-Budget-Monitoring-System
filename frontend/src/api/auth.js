@@ -10,9 +10,8 @@ export function normalizeEmail(raw) {
 
 export function isValidEmail(raw) {
   const email = normalizeEmail(raw);
-  // Allowed domains: @gmail.com, @googlemail.com, @msumain.edu.ph
+  // Keep this list aligned with the backend validation rule.
   return /^[^\s@]+@gmail\.com$/.test(email)
-      || /^[^\s@]+@googlemail\.com$/.test(email)
       || /^[^\s@]+@msumain\.edu\.ph$/.test(email);
 }
 
@@ -41,7 +40,7 @@ function toMockUser(code, email) {
 export async function login(email, password) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail address.');
+    throw new Error('Enter a valid Gmail or MSU-Main email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -87,7 +86,7 @@ export async function register({ name: _name, email, password, first_name, last_
     throw new Error('First and last name are required.');
   }
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid email address.');
+    throw new Error('Enter a valid Gmail or MSU-Main email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -146,7 +145,7 @@ export async function register({ name: _name, email, password, first_name, last_
 export async function forgotPassword(email) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail address.');
+    throw new Error('Enter a valid Gmail or MSU-Main email address.');
   }
 
   if (USE_MOCK) {
@@ -178,7 +177,7 @@ export async function forgotPassword(email) {
 export async function resetPassword({ email, token, password }) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail address.');
+    throw new Error('Enter a valid Gmail or MSU-Main email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
