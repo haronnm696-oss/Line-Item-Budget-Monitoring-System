@@ -76,7 +76,7 @@ export async function login(email, password) {
   }
 }
 
-export async function register({ name: _name, email, password, first_name, last_name, employee_id, contact_number, college, department } = {}) {
+export async function register({ name: _name, email, password, first_name, last_name, employee_id, contact_number, college, department, position } = {}) {
   const cleanEmail = normalizeEmail(email);
   const cleanFirstName = (first_name || '').trim();
   const cleanLastName = (last_name || '').trim();
@@ -85,8 +85,8 @@ export async function register({ name: _name, email, password, first_name, last_
   if (!cleanFirstName || !cleanLastName) {
     throw new Error('First and last name are required.');
   }
-  if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail or MSU-Main email address.');
+  if (!cleanEmail || !/^[^@\s]+@msumain\.edu\.ph$/i.test(cleanEmail)) {
+    throw new Error('Please use your institutional email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -125,6 +125,7 @@ export async function register({ name: _name, email, password, first_name, last_
       contact_number: contact_number || undefined,
       college: college || undefined,
       department: department || undefined,
+      position: position || undefined,
     });
     return res.data;
   } catch (err) {
