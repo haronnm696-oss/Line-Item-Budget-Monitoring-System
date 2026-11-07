@@ -23,6 +23,7 @@ class RegistrationTest extends TestCase
             'contact_number' => '09096254046',
             'college' => 'College of Business and Finance',
             'department' => 'Finance',
+            'position' => 'Professor VI',
         ], $overrides);
     }
 
