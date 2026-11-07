@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AuditTrail;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\AccountApprovedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Program Leader / Finance-Admin approval queue for self-registered accounts.
@@ -40,6 +42,12 @@ class UserApprovalController extends Controller
             ], 409);
         }
 
+        if (is_null($user->email_verified_at)) {
+            return response()->json([
+                'message' => 'Please verify your email before the account can be reviewed.',
+            ], 403);
+        }
+
         $data = $request->validate([
             'role' => ['required', 'string', 'in:program-leader,project-leader,research-assistant,researcher,finance-admin'],
         ]);
@@ -66,6 +74,8 @@ class UserApprovalController extends Controller
                 'created_at' => now(),
             ]);
         });
+
+        Notification::send($user, new AccountApprovedNotification($user->fresh(), $role->name));
 
         return response()->json([
             'message' => 'Account approved and role assigned.',

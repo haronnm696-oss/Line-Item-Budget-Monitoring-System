@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Notifications\NewRegistrationPendingNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -96,12 +98,13 @@ class AuthController extends Controller
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|msumain\.edu\.ph)$/i', 'unique:users,email'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/^[^@\s]+@msumain\.edu\.ph$/i', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
-            'employee_id' => ['nullable', 'string', 'max:255', 'unique:users,employee_id'],
+            'employee_id' => ['nullable', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
             'contact_number' => ['nullable', 'string', 'max:20'],
             'college' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:255'],
+            'position' => ['required', 'string', 'max:255'],
         ]);
 
         $email = $data['email'];
@@ -130,10 +133,16 @@ class AuthController extends Controller
             'college' => $data['college'] ?? null,
             'department' => $data['department'] ?? null,
             'role_id' => null,
-            'position' => 'Pending approval',
+            'position' => $data['position'],
             'email_verified_at' => now(),
             'is_active' => false,
         ]);
+
+        $programLeaders = User::query()
+            ->whereHas('primaryRole', fn ($query) => $query->where('slug', 'program-leader'))
+            ->get();
+
+        Notification::send($programLeaders, new NewRegistrationPendingNotification($user));
 
         return response()->json([
             'user' => self::toUserPayload($user),

@@ -21,28 +21,59 @@ function getPasswordStrength(pw) {
 
 const STRENGTH_LABELS = ['', 'Weak', 'Weak', 'Fair', 'Good', 'Strong'];
 
+function isPersonalPassword(pw, firstName, lastName, email) {
+  const lower = pw.toLowerCase();
+  const first = (firstName || '').trim().toLowerCase();
+  const last = (lastName || '').trim().toLowerCase();
+  const emailLocal = (email || '').split('@')[0].toLowerCase();
+
+  if (first && lower.includes(first)) return false;
+  if (last && lower.includes(last)) return false;
+  if (emailLocal && lower.includes(emailLocal)) return false;
+  return true;
+}
+
 export default function Register() {
   const { signUp } = useAuth();
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     contactNumber: '',
     employeeId: '',
+    position: '',
     college: '',
     department: '',
     password: '',
     confirmPassword: '',
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [agreeAccuracy, setAgreeAccuracy] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agree, setAgree] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleChange = (e) => {
+  const selectedCollege = COLLEGES.find((c) => c.name === formData.college);
+  const departments = selectedCollege ? selectedCollege.departments : [];
+
+  const strength = getPasswordStrength(formData.password);
+  const strengthLabel = STRENGTH_LABELS[strength];
+
+  const passwordChecks = [
+    { label: '8+ characters', valid: formData.password.length >= 8 },
+    { label: 'Contains a number', valid: /\d/.test(formData.password) },
+    { label: 'Contains a symbol', valid: /[^A-Za-z0-9]/.test(formData.password) },
+    { label: 'Not your name or email', valid: isPersonalPassword(formData.password, formData.firstName, formData.lastName, formData.email) },
+  ];
+  const passwordValid = formData.password.length >= 8 && /\d/.test(formData.password) && /[^A-Za-z0-9]/.test(formData.password) && passwordChecks[3].valid;
+  const confirmValid = formData.confirmPassword.length > 0 && formData.confirmPassword === formData.password && passwordValid;
+
+  const emailValid = /^[^@\s]+@msumain\.edu\.ph$/i.test(formData.email);
+  const employeeIdValid = /^MSU-\d{5}$/.test(formData.employeeId.trim());
+
+  function handleChange(e) {
     const { name, value } = e.target;
     setFormData((prev) => {
       const next = { ...prev, [name]: value };
@@ -51,16 +82,11 @@ export default function Register() {
       }
       return next;
     });
-  };
+  }
 
-  const selectedCollege = COLLEGES.find((c) => c.name === formData.college);
-  const departments = selectedCollege ? selectedCollege.departments : [];
-
-  const strength = getPasswordStrength(formData.password);
-  const strengthLabel = STRENGTH_LABELS[strength];
-
-  const handleRegister = async (e) => {
+  async function handleRegister(e) {
     e?.preventDefault();
+
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
       setError('Please fill in all required fields.');
       return;
@@ -73,28 +99,33 @@ export default function Register() {
       setError('Passwords do not match.');
       return;
     }
-    if (!agreeAccuracy || !agreeTerms) {
-      setError('Please accept both policy agreements to continue.');
+    if (!agree) {
+      setError('Please accept the policy to continue.');
       return;
     }
-    const employeeId = formData.employeeId.trim();
-    const email = formData.email.trim();
-    if (employeeId && employeeId.toLowerCase() === email.toLowerCase()) {
-      setError('Employee ID cannot be the same as your email address.');
+    if (!employeeIdValid) {
+      setError('Employee ID must be in format MSU-XXXXX.');
       return;
     }
+    if (!emailValid) {
+      setError('Please use your institutional email address.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
+
     try {
-      await signUp({
+      const res = await signUp({
         first_name: formData.firstName,
         last_name: formData.lastName,
-        email,
+        email: formData.email,
         password: formData.password,
-        employee_id: employeeId || undefined,
+        employee_id: formData.employeeId,
         contact_number: formData.contactNumber || undefined,
         college: formData.college || undefined,
         department: formData.department || undefined,
+        position: formData.position,
       });
       setSuccess(true);
     } catch (err) {
@@ -102,375 +133,291 @@ export default function Register() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   if (success) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          width: '100%',
-          background: 'radial-gradient(circle at top left, #5a061c, #26020b, #110005)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '32px 16px',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          boxSizing: 'border-box',
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: '520px',
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '20px',
-            padding: '36px',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-            boxSizing: 'border-box',
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              width: '54px',
-              height: '54px',
-              margin: '0 auto 20px',
-              borderRadius: '50%',
-              backgroundColor: 'rgba(34, 197, 94, 0.15)',
-              border: '1px solid rgba(34, 197, 94, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#86efac',
-              fontSize: '26px',
-            }}
-          >
-            ✓
+      <div className="auth-screen">
+        <div className="auth-card">
+          <div className="auth-panel auth-panel--bg">
+            <div className="auth-form-wrap">
+              <div className="auth-form-card" style={{ textAlign: 'center', padding: '32px' }}>
+                <div className="auth-badge" style={{ margin: '0 auto 20px', background: 'var(--ok)', borderColor: 'var(--ok)' }}>
+                  &#10003;
+                </div>
+                <h2 className="auth-form-title">Registration submitted</h2>
+                <p className="auth-form-sub" style={{ marginBottom: 24 }}>
+                  Your account is pending approval. A Program Leader will review it and you will be emailed once approved.
+                </p>
+                <button className="auth-btn" type="button" onClick={() => setSuccess(false)}>
+                  Back to sign in
+                </button>
+              </div>
+            </div>
           </div>
-          <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: '0 0 10px' }}>
-            Account submitted
-          </h2>
-          <p style={{ fontSize: '13px', lineHeight: '1.6', color: 'rgba(254, 205, 211, 0.8)', margin: '0 0 10px' }}>
-            Your registration is now <strong style={{ color: '#fcd34d' }}>Pending approval</strong>.
-            A Program Leader or Finance/Admin staff member must approve the account and assign your role before you can sign in.
-          </p>
-          <p style={{ fontSize: '12px', color: 'rgba(254, 205, 211, 0.6)', margin: '0 0 24px' }}>
-            You will not be signed in automatically.
-          </p>
-          <Link
-            to="/login"
-            style={{
-              display: 'inline-block',
-              background: 'linear-gradient(to right, #f59e0b, #e11d48)',
-              color: '#ffffff',
-              fontWeight: '700',
-              fontSize: '13px',
-              padding: '12px 28px',
-              borderRadius: '10px',
-              textDecoration: 'none',
-              boxShadow: '0 10px 15px -3px rgba(225, 29, 72, 0.3)',
-            }}
-          >
-            Back to sign in
-          </Link>
         </div>
       </div>
     );
   }
 
-  const inputStyle = {
-    width: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-    border: '1px solid rgba(255, 255, 255, 0.25)',
-    color: '#ffffff',
-    borderRadius: '10px',
-    padding: '11px 14px',
-    fontSize: '13px',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const fieldLabelStyle = {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: '600',
-    color: 'rgba(254, 205, 211, 0.9)',
-    marginBottom: '4px',
-  };
-
   return (
-    <div 
-      style={{ 
-        minHeight: '100vh',
-        width: '100%',
-        background: 'radial-gradient(circle at top left, #5a061c, #26020b, #110005)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '32px 16px',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        boxSizing: 'border-box'
-      }}
-    >
-      {/* Main Glassmorphic Container Card */}
-      <div 
-        style={{ 
-          width: '100%',
-          maxWidth: '1000px',
-          minHeight: '600px',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          background: 'rgba(20, 2, 7, 0.45)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          flexWrap: 'wrap',
-          overflow: 'hidden',
-          position: 'relative'
-        }}
-      >
-        {/* Left Hero Section (Branding & Guidance) */}
-        <div 
-          style={{ 
-            flex: '1 1 450px',
-            padding: '48px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxSizing: 'border-box'
-          }}
-        >
+    <div className="auth-screen">
+      <div className="auth-card">
+        <div className="auth-panel auth-panel--brand">
           <div>
-            {/* Logo Badge */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '32px' }}>
-              <div 
-                style={{ 
-                  width: '36px', height: '36px', backgroundColor: '#f59e0b', borderRadius: '10px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900',
-                  color: '#26020b', fontSize: '14px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)'
-                }}
-              >
-                M
-              </div>
-              <span style={{ color: '#ffffff', fontWeight: '800', fontSize: '13px', letterSpacing: '1px' }}>MSU-MAIN</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
+              <div className="auth-badge">MSU</div>
+              <div className="auth-brand-name">LIB Monitoring System</div>
             </div>
 
-            {/* Title */}
-            <h1 style={{ fontSize: '42px', fontWeight: '900', color: '#ffffff', margin: '0 0 16px 0', tracking: '-1px' }}>
-              Let's get started<span style={{ color: '#fbbf24' }}>!</span>
-            </h1>
+            <h1 className="auth-title">Request access</h1>
+            <div className="auth-underline" />
 
-            <div style={{ width: '60px', height: '4px', background: 'linear-gradient(to right, #fbbf24, #f43f5e)', borderRadius: '2px', marginBottom: '24px' }} />
-
-            <p style={{ color: 'rgba(254, 205, 211, 0.8)', fontSize: '15px', lineHeight: '1.6', maxWidth: '380px', margin: '0 0 28px 0' }}>
-              Create your account to monitor externally funded research projects at Mindanao State University – Main Campus.
-            </p>
-
-            {/* Benefit Checkmarks */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', color: '#ffffff', fontSize: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(251, 191, 36, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', fontSize: '11px', fontWeight: 'bold' }}>✓</span>
-                <span>Create your institutional research account</span>
+            <div className="auth-steps">
+              <div className="auth-step">
+                <span className="auth-step-number">1</span>
+                <span>Register with your MSU email</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(251, 191, 36, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', fontSize: '11px', fontWeight: 'bold' }}>✓</span>
-                <span>A Program Leader reviews and assigns your role</span>
+              <div className="auth-step">
+                <span className="auth-step-number">2</span>
+                <span>The Program Leader reviews your request and assigns your role</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(251, 191, 36, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', fontSize: '11px', fontWeight: 'bold' }}>✓</span>
-                <span>Sign in after your account is approved</span>
+              <div className="auth-step">
+                <span className="auth-step-number">3</span>
+                <span>Sign in once you are approved</span>
               </div>
             </div>
           </div>
 
-          <div style={{ fontSize: '11px', color: 'rgba(254, 205, 211, 0.4)', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '32px' }}>
-            MSU-MAIN CAMPUS · EXTERNALLY FUNDED RESEARCH
-          </div>
+          <div className="auth-footer">MSU–Main Campus · Authorized personnel only</div>
         </div>
 
-        {/* Right Section - Floating Glassmorphic Registration Box */}
-        <div 
-          style={{ 
-            flex: '1 1 450px',
-            padding: '32px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxSizing: 'border-box'
-          }}
-        >
-          <div 
-            style={{ 
-              width: '100%',
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '20px',
-              padding: '32px',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-              boxSizing: 'border-box'
-            }}
-          >
-            <div style={{ marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: 0 }}>
-                Create <span style={{ borderBottom: '3px solid #fbbf24', paddingBottom: '2px' }}>account</span>
-              </h2>
-              <p style={{ fontSize: '12px', color: 'rgba(254, 205, 211, 0.7)', marginTop: '6px' }}>
-                Fill in the details to register for the program.
-              </p>
-            </div>
+        <div className="auth-panel auth-panel--bg">
+          <div className="auth-form-wrap">
+            <div className="auth-form-card">
+              <h2 className="auth-form-title">Create account</h2>
+              <p className="auth-form-sub">Fill in the details to request access.</p>
 
-            {error && (
-              <div style={{ padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '10px', color: '#fecdd3', fontSize: '12px', marginBottom: '16px' }}>
-                {error}
-              </div>
-            )}
+              {error && <div className="auth-error" role="alert">{error}</div>}
 
-            <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* First Name & Last Name */}
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>First Name</label>
-                  <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} placeholder="e.g. Juan" style={inputStyle} required />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Last Name</label>
-                  <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} placeholder="e.g. Dela Cruz" style={inputStyle} required />
-                </div>
-              </div>
+              <form onSubmit={handleRegister}>
+                <div className="auth-section-title">Personal details</div>
 
-              {/* Email Address & Contact Number */}
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Email address</label>
-                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="name@msumain.edu.ph" style={inputStyle} autoComplete="email" required />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Contact Number</label>
-                  <input type="text" name="contactNumber" value={formData.contactNumber} onChange={handleChange} placeholder="e.g. 0917-123-4567" style={inputStyle} autoComplete="tel" />
-                </div>
-              </div>
-
-              {/* Employee ID */}
-              <div>
-                <label style={fieldLabelStyle}>Employee ID</label>
-                <input type="text" name="employeeId" value={formData.employeeId} onChange={handleChange} placeholder="e.g. MSU-04182" style={inputStyle} autoComplete="off" />
-              </div>
-
-              {/* College & Department */}
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>College</label>
-                  <select name="college" value={formData.college} onChange={handleChange} style={{ ...inputStyle, appearance: 'auto' }}>
-                    <option value="">Select a college</option>
-                    {COLLEGES.map((c) => (
-                      <option key={c.name} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Department</label>
-                  <select name="department" value={formData.department} onChange={handleChange} disabled={!formData.college} style={{ ...inputStyle, appearance: 'auto', opacity: formData.college ? 1 : 0.6 }}>
-                    <option value="">{formData.college ? 'Select a department' : 'Select a college first'}</option>
-                    {departments.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Password & Confirm Password */}
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Password</label>
-                  <div style={{ position: 'relative' }}>
+                <div className="auth-grid-2">
+                  <div className="auth-field">
+                    <label className="auth-label" htmlFor="reg-first-name">First name</label>
                     <input
+                      id="reg-first-name"
+                      className="auth-input"
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      autoComplete="given-name"
+                      required
+                    />
+                    {formData.firstName.trim().length > 0 && (
+                      <div className="auth-check" style={{ marginTop: 6, color: 'var(--ok)' }}>
+                        <span className="auth-check-icon">&#10003;</span>
+                        <span>Valid</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="auth-field">
+                    <label className="auth-label" htmlFor="reg-last-name">Last name</label>
+                    <input
+                      id="reg-last-name"
+                      className="auth-input"
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      autoComplete="family-name"
+                      required
+                    />
+                    {formData.lastName.trim().length > 0 && (
+                      <div className="auth-check" style={{ marginTop: 6, color: 'var(--ok)' }}>
+                        <span className="auth-check-icon">&#10003;</span>
+                        <span>Valid</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="auth-grid-2">
+                  <div className="auth-field">
+                    <label className="auth-label" htmlFor="reg-email">Email address</label>
+                    <input
+                      id="reg-email"
+                      className="auth-input"
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      autoComplete="email"
+                      required
+                    />
+                    {formData.email && !emailValid && (
+                      <div className="auth-error" style={{ marginTop: 6, marginBottom: 0 }}>Please use your institutional email address.</div>
+                    )}
+                    {formData.email && emailValid && (
+                      <div className="auth-check" style={{ marginTop: 6, color: 'var(--ok)' }}>
+                        <span className="auth-check-icon">&#10003;</span>
+                        <span>Valid</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="auth-field">
+                    <label className="auth-label" htmlFor="reg-contact">Contact number</label>
+                    <input
+                      id="reg-contact"
+                      className="auth-input"
+                      type="text"
+                      name="contactNumber"
+                      value={formData.contactNumber}
+                      onChange={handleChange}
+                      autoComplete="tel"
+                    />
+                  </div>
+                </div>
+
+                <div className="auth-section-title">Employment</div>
+
+                <div className="auth-field">
+                  <label className="auth-label" htmlFor="reg-employee-id">Employee ID</label>
+                  <input
+                    id="reg-employee-id"
+                    className="auth-input"
+                    type="text"
+                    name="employeeId"
+                    value={formData.employeeId}
+                    onChange={handleChange}
+                    autoComplete="off"
+                    required
+                  />
+                  {formData.employeeId && !employeeIdValid && (
+                    <div className="auth-error" style={{ marginTop: 6, marginBottom: 0 }}>Employee ID must be in format MSU-XXXXX.</div>
+                  )}
+                  {formData.employeeId && employeeIdValid && (
+                    <div className="auth-check" style={{ marginTop: 6, color: 'var(--ok)' }}>
+                      <span className="auth-check-icon">&#10003;</span>
+                      <span>Valid</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="auth-field">
+                  <label className="auth-label" htmlFor="reg-position">Position</label>
+                  <input
+                    id="reg-position"
+                    className="auth-input"
+                    type="text"
+                    name="position"
+                    value={formData.position}
+                    onChange={handleChange}
+                    placeholder="e.g. Professor VI"
+                    required
+                  />
+                </div>
+
+                <div className="auth-grid-2">
+                  <div className="auth-field">
+                    <label className="auth-label" htmlFor="reg-college">College</label>
+                    <select id="reg-college" className="auth-input" name="college" value={formData.college} onChange={handleChange}>
+                      <option value="">Select a college</option>
+                      {COLLEGES.map((c) => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="auth-field">
+                    <label className="auth-label" htmlFor="reg-department">Department</label>
+                    <select id="reg-department" className="auth-input" name="department" value={formData.department} onChange={handleChange} disabled={!formData.college}>
+                      <option value="">{formData.college ? 'Select a department' : 'Select a college first'}</option>
+                      {departments.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="auth-section-title">Security</div>
+
+                <div className="auth-field">
+                  <label className="auth-label" htmlFor="reg-password">Password</label>
+                  <div className="auth-input-affix">
+                    <input
+                      id="reg-password"
+                      className="auth-input"
                       type={showPassword ? 'text' : 'password'}
                       name="password"
                       value={formData.password}
                       onChange={handleChange}
-                      placeholder="Enter your password"
-                      style={{ ...inputStyle, paddingRight: '40px' }}
+                      autoComplete="new-password"
                       required
                     />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '14px' }}>
-                      {showPassword ? '🙈' : '👁️'}
+                    <button type="button" className="auth-affix-btn" onClick={() => setShowPassword((s) => !s)}>
+                      {showPassword ? 'Hide' : 'Show'}
                     </button>
                   </div>
                   {formData.password && (
-                    <div style={{ marginTop: '6px' }}>
-                      <div style={{ height: '4px', backgroundColor: 'rgba(255, 255, 255, 0.15)', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ width: `${(strength / 5) * 100}%`, height: '4px', backgroundColor: strength >= 4 ? '#22c55e' : strength >= 3 ? '#f59e0b' : '#ef4444', borderRadius: '2px' }} />
+                    <>
+                      <div style={{ height: 4, backgroundColor: 'var(--brand-surface)', borderRadius: 2, overflow: 'hidden', marginTop: 8 }}>
+                        <div style={{ width: `${(strength / 5) * 100}%`, height: '4px', backgroundColor: strength >= 4 ? 'var(--ok)' : strength >= 3 ? 'var(--warn)' : 'var(--over)', borderRadius: 2 }} />
                       </div>
-                      <div style={{ fontSize: '11px', color: 'rgba(254, 205, 211, 0.7)', marginTop: '4px' }}>Password strength: {strengthLabel}</div>
-                    </div>
+                      <div style={{ fontSize: 11, color: 'rgba(34,29,26,.72)', marginTop: 4 }}>Password strength: {strengthLabel}</div>
+                    </>
                   )}
+                  {passwordChecks.map((check) => (
+                    <div className="auth-check" key={check.label} style={{ marginTop: 8 }}>
+                      <span className="auth-check-icon" style={{ color: check.valid ? 'var(--ok)' : 'var(--gold)' }}>
+                        {check.valid ? '&#10003;' : ''}
+                      </span>
+                      <span>{check.label}</span>
+                    </div>
+                  ))}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Confirm Password</label>
-                  <div style={{ position: 'relative' }}>
+
+                <div className="auth-field">
+                  <label className="auth-label" htmlFor="reg-confirm-password">Confirm password</label>
+                  <div className="auth-input-affix">
                     <input
+                      id="reg-confirm-password"
+                      className="auth-input"
                       type={showConfirmPassword ? 'text' : 'password'}
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleChange}
-                      placeholder="Re-enter your password"
-                      style={{ ...inputStyle, paddingRight: '40px' }}
+                      autoComplete="new-password"
                       required
                     />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '14px' }}>
-                      {showConfirmPassword ? '🙈' : '👁️'}
+                    <button type="button" className="auth-affix-btn" onClick={() => setShowConfirmPassword((s) => !s)}>
+                      {showConfirmPassword ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  {formData.confirmPassword && !confirmValid && (
+                    <div className="auth-error" style={{ marginTop: 6, marginBottom: 0 }}>Passwords do not match.</div>
+                  )}
                 </div>
-              </div>
 
-              {/* Policy Checkboxes */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: 'rgba(254, 205, 211, 0.7)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={agreeAccuracy} onChange={(e) => setAgreeAccuracy(e.target.checked)} style={{ marginTop: '2px' }} />
-                  <span>I confirm that the information provided is accurate and I agree to the research data policies of Mindanao State University – Main Campus.</span>
+                <label className="auth-checkbox" style={{ marginBottom: 16 }}>
+                  <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+                  <span>
+                    I confirm my information is accurate and agree to the Terms of Service and Privacy Policy (Data Privacy Act of 2012).{' '}
+                    <Link to="/terms" className="auth-link">Terms of Service</Link> and{' '}
+                    <Link to="/privacy" className="auth-link">Privacy Policy</Link>
+                  </span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', color: 'rgba(254, 205, 211, 0.7)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} style={{ marginTop: '2px' }} />
-                  <span>By creating an account, you agree to our Terms of Service and Privacy Policy.</span>
-                </label>
-              </div>
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={submitting}
-                style={{
-                  width: '100%',
-                  marginTop: '10px',
-                  background: 'linear-gradient(to right, #f59e0b, #e11d48)',
-                  border: 'none',
-                  color: '#ffffff',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  padding: '12px',
-                  borderRadius: '10px',
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 10px 15px -3px rgba(225, 29, 72, 0.3)'
-                }}
-              >
-                {submitting ? 'Creating account...' : 'Create Account'}
-              </button>
-            </form>
+                <button className="auth-btn" type="submit" disabled={submitting}>
+                  {submitting ? 'Submitting…' : 'Submit registration'}
+                </button>
+              </form>
 
-            <p style={{ textAlign: 'center', fontSize: '12px', color: 'rgba(254, 205, 211, 0.6)', marginTop: '20px' }}>
-              Already have an account?{' '}
-              <Link to="/login" style={{ color: '#fbbf24', fontWeight: '600', textDecoration: 'underline' }}>
-                Sign in
-              </Link>
-            </p>
+              <p className="auth-switch">
+                Already have an account? <Link to="/login" className="auth-link">Sign in</Link>
+              </p>
+            </div>
           </div>
         </div>
       </div>
