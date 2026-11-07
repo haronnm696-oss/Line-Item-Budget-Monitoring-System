@@ -93,10 +93,15 @@ class Project extends Model
             ->sum('allocated_amount');
     }
 
-    /** Total spent = verified expenses + released/approved payroll, optionally by PS/MOOE. */
+    /**
+     * Total spent = verified expenses only, optionally by PS/MOOE.
+     *
+     * Payroll is intentionally excluded: LIB utilization is driven by the
+     * expense ledger so every dashboard and report produces the same number.
+     */
     public function totalSpent(?string $categoryType = null): float
     {
-        $expenseSpent = $this->expenses()
+        return (float) $this->expenses()
             ->where('status', 'verified')
             ->whereHas('libCategory', function ($q) use ($categoryType) {
                 if ($categoryType) {
@@ -104,17 +109,6 @@ class Project extends Model
                 }
             })
             ->sum('amount');
-
-        $payrollSpent = $this->payrolls()
-            ->whereIn('status', ['approved', 'released'])
-            ->whereHas('libCategory', function ($q) use ($categoryType) {
-                if ($categoryType) {
-                    $q->where('category_type', $categoryType);
-                }
-            })
-            ->sum('net_pay');
-
-        return (float) ($expenseSpent + $payrollSpent);
     }
 
     public function totalRemaining(?string $categoryType = null): float

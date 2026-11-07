@@ -22,7 +22,9 @@ export default function ComplianceTracker({ compliance }) {
   if (!compliance) return null;
 
   const total = Number(compliance.total_expenses) || 0;
-  const pct = Number(compliance.compliance_pct) || 0;
+  const pct = total > 0 ? (Number(compliance.compliance_pct) || 0) : null;
+  const pctDisplay = pct === null ? '—' : formatPct(pct);
+  const ringPct = pct ?? 0;
   const tone = compliance.tone || 'neutral';
   const missing = compliance.missing_items ?? [];
 
@@ -37,12 +39,12 @@ export default function ComplianceTracker({ compliance }) {
         <div className="compliance-hero">
           <div
             className="compliance-ring"
-            style={{ background: `conic-gradient(${RING_COLOR[tone] || RING_COLOR.neutral} ${pct * 3.6}deg, var(--line) 0)` }}
+            style={{ background: `conic-gradient(${RING_COLOR[tone] || RING_COLOR.neutral} ${ringPct * 3.6}deg, var(--line) 0)` }}
             role="img"
-            aria-label={`${formatPct(pct)} of expenses have digitized receipts`}
+            aria-label={pct === null ? 'No expenses recorded yet' : `${formatPct(pct)} of expenses have digitized receipts`}
           >
             <div className="compliance-ring-inner">
-              <b>{formatPct(pct)}</b>
+              <b>{pctDisplay}</b>
               <span>with receipts</span>
             </div>
           </div>
@@ -68,7 +70,7 @@ export default function ComplianceTracker({ compliance }) {
 
         <div className="util compliance-bar">
           <div className="track">
-            <div className={`fill ${tone}`} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+            <div className={`fill ${tone}`} style={{ width: `${Math.max(0, Math.min(100, ringPct))}%` }} />
           </div>
         </div>
 

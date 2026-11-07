@@ -1,47 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ROUTE_BY_ROLE } from './Dashboard';
-import { ROLE_MAP, normalizeRole } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 
-// All assignable roles, derived from the canonical ROLE_MAP so the login
-// selector and post-login routing always stay in sync.
-const ALL_ROLES = Object.entries(ROLE_MAP).map(([code, info]) => ({
-  code,
-  label: info.label,
-  path: ROUTE_BY_ROLE[code] || '/dashboard',
-}));
-
-const DEFAULT_ROLE = 'PRG';
-
-// Map a role (code or label-ish value) to its dashboard URL.
+// Map the role code returned by the backend to its dashboard URL.
 function getDashboardPath(roleCode) {
-  const code = normalizeRole({ role: roleCode }) || DEFAULT_ROLE;
-  return ROUTE_BY_ROLE[code] || '/dashboard';
+  return ROUTE_BY_ROLE[roleCode] || '/dashboard';
 }
-
-// Mock Google OAuth accounts offered in the "Continue with Google" picker,
-// each pre-assigned to the dashboard they should land on.
-const GOOGLE_ACCOUNTS = [
-  { email: 'r.bayabao@msumain.edu.ph', name: 'Dr. Rahana Bayabao', initials: 'RB', role: 'PRG' },
-  { email: 'a.macarambon@msumain.edu.ph', name: 'Dr. Aminah Macarambon', initials: 'AM', role: 'PL' },
-];
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('macadaub.jnnh@msumain.edu.ph');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('user') || '{}');
-      return normalizeRole(raw) || DEFAULT_ROLE;
-    } catch {
-      return DEFAULT_ROLE;
-    }
-  });
 
   const { signIn } = useAuth();
   const [submitting, setSubmitting] = useState(false);
@@ -65,14 +37,6 @@ export default function Login() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleGoogleSelect = (userEmail) => {
-    const account = GOOGLE_ACCOUNTS.find((a) => a.email === userEmail);
-    const roleCode = account?.role || selectedRole;
-    localStorage.setItem('user', JSON.stringify({ email: userEmail, role: roleCode }));
-    setIsGoogleModalOpen(false);
-    navigate(getDashboardPath(roleCode), { replace: true });
   };
 
   return (
@@ -288,31 +252,6 @@ export default function Login() {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'rgba(254, 205, 211, 0.9)', marginBottom: '6px' }}>
-                  Role
-                </label>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  style={{
-                    width: '100%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)',
-                    color: '#ffffff',
-                    borderRadius: '10px',
-                    padding: '12px 14px',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  {ALL_ROLES.map(({ code, label }) => (
-                    <option key={code} value={code}>{label}</option>
-                  ))}
-                </select>
-              </div>
-
               <button
                 type="submit"
                 disabled={submitting}
@@ -334,42 +273,7 @@ export default function Login() {
               </button>
             </form>
 
-            <div style={{ position: 'relative', margin: '20px 0', textAlign: 'center' }}>
-              <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.15)', width: '100%' }} />
-              <span style={{ position: 'absolute', top: '-8px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#2d040f', padding: '0 8px', color: 'rgba(254, 205, 211, 0.5)', fontSize: '10px', fontWeight: '700' }}>
-                OR
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsGoogleModalOpen(true)}
-              style={{
-                width: '100%',
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.25)',
-                color: '#ffffff',
-                fontSize: '12px',
-                fontWeight: '600',
-                padding: '10px',
-                borderRadius: '10px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <svg style={{ width: '16px', height: '16px' }} viewBox="0 0 24 24">
-                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.1 9 5 12 5z" />
-                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
-                <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z" />
-                <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.1-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z" />
-              </svg>
-              Continue with Google
-            </button>
-
-            <p style={{ textAlign: 'center', fontSize: '12px', color: 'rgba(254, 205, 211, 0.6)', marginTop: '16px' }}>
+            <p style={{ textAlign: 'center', fontSize: '12px', color: 'rgba(254, 205, 211, 0.6)', marginTop: '20px' }}>
               Don't have an account?{' '}
               <Link to="/register" style={{ color: '#fbbf24', fontWeight: '600', textDecoration: 'underline' }}>
                 Register here
@@ -379,46 +283,6 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Google Modal */}
-      {isGoogleModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ backgroundColor: '#1e030b', border: '1px solid rgba(255,255,255,0.2)', width: '100%', maxWidth: '360px', borderRadius: '16px', padding: '24px', color: '#fff' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 4px 0' }}>Choose an Account</h3>
-            <p style={{ fontSize: '12px', color: 'rgba(254,205,211,0.6)', margin: '0 0 16px 0' }}>to continue to MSU LIB Monitoring</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-              <button
-                onClick={() => handleGoogleSelect('r.bayabao@msumain.edu.ph')}
-                style={{ textAlign: 'left', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: '#fff' }}
-              >
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '12px', color: '#000' }}>RB</div>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: '600' }}>Dr. Rahana Bayabao</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(254,205,211,0.6)' }}>r.bayabao@msumain.edu.ph</div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleGoogleSelect('a.macarambon@msumain.edu.ph')}
-                style={{ textAlign: 'left', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', color: '#fff' }}
-              >
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#f43f5e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '12px', color: '#fff' }}>AM</div>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: '600' }}>Dr. Aminah Macarambon</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(254,205,211,0.6)' }}>a.macarambon@msumain.edu.ph</div>
-                </div>
-              </button>
-            </div>
-
-            <button
-              onClick={() => setIsGoogleModalOpen(false)}
-              style={{ width: '100%', fontSize: '12px', color: 'rgba(254,205,211,0.5)', background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0' }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

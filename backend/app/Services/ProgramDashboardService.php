@@ -17,6 +17,10 @@ use Illuminate\Validation\ValidationException;
 
 class ProgramDashboardService
 {
+    public function __construct(private ProjectFinancialService $financials)
+    {
+    }
+
     /**
      * Build the single program-wide dashboard payload.
      *
@@ -73,6 +77,10 @@ class ProgramDashboardService
         ?string $remarks,
         User $actor
     ): ApprovalRequest {
+        if ((int) $approval->requested_by === (int) $actor->id) {
+            abort(403, 'You cannot approve or reject a request you created.');
+        }
+
         if (! $approval->isPending()) {
             abort(409, 'This approval request has already been reviewed.');
         }
@@ -82,6 +90,10 @@ class ProgramDashboardService
                 ->with(['liquidation'])
                 ->lockForUpdate()
                 ->findOrFail($approval->id);
+
+            if ((int) $locked->requested_by === (int) $actor->id) {
+                abort(403, 'You cannot approve or reject a request you created.');
+            }
 
             if (! $locked->isPending()) {
                 abort(409, 'This approval request has already been reviewed.');
@@ -121,34 +133,12 @@ class ProgramDashboardService
                 'tranches',
                 'reports',
                 'liquidations',
-                'libCategories' => function ($query) {
-                    $query
-                        ->withSum(['expenses as verified_expense_total' => function ($expense) {
-                            $expense->where('status', 'verified');
-                        }], 'amount')
-                        ->withSum(['payrolls as payroll_total' => function ($payroll) {
-                            $payroll->whereIn('status', ['approved', 'released']);
-                        }], 'net_pay')
-                        ->withCount(['expenses as expenses_count'])
-                        ->withCount(['expenses as expenses_with_receipt_count' => function ($expense) {
-                            $expense->whereNotNull('attachment_path');
-                        }]);
-                },
+                'libCategories',
                 'approvalRequests' => function ($query) {
                     $query->where('status', 'pending')
                         ->with(['requestedBy', 'tranche', 'liquidation']);
                 },
             ])
-            ->withSum(['expenses as verified_expense_total' => function ($query) {
-                $query->where('status', 'verified');
-            }], 'amount')
-            ->withSum(['payrolls as payroll_total' => function ($query) {
-                $query->whereIn('status', ['approved', 'released']);
-            }], 'net_pay')
-            ->withCount('expenses')
-            ->withCount(['expenses as expenses_with_receipt_count' => function ($query) {
-                $query->whereNotNull('attachment_path');
-            }])
             ->when($funder, function ($query) use ($funder) {
                 if (ctype_digit((string) $funder)) {
                     $query->where('funding_agency_id', (int) $funder);
@@ -168,26 +158,21 @@ class ProgramDashboardService
      */
     protected function projectRow(Project $project, Carbon $today): array
     {
-        $budget = (float) $project->total_approved_budget;
-        if ($budget <= 0) {
-            $budget = (float) $project->libCategories->sum('allocated_amount');
-        }
-
-        $spent = (float) ($project->verified_expense_total ?? 0)
-            + (float) ($project->payroll_total ?? 0);
-        $spentPct = $this->pct($spent, $budget);
+        $metrics = $this->financials->financials($project);
+        $budget = $metrics['budget'];
+        $spent = $metrics['spent'];
+        $spentPct = $metrics['utilization_pct'];
         $time = $this->timeMetrics($project, $today);
         $gap = round($spentPct - $time['time_pct'], 1);
 
-        $expenseCount = (int) ($project->expenses_count ?? 0);
-        $withReceipt = (int) ($project->expenses_with_receipt_count ?? 0);
-        $receiptPct = $expenseCount > 0
-            ? round(($withReceipt / $expenseCount) * 100, 1)
-            : null;
+        $expenseCount = $metrics['expenses_count'];
+        $withReceipt = $metrics['receipts_count'];
+        $receiptPct = $metrics['receipt_compliance_pct'];
 
         $tranche = $this->trancheMetric($project, $today, $spentPct);
         $report = $this->reportMetric($project, $today);
-        $closed = $project->status === 'completed'
+        $status = $this->financials->derivedStatus($project);
+        $closed = $status === 'completed'
             || ($project->end_date && $project->end_date->lt($today));
         [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct, $closed);
 
@@ -197,7 +182,7 @@ class ProgramDashboardService
             'title' => $project->title,
             'funder' => $this->funderLabel($project),
             'funder_id' => $project->funding_agency_id,
-            'status' => ucfirst($project->status),
+            'status' => ucfirst($status),
             'budget' => round($budget, 2),
             'spent' => round($spent, 2),
             'remaining' => round($budget - $spent, 2),
@@ -606,8 +591,7 @@ class ProgramDashboardService
 
             foreach ($project->libCategories as $category) {
                 $name = (string) $category->line_item_name;
-                $spent = (float) ($category->verified_expense_total ?? 0)
-                    + (float) ($category->payroll_total ?? 0);
+                $spent = $category->spentAmount();
                 $allocated = (float) $category->allocated_amount;
 
                 $isSelfBenefiting = preg_match('/program\s*leader/i', $name)

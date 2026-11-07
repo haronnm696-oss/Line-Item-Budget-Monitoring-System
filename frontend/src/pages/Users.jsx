@@ -1,13 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Chip from '../components/Chip';
 import AddUserModal from '../components/AddUserModal';
 import AssignProjectModal from '../components/AssignProjectModal';
+import { fetchPendingUsers, approveUser } from '../api/users';
 import {
   systemUsers as mockSystemUsers,
   projectAssignments as mockProjectAssignments,
   projects as mockProjects,
   CURRENT_PROJECT,
 } from '../data/mockData';
+
+const APPROVER_ROLES = [
+  ['program-leader', 'Program Leader'],
+  ['project-leader', 'Project Leader'],
+  ['research-assistant', 'Research Assistant'],
+  ['researcher', 'Researcher'],
+  ['finance-admin', 'Finance/Admin Staff'],
+];
+
+function formatPendingDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
 
 const CAPABILITIES = [
   ['View dashboards & reports', '✓ all projects', '✓ own projects', '✓ assigned', '✓ assigned', '✓ assigned'],
@@ -34,6 +52,29 @@ export default function Users() {
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [pendingRoles, setPendingRoles] = useState({});
+  const [approvingId, setApprovingId] = useState(null);
+  const [pendingError, setPendingError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    fetchPendingUsers()
+      .then((users) => {
+        if (!alive) return;
+        setPendingUsers(users);
+        setPendingRoles(Object.fromEntries(users.map((u) => [u.id, 'project-leader'])));
+      })
+      .catch((err) => {
+        if (!alive) return;
+        // Non-approvers receive 403 here; keep the panel hidden instead of
+        // turning the whole Users page into an error state.
+        if (err?.response?.status !== 403) {
+          setPendingError(err?.response?.data?.message || 'Could not load pending registrations.');
+        }
+      });
+    return () => { alive = false; };
+  }, []);
 
   // Filtered views
   const currentProjectId = CURRENT_PROJECT.id;
@@ -51,6 +92,22 @@ export default function Users() {
   function showToast(msg) {
     setToast({ msg });
     setTimeout(() => setToast(null), 3500);
+  }
+
+  // ---------- Approve pending registration ----------
+  async function handleApprovePending(user) {
+    const role = pendingRoles[user.id] || 'project-leader';
+    setApprovingId(user.id);
+    setPendingError('');
+    try {
+      await approveUser(user.id, role);
+      setPendingUsers((prev) => prev.filter((u) => u.id !== user.id));
+      showToast(`${user.name} approved as ${APPROVER_ROLES.find(([slug]) => slug === role)?.[1] || role}.`);
+    } catch (err) {
+      setPendingError(err?.response?.data?.message || err?.message || 'Could not approve this account.');
+    } finally {
+      setApprovingId(null);
+    }
   }
 
   // ---------- Add user ----------
@@ -156,6 +213,63 @@ export default function Users() {
       {toast && (
         <div className="banner toast" style={{ boxShadow: '0 4px 12px rgba(34,29,26,.18)' }}>
           {toast.msg}
+        </div>
+      )}
+
+      {/* Pending self-registrations */}
+      {pendingUsers.length > 0 && (
+        <div className="panel wide-scroll" style={{ marginBottom: 16 }}>
+          <div className="panel-head">
+            <h3>Pending registrations</h3>
+            <span className="hint">Assign a role to activate each account</span>
+          </div>
+          {pendingError && (
+            <div className="banner" style={{ margin: 12, color: 'var(--over)' }}>{pendingError}</div>
+          )}
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Employee ID</th>
+                <th>College / Department</th>
+                <th>Submitted</th>
+                <th>Assign role</th>
+                <th className="r">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingUsers.map((u) => (
+                <tr key={u.id}>
+                  <td><b>{u.name}</b></td>
+                  <td>{u.email}</td>
+                  <td className="num">{u.employee_id || '—'}</td>
+                  <td>{[u.college, u.department].filter(Boolean).join(' / ') || '—'}</td>
+                  <td className="num">{formatPendingDate(u.created_at)}</td>
+                  <td>
+                    <select
+                      value={pendingRoles[u.id] || 'project-leader'}
+                      onChange={(e) => setPendingRoles((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                      style={{ padding: '6px 8px', borderRadius: 6 }}
+                    >
+                      {APPROVER_ROLES.map(([slug, label]) => (
+                        <option key={slug} value={slug}>{label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="r">
+                    <button
+                      className="btn primary"
+                      onClick={() => handleApprovePending(u)}
+                      disabled={approvingId === u.id}
+                    >
+                      {approvingId === u.id ? 'Approving…' : 'Approve'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
