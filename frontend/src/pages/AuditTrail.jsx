@@ -4,8 +4,24 @@ import { getWithFallback } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
 import { auditLog } from '../data/mockData';
 
-const ACTION_TONE = { created: 'neutral', updated: 'neutral', verified: 'ok', approved: 'ok', rejected: 'over' };
-const ACTION_LABEL = { created: 'Created', updated: 'Updated', verified: 'Verified', approved: 'Approved', rejected: 'Rejected' };
+const ACTION_TONE = {
+  created: 'neutral',
+  updated: 'neutral',
+  requested: 'neutral',
+  budget_changed: 'neutral',
+  verified: 'ok',
+  approved: 'ok',
+  rejected: 'over',
+};
+const ACTION_LABEL = {
+  created: 'Created',
+  updated: 'Updated',
+  requested: 'Requested',
+  budget_changed: 'Budget changed',
+  verified: 'Verified',
+  approved: 'Approved',
+  rejected: 'Rejected',
+};
 
 function toCSV(rows, headers) {
   const escape = (v) => {
@@ -130,8 +146,8 @@ export default function AuditTrail() {
     getWithFallback(ENDPOINTS.audit, auditLog).then(setLog);
   }, []);
 
-  const actions = ['All', ...new Set(auditLog.map((a) => a.action))];
-  const recordTypes = ['All', ...new Set(auditLog.map((a) => a.recordType))];
+  const actions = ['All', ...new Set(log.map((a) => a.action))];
+  const recordTypes = ['All', ...new Set(log.map((a) => a.recordType))];
 
   const filtered = log.filter((a) => {
     const matchesSearch =

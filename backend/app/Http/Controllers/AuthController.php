@@ -74,7 +74,7 @@ class AuthController extends Controller
             ], 403);
         }
 
-        if (! Auth::attempt(['email' => $email, 'password' => $data['password']])) {
+        if (! Auth::guard('web')->attempt(['email' => $email, 'password' => $data['password']])) {
             throw ValidationException::withMessages([
                 'email' => ['Invalid email or password.'],
             ]);
@@ -82,7 +82,7 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        return response()->json(['user' => self::toUserPayload($request->user())]);
+        return response()->json(['user' => self::toUserPayload(Auth::guard('web')->user())]);
     }
 
     public function register(Request $request)
