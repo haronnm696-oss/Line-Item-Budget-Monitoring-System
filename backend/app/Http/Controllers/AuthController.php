@@ -101,10 +101,15 @@ class AuthController extends Controller
             'email' => ['required', 'email:rfc', 'max:255', 'regex:/^[^@\s]+@msumain\.edu\.ph$/i', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'employee_id' => ['nullable', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
-            'contact_number' => ['nullable', 'string', 'max:20'],
+            'contact_number' => ['required', 'string', 'size:11', 'regex:/^09[0-9]{9}$/'],
             'college' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:255'],
             'position' => ['required', 'string', 'max:255'],
+        ], [
+            'contact_number.required' => 'Ang numero ng tawag ay kailangan. (Contact number is required.)',
+            'contact_number.string' => 'Ang numero ng tawag ay dapat isama sa teksto. (Contact number must be a string.)',
+            'contact_number.size' => 'Ang numero ng tawag ay dapat 11 na digit. (Contact number must be 11 digits.)',
+            'contact_number.regex' => 'Ang numero ng tawag ay dapat nagsisimula sa 09 at may 11 na digit. (Contact number must start with 09 and have 11 digits.)',
         ]);
 
         $email = $data['email'];

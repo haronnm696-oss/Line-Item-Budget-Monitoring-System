@@ -65,6 +65,20 @@ class RegistrationTest extends TestCase
             ->assertJsonPath('message', 'Your account is awaiting Program Leader approval.');
     }
 
+    public function test_registration_requires_a_contact_number(): void
+    {
+        $this->postJson('/api/register', $this->payload(['contact_number' => '']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('contact_number');
+    }
+
+    public function test_registration_rejects_a_contact_number_that_is_not_eleven_digits_starting_with_09(): void
+    {
+        $this->postJson('/api/register', $this->payload(['contact_number' => '12345678901']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('contact_number');
+    }
+
     public function test_program_leader_can_approve_a_pending_account_and_assign_a_role(): void
     {
         $leader = $this->userWithRole('program-leader');
