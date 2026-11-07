@@ -4,7 +4,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ApprovalController;
+use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportController;
@@ -40,9 +42,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/projects/{project}/burn-rate', [DashboardController::class, 'burnRate']);
     Route::get('/projects/{project}/compliance', [DashboardController::class, 'compliance']);
 
+    Route::get('/audit', [AuditTrailController::class, 'index']);
+
     Route::get('/approvals', [ApprovalController::class, 'index']);
     Route::patch('/approvals/{approval}/approve', [ApprovalController::class, 'approve']);
     Route::patch('/approvals/{approval}/reject', [ApprovalController::class, 'reject']);
+
+    Route::patch('/expenses/{expense}/verify', [ExpenseController::class, 'verify']);
+    Route::patch('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);
 
     // Self-registration approval queue (Program Leader / Finance-Admin).
     Route::get('/users/pending', [UserApprovalController::class, 'index']);
