@@ -1,6 +1,6 @@
 import client from './client';
 import { ENDPOINTS } from './endpoints';
-import { ROLE_MAP, SLUG_TO_CODE, normalizeRole } from '../data/mockData';
+import { ROLE_MAP, normalizeRole } from '../data/mockData';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -77,7 +77,7 @@ export async function login(email, password) {
   }
 }
 
-export async function register({ name: _name, email, password, role, first_name, last_name, employee_id, contact_number, college, department } = {}) {
+export async function register({ name: _name, email, password, first_name, last_name, employee_id, contact_number, college, department } = {}) {
   const cleanEmail = normalizeEmail(email);
   const cleanFirstName = (first_name || '').trim();
   const cleanLastName = (last_name || '').trim();
@@ -87,34 +87,32 @@ export async function register({ name: _name, email, password, role, first_name,
     throw new Error('First and last name are required.');
   }
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail address.');
+    throw new Error('Enter a valid email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
-  }
-  if (!role) {
-    throw new Error('Please select a role.');
   }
 
   if (USE_MOCK) {
     if (MOCK_USERS.find((u) => u.email === cleanEmail)) {
       throw new Error('An account with this email already exists.');
     }
-    const code = SLUG_TO_CODE[role] ?? null;
-    if (!code) throw new Error('Invalid role selected.');
-    const roleInfo = ROLE_MAP[code];
     const initials = (cleanName.match(/\b\w/g) || []).slice(0, 2).join('').toUpperCase() || 'U';
-    const newUser = {
-      id: Date.now(),
-      name: cleanName,
-      email: cleanEmail,
-      role: code,
-      role_slug: role,
-      roleLabel: roleInfo.label,
-      avatar_initials: initials,
+    return {
+      pending: true,
+      message: 'Account submitted. A Program Leader must approve it and assign a role before you can sign in.',
+      user: {
+        id: Date.now(),
+        name: cleanName,
+        email: cleanEmail,
+        role: null,
+        role_slug: null,
+        roleLabel: 'Pending approval',
+        status: 'Pending',
+        is_active: false,
+        avatar_initials: initials,
+      },
     };
-    MOCK_USERS.push({ email: cleanEmail, password, code });
-    return newUser;
   }
 
   try {
@@ -128,12 +126,8 @@ export async function register({ name: _name, email, password, role, first_name,
       contact_number: contact_number || undefined,
       college: college || undefined,
       department: department || undefined,
-      role,
     });
-    const user = res.data.user;
-    const code = normalizeRole(user);
-    if (!code) throw new Error('Your account has no role assigned. Contact your administrator.');
-    return { ...user, email: cleanEmail, role: code };
+    return res.data;
   } catch (err) {
     const status = err.response?.status;
     if (status === 422) {

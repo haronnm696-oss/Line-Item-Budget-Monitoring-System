@@ -86,4 +86,6 @@ export const ENDPOINTS = {
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,
   roles: '/api/roles',
+  pendingUsers: '/api/users/pending',
+  approveUser: (id) => `/api/users/${id}/approve`,
 };

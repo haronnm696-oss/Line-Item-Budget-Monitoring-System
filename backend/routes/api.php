@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\UserApprovalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,6 +43,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/approvals', [ApprovalController::class, 'index']);
     Route::patch('/approvals/{approval}/approve', [ApprovalController::class, 'approve']);
     Route::patch('/approvals/{approval}/reject', [ApprovalController::class, 'reject']);
+
+    // Self-registration approval queue (Program Leader / Finance-Admin).
+    Route::get('/users/pending', [UserApprovalController::class, 'index']);
+    Route::patch('/users/{user}/approve', [UserApprovalController::class, 'approve']);
 
     Route::get('/projects/{project}/reports/{type}', [ReportController::class, 'export']);
 

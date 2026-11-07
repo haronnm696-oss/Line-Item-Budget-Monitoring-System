@@ -3,13 +3,16 @@
 namespace App\Services;
 
 use App\Models\ApprovalRequest;
-use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\ProjectTranche;
 use Illuminate\Http\Request;
 
 class DashboardService
 {
+    public function __construct(private ProjectFinancialService $financials)
+    {
+    }
+
     /**
      * Resolve the project a dashboard request refers to. Program leaders see
      * the current ongoing project by default; an explicit project_id wins.
@@ -32,8 +35,8 @@ class DashboardService
     }
 
     /**
-     * Project list rows for the Projects page. Uses the same verified
-     * expenses + approved/released payroll source as the Program dashboard.
+     * Project list rows for the Projects page. Uses the same canonical
+     * ProjectFinancialService as every dashboard and report.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -41,23 +44,11 @@ class DashboardService
     {
         return Project::query()
             ->with('fundingAgency')
-            ->withSum(['expenses as verified_expense_total' => function ($query) {
-                $query->where('status', 'verified');
-            }], 'amount')
-            ->withSum(['payrolls as payroll_total' => function ($query) {
-                $query->whereIn('status', ['approved', 'released']);
-            }], 'net_pay')
-            ->withCount('expenses')
             ->orderBy('code')
             ->get()
             ->map(function (Project $project) {
-                $budget = (float) $project->total_approved_budget;
-                if ($budget <= 0) {
-                    $budget = $project->totalAllocated();
-                }
-
-                $spent = (float) ($project->verified_expense_total ?? 0)
-                    + (float) ($project->payroll_total ?? 0);
+                $metrics = $this->financials->financials($project);
+                $status = $this->financials->derivedStatus($project);
 
                 return [
                     'id' => $project->id,
@@ -68,17 +59,19 @@ class DashboardService
                         ? ($project->fundingAgency->acronym ?: $project->fundingAgency->name)
                         : 'Unassigned funder',
                     'funding_agency_id' => $project->funding_agency_id,
-                    'budget' => round($budget, 2),
-                    'spent' => round($spent, 2),
-                    'remaining' => round($budget - $spent, 2),
-                    'utilization_pct' => $this->pct($spent, $budget),
+                    'budget' => $metrics['budget'],
+                    'spent' => $metrics['spent'],
+                    'remaining' => $metrics['remaining'],
+                    'utilization_pct' => $metrics['utilization_pct'],
                     'period' => $this->period($project),
-                    'status' => ucfirst($project->status),
-                    'status_key' => $project->status,
+                    'status' => ucfirst($status),
+                    'status_key' => $status,
                     'start_date' => $project->start_date?->toDateString(),
                     'end_date' => $project->end_date?->toDateString(),
-                    'program' => null,
-                    'expenses_count' => (int) ($project->expenses_count ?? 0),
+                    'program' => $this->programLabel($project),
+                    'expenses_count' => $metrics['expenses_count'],
+                    'receipts_count' => $metrics['receipts_count'],
+                    'receipt_compliance_pct' => $metrics['receipt_compliance_pct'],
                 ];
             })
             ->values()
@@ -92,18 +85,19 @@ class DashboardService
     {
         $project->loadMissing(['fundingAgency', 'libCategories']);
 
-        $categories = $this->categoryRows($project);
+        $metrics = $this->financials->financials($project);
+        $categories = $this->financials->categoryRows($project);
         $ps = array_values(array_filter($categories, fn ($c) => $c['type'] === 'PS'));
         $mooe = array_values(array_filter($categories, fn ($c) => $c['type'] === 'MOOE'));
 
-        $totalAllocated = (float) array_sum(array_column($categories, 'allocated'));
-        $totalSpent = (float) array_sum(array_column($categories, 'spent'));
-        $budget = $totalAllocated > 0 ? $totalAllocated : (float) $project->total_approved_budget;
-        $remaining = $budget - $totalSpent;
+        $budget = $metrics['budget'];
+        $totalSpent = $metrics['spent'];
+        $remaining = $metrics['remaining'];
+        $status = $this->financials->derivedStatus($project);
 
         $tranches = $this->trancheRows($project);
         $approvals = $this->pendingApprovalRows($project);
-        $compliance = $this->compliance($project);
+        $compliance = $this->financials->compliance($project);
         $burnRate = $this->burnRate($project, $budget, $totalSpent);
 
         return [
@@ -116,14 +110,14 @@ class DashboardService
                 'funding_agency' => $this->fundingAgencyName($project),
                 'project_leader' => $this->projectLeaderName($project) ?? 'Unassigned',
                 'period' => $this->period($project),
-                'status' => ucfirst($project->status),
-                'status_key' => $project->status,
+                'status' => ucfirst($status),
+                'status_key' => $status,
                 'start_date' => $project->start_date?->toDateString(),
                 'end_date' => $project->end_date?->toDateString(),
                 'total_budget' => $budget,
                 'total_spent' => $totalSpent,
                 'remaining' => $remaining,
-                'utilization_pct' => $this->pct($totalSpent, $budget),
+                'utilization_pct' => $metrics['utilization_pct'],
                 'counterpart_budget' => (float) $project->implementing_agency_counterpart,
                 'funding_budget' => (float) $project->funding_agency_amount,
             ],
@@ -131,15 +125,19 @@ class DashboardService
                 'total_budget' => $budget,
                 'total_spent' => $totalSpent,
                 'remaining' => $remaining,
-                'utilization_pct' => $this->pct($totalSpent, $budget),
+                'utilization_pct' => $metrics['utilization_pct'],
                 'pending_approvals' => count($approvals),
                 'tranches_released' => $tranches['summary']['released_count'],
                 'tranches_total' => $tranches['summary']['total_count'],
+                'expenses_count' => $metrics['expenses_count'],
+                'receipts_count' => $metrics['receipts_count'],
+                'receipt_compliance_pct' => $metrics['receipt_compliance_pct'],
             ],
             'categories' => [
                 'ps' => $ps,
                 'mooe' => $mooe,
             ],
+            'expenses' => $this->expenseRows($project),
             'tranches' => $tranches,
             'burn_rate' => $burnRate,
             'approvals' => $approvals,
@@ -147,7 +145,7 @@ class DashboardService
             'funding_sources' => [
                 'counterpart' => (float) $project->implementing_agency_counterpart,
                 'funding' => (float) $project->funding_agency_amount,
-                'total' => (float) $project->total_approved_budget,
+                'total' => $budget,
             ],
         ];
     }
@@ -157,25 +155,33 @@ class DashboardService
      */
     public function categoryRows(Project $project): array
     {
-        $project->loadMissing('libCategories');
+        return $this->financials->categoryRows($project);
+    }
 
-        return $project->libCategories
-            ->map(function (LibCategory $category) {
-                $allocated = (float) $category->allocated_amount;
-                $spent = $category->spentAmount();
-
-                return [
-                    'id' => $category->id,
-                    'type' => $category->category_type,
-                    'name' => $category->line_item_name,
-                    'code' => $category->line_item_code,
-                    'allocated' => $allocated,
-                    'spent' => $spent,
-                    'remaining' => $allocated - $spent,
-                    'utilization_pct' => $this->pct($spent, $allocated),
-                ];
-            })
-            ->values()
+    /**
+     * Expense rows used by the Reports page previews.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function expenseRows(Project $project): array
+    {
+        return $project->expenses()
+            ->with(['libCategory', 'recordedBy', 'verifiedBy'])
+            ->orderByDesc('expense_date')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($expense) => [
+                'id' => $expense->id,
+                'date' => $expense->expense_date?->toDateString(),
+                'ref' => $expense->reference_no,
+                'desc' => $expense->description,
+                'category' => $expense->libCategory?->line_item_name,
+                'type' => $expense->libCategory?->category_type,
+                'amount' => (float) $expense->amount,
+                'status' => ucfirst($expense->status),
+                'recorded_by' => $expense->recordedBy?->name,
+                'verified_by' => $expense->verifiedBy?->name,
+            ])
             ->all();
     }
 
@@ -297,48 +303,7 @@ class DashboardService
      */
     public function compliance(Project $project): array
     {
-        $expenses = $project->expenses()
-            ->with(['libCategory', 'verifiedBy'])
-            ->get();
-
-        $total = $expenses->count();
-        $withReceipt = $expenses->filter(fn ($e) => filled($e->attachment_path))->count();
-        $verified = $expenses->where('status', 'verified')->count();
-        $pending = $expenses->where('status', 'pending')->count();
-        $rejected = $expenses->where('status', 'rejected')->count();
-        $verifiedWithReceipt = $expenses
-            ->filter(fn ($e) => $e->status === 'verified' && filled($e->attachment_path))
-            ->count();
-
-        $compliancePct = $this->pct($withReceipt, $total);
-        $verifiedPct = $this->pct($verifiedWithReceipt, $total);
-        $missing = $expenses
-            ->filter(fn ($e) => blank($e->attachment_path))
-            ->sortByDesc(fn ($e) => $e->expense_date?->timestamp ?? 0)
-            ->values();
-
-        return [
-            'total_expenses' => $total,
-            'with_receipt' => $withReceipt,
-            'missing_receipt' => $missing->count(),
-            'verified' => $verified,
-            'pending' => $pending,
-            'rejected' => $rejected,
-            'verified_with_receipt' => $verifiedWithReceipt,
-            'compliance_pct' => $compliancePct,
-            'verified_pct' => $verifiedPct,
-            'status' => $this->complianceLabel($total, $compliancePct),
-            'tone' => $this->complianceTone($total, $compliancePct),
-            'missing_items' => $missing->take(6)->map(fn ($e) => [
-                'id' => $e->id,
-                'reference_no' => $e->reference_no,
-                'description' => $e->description,
-                'amount' => (float) $e->amount,
-                'expense_date' => $e->expense_date?->toDateString(),
-                'status' => ucfirst($e->status),
-                'category' => $e->libCategory?->line_item_name,
-            ])->all(),
-        ];
+        return $this->financials->compliance($project);
     }
 
     /**
@@ -431,34 +396,24 @@ class DashboardService
         ];
     }
 
-    protected function complianceLabel(int $total, float $pct): string
+    /**
+     * Public program label for the Projects page. The schema has no program
+     * column, so the label is derived from the funding source.
+     */
+    protected function programLabel(Project $project): string
     {
-        if ($total === 0) {
-            return 'No expenses yet';
-        }
+        $funder = $project->fundingAgency
+            ? ($project->fundingAgency->acronym ?: $project->fundingAgency->name)
+            : 'External';
 
-        if ($pct >= 90) {
-            return 'Audit Ready';
-        }
+        $programs = [
+            'MOST-BARMM' => 'MOST R&D Program',
+            'DOST-PCAARRD' => 'DOST-PCAARRD Program',
+            'CHED' => 'CHED Research Program',
+            'DOST-PCHRD' => 'DOST-PCHRD Program',
+        ];
 
-        if ($pct >= 70) {
-            return 'Needs Attention';
-        }
-
-        return 'High Compliance Risk';
-    }
-
-    protected function complianceTone(int $total, float $pct): string
-    {
-        if ($total === 0) {
-            return 'neutral';
-        }
-
-        if ($pct >= 90) {
-            return 'ok';
-        }
-
-        return $pct >= 70 ? 'warn' : 'over';
+        return $programs[$funder] ?? $funder . ' Program';
     }
 
     protected function fundingAgencyName(Project $project): string
@@ -467,7 +422,7 @@ class DashboardService
             return $project->fundingAgency->acronym ?: $project->fundingAgency->name;
         }
 
-        return $project->code === 'MOST-RD-2026-001' ? 'MOST-BARMM' : 'External Funding Agency';
+        return 'External Funding Agency';
     }
 
     protected function projectLeaderName(Project $project): ?string
