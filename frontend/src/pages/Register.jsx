@@ -275,8 +275,13 @@ export default function Register() {
                       type="text"
                       name="contactNumber"
                       value={formData.contactNumber}
-                      onChange={handleChange}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/\D/g, '').slice(0, 11);
+                        setFormData((prev) => ({ ...prev, contactNumber: cleaned }));
+                      }}
+                      maxLength={11}
                       autoComplete="tel"
+                      required
                     />
                   </div>
                 </div>
