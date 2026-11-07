@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,6 +38,8 @@ class AuthController extends Controller
             'role' => $code,
             'role_slug' => $slug,
             'roleLabel' => $label,
+            'status' => $user->role_id === null ? 'Pending' : ($user->is_active ? 'Active' : 'Inactive'),
+            'is_active' => (bool) $user->is_active,
             'avatar_initials' => self::initials($user->name),
         ];
     }
@@ -62,6 +63,11 @@ class AuthController extends Controller
         $email = strtolower(trim($data['email']));
 
         $user = User::where('email', $email)->first();
+        if ($user && $user->role_id === null) {
+            return response()->json([
+                'message' => 'Your account is awaiting Program Leader approval.',
+            ], 403);
+        }
         if ($user && ! $user->is_active) {
             return response()->json([
                 'message' => 'This account is deactivated. Contact your administrator.',
@@ -96,7 +102,6 @@ class AuthController extends Controller
             'contact_number' => ['nullable', 'string', 'max:20'],
             'college' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:255'],
-            'role' => ['required', 'string', 'in:program-leader,project-leader,research-assistant,researcher,finance-admin'],
         ]);
 
         $email = $data['email'];
@@ -112,16 +117,8 @@ class AuthController extends Controller
             ]);
         }
 
-        $role = Role::where('slug', $data['role'])->firstOrFail();
-
-        $positionMap = [
-            'program-leader' => 'Program Leader',
-            'project-leader' => 'Project Leader',
-            'research-assistant' => 'Research Assistant',
-            'researcher' => 'Researcher',
-            'finance-admin' => 'Finance Officer',
-        ];
-
+        // Public registration never assigns a role. The account stays pending
+        // and inactive until a Program Leader or Finance/Admin approves it.
         $user = User::create([
             'name' => trim($data['first_name'] . ' ' . $data['last_name']),
             'first_name' => $data['first_name'],
@@ -132,16 +129,17 @@ class AuthController extends Controller
             'contact_number' => $data['contact_number'] ?? null,
             'college' => $data['college'] ?? null,
             'department' => $data['department'] ?? null,
-            'role_id' => $role->id,
-            'position' => $positionMap[$data['role']] ?? 'Research Assistant',
+            'role_id' => null,
+            'position' => 'Pending approval',
             'email_verified_at' => now(),
-            'is_active' => true,
+            'is_active' => false,
         ]);
 
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        return response()->json(['user' => self::toUserPayload($user)], 201);
+        return response()->json([
+            'user' => self::toUserPayload($user),
+            'pending' => true,
+            'message' => 'Account submitted. A Program Leader must approve it and assign a role before you can sign in.',
+        ], 201);
     }
 
     public function me(Request $request)

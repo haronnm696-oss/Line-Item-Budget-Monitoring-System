@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { peso } from '../components/money';
 import {
   CURRENT_PROJECT,
-  projects,
+  projects as mockProjects,
   libCategoriesPS,
   libCategoriesMOOE,
-  expenses,
+  expenses as mockExpenses,
   payrollRun,
 } from '../data/mockData';
+import { getWithFallback } from '../api/http';
+import { ENDPOINTS } from '../api/endpoints';
 import Chip, { statusTone } from '../components/Chip';
 import UtilBar from '../components/UtilBar';
 import StatCard from '../components/StatCard';
@@ -40,11 +42,9 @@ const REPORT_TYPES = [
 ];
 
 const PERIODS = [
-  'Jan – Sep 2026 (year to date)',
-  'Q3 2026 (Jul – Sep)',
-  'Q2 2026 (Apr – Jun)',
-  'Q1 2026 (Jan – Mar)',
-  'Custom range…',
+  'All dates',
+  'Current year',
+  'Last 90 days',
 ];
 
 const CATEGORIES = ['PS and MOOE', 'PS only', 'MOOE only'];
@@ -80,7 +80,9 @@ function downloadCSV(content, filename) {
 }
 
 export default function Reports() {
-  const [selectedProject, setSelectedProject] = useState(CURRENT_PROJECT);
+  const [selectedCode, setSelectedCode] = useState('');
+  const [projectList, setProjectList] = useState([]);
+  const [detail, setDetail] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState(PERIODS[0]);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
   const [toast, setToast] = useState(null); // { msg, type }
@@ -88,31 +90,82 @@ export default function Reports() {
   const [printReport, setPrintReport] = useState(null); // { key, title, html }
   const [csvReport, setCsvReport] = useState(null); // { key, title, content, filename }
 
-  // ---------- Filtering ----------
-  const filteredProjects = projects;
+  // Load the project list once, then load the selected project's canonical
+  // financial detail (budget, spent, line items, expense rows) from the API.
+  useEffect(() => {
+    let alive = true;
+    getWithFallback(ENDPOINTS.projects, mockProjects)
+      .then((list) => {
+        if (!alive) return;
+        const rows = Array.isArray(list) ? list : [];
+        setProjectList(rows);
+        if (rows[0]) setSelectedCode(rows[0].code);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setProjectList(mockProjects);
+        setSelectedCode(mockProjects[0].code);
+      });
+    return () => { alive = false; };
+  }, []);
 
+  useEffect(() => {
+    if (!selectedCode) return;
+    let alive = true;
+    const source = projectList.length ? projectList : mockProjects;
+    const project = source.find((p) => p.code === selectedCode) || source[0];
+    if (!project) return;
+
+    const fallback = {
+      project: CURRENT_PROJECT,
+      categories: { ps: libCategoriesPS, mooe: libCategoriesMOOE },
+      expenses: mockExpenses,
+    };
+
+    setDetail(null);
+    getWithFallback(ENDPOINTS.project(project.id), fallback)
+      .then((data) => { if (alive) setDetail(data); })
+      .catch(() => { if (alive) setDetail(fallback); });
+    return () => { alive = false; };
+  }, [selectedCode, projectList]);
+
+  const filteredProjects = projectList.length ? projectList : mockProjects;
+  const selectedProject = detail?.project
+    || filteredProjects.find((p) => p.code === selectedCode)
+    || CURRENT_PROJECT;
+  const psCategories = detail?.categories?.ps || libCategoriesPS;
+  const mooeCategories = detail?.categories?.mooe || libCategoriesMOOE;
+  const expenseRows = detail?.expenses || mockExpenses;
+
+  // ---------- Filtering ----------
   function filterExpenses() {
-    let result = [...expenses];
-    // Period filter
-    if (selectedPeriod.startsWith('Q3')) {
-      result = result.filter((e) => e.date >= '2026-07-01' && e.date <= '2026-09-30');
-    } else if (selectedPeriod.startsWith('Q2')) {
-      result = result.filter((e) => e.date >= '2026-04-01' && e.date <= '2026-06-30');
-    } else if (selectedPeriod.startsWith('Q1')) {
-      result = result.filter((e) => e.date >= '2026-01-01' && e.date <= '2026-03-31');
-    } else if (selectedPeriod.startsWith('Jan – Sep')) {
-      result = result.filter((e) => e.date >= '2026-01-01' && e.date <= '2026-09-30');
+    let result = [...expenseRows];
+    const today = new Date();
+
+    if (selectedPeriod === 'Current year') {
+      const yearStart = `${today.getFullYear()}-01-01`;
+      result = result.filter((e) => e.date >= yearStart);
+    } else if (selectedPeriod === 'Last 90 days') {
+      const cutoff = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      result = result.filter((e) => e.date >= cutoff);
     }
-    // Category filter
+
     if (selectedCategory === 'PS only') {
-      result = result.filter((e) =>
-        e.category.includes('Honoraria') || e.category.includes('Professional Services') || e.category.includes('Salaries')
-      );
+      result = result.filter((e) => e.type === 'PS' || (
+        (e.category || '').includes('Honoraria')
+        || (e.category || '').includes('Professional Services')
+        || (e.category || '').includes('Salaries')
+      ));
     } else if (selectedCategory === 'MOOE only') {
-      result = result.filter((e) =>
-        !e.category.includes('Honoraria') && !e.category.includes('Professional Services') && !e.category.includes('Salaries')
-      );
+      result = result.filter((e) => e.type === 'MOOE' || (
+        !(e.category || '').includes('Honoraria')
+        && !(e.category || '').includes('Professional Services')
+        && !(e.category || '').includes('Salaries')
+      ));
     }
+
     return result.sort((a, b) => new Date(b.date) - new Date(a.date));
   }
 
@@ -150,8 +203,8 @@ export default function Reports() {
       else { mooeAlloc = gAlloc; mooeSpent = gSpent; }
     };
 
-    addGroup('I. Personnel Services (PS)', libCategoriesPS);
-    addGroup('II. Maintenance & Other Operating Expenses (MOOE)', libCategoriesMOOE);
+    addGroup('I. Personnel Services (PS)', psCategories);
+    addGroup('II. Maintenance & Other Operating Expenses (MOOE)', mooeCategories);
 
     const totalAlloc = psAlloc + mooeAlloc;
     const totalSpent = psSpent + mooeSpent;
@@ -193,23 +246,27 @@ export default function Reports() {
   }
 
   function buildMonthlySummaryRows() {
-    // Group expenses by month
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
     const data = {};
-    months.forEach((m) => { data[m] = { ps: 0, mooe: 0 }; });
     expensesForPreview.forEach((e) => {
-      const m = e.date.slice(5, 7);
-      const monthName = months[parseInt(m, 10) - 1];
-      if (!data[monthName]) data[monthName] = { ps: 0, mooe: 0 };
-      const isPS = e.category.includes('Honoraria') || e.category.includes('Professional Services') || e.category.includes('Salaries');
-      if (isPS) data[monthName].ps += e.amount;
-      else data[monthName].mooe += e.amount;
+      const key = (e.date || '').slice(0, 7);
+      if (!key) return;
+      if (!data[key]) data[key] = { ps: 0, mooe: 0 };
+      const isPS = e.type === 'PS'
+        || (e.category || '').includes('Honoraria')
+        || (e.category || '').includes('Professional Services')
+        || (e.category || '').includes('Salaries');
+      if (isPS) data[key].ps += Number(e.amount) || 0;
+      else data[key].mooe += Number(e.amount) || 0;
     });
-    return months.map((m) => ({
-      month: m,
-      ps: data[m].ps,
-      mooe: data[m].mooe,
-      total: data[m].ps + data[m].mooe,
+
+    return Object.keys(data).sort().map((key) => ({
+      month: new Date(`${key}-01T00:00:00`).toLocaleDateString('en-PH', {
+        month: 'short',
+        year: 'numeric',
+      }),
+      ps: data[key].ps,
+      mooe: data[key].mooe,
+      total: data[key].ps + data[key].mooe,
     }));
   }
 
@@ -389,7 +446,7 @@ export default function Reports() {
           <div class="org">
             <h1>Mindanao State University–Main Campus</h1>
             <p>Office of the Vice Chancellor for Research & Extension · LIB Monitoring System</p>
-            <p>Monitoring Agency: <b>MOST-BARMM</b> · Implementing Agency: <b>MSU-Marawi</b></p>
+            <p>Monitoring Agency: <b>${selectedProject.funding_agency || 'External funder'}</b> · Implementing Agency: <b>MSU-Marawi</b></p>
           </div>
         </div>
 
@@ -407,7 +464,7 @@ export default function Reports() {
         ${tableHtml}
 
         <div class="footer">
-          This report was generated from verified expenses and approved payroll only. <br />
+          This report was generated from verified expense records only. <br />
           Mindanao State University–Main Campus · MOST R&D Form B · Line-Item Budget Monitoring System.
         </div>
         <script>window.print();</script>
@@ -528,20 +585,18 @@ export default function Reports() {
     );
   }
 
-  // ---------- Report summary cards ----------
-  const psAllocated = libCategoriesPS.reduce((s, c) => s + c.allocated, 0);
-  const psSpent = libCategoriesPS.reduce((s, c) => s + c.spent, 0);
-  const mooeAllocated = libCategoriesMOOE.reduce((s, c) => s + c.spent, 0);
-  const mooeSpent = libCategoriesMOOE.reduce((s, c) => s + c.spent, 0);
-  const totalAlloc = psAllocated + mooeAllocated;
-  const totalSpent = psSpent + mooeSpent;
+  // ---------- Report summary cards (canonical backend figures) ----------
+  const totalAlloc = Number(selectedProject.total_budget) || 0;
+  const totalSpent = Number(selectedProject.total_spent) || 0;
+  const remaining = Number(selectedProject.remaining ?? (totalAlloc - totalSpent)) || 0;
+  const utilization = Number(selectedProject.utilization_pct) || 0;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h2>Reports</h2>
-          <p>Generated from verified expenses and approved payroll only · MOST R&D Form B</p>
+          <p>Generated from verified expense records only · MOST R&D Form B</p>
         </div>
       </div>
 
@@ -602,8 +657,8 @@ export default function Reports() {
           <div className="field" style={{ margin: 0 }}>
             <label>Project</label>
             <select
-              value={selectedProject.code}
-              onChange={(e) => setSelectedProject(projects.find((p) => p.code === e.target.value) || CURRENT_PROJECT)}
+              value={selectedCode || selectedProject.code}
+              onChange={(e) => setSelectedCode(e.target.value)}
             >
               {filteredProjects.map((p) => (
                 <option key={p.id} value={p.code}>{p.title} ({p.code})</option>
@@ -627,10 +682,10 @@ export default function Reports() {
 
       {/* Summary widgets */}
       <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
-        <StatCard label="Total MOST Funding" value={formatMoney(CURRENT_PROJECT.funding_budget)} sub="MOST-BARMM grant" />
-        <StatCard label="MSU Counterpart Funding" value={formatMoney(CURRENT_PROJECT.counterpart_budget)} sub="MSU-Marawi share" />
-        <StatCard label="Total Disbursed" value={formatMoney(totalSpent)} sub={`${((totalSpent / totalAlloc) * 100).toFixed(1)}% of total budget`} />
-        <StatCard label="Remaining Balance" value={formatMoney(totalAlloc - totalSpent)} sub={`${(((totalAlloc - totalSpent) / totalAlloc) * 100).toFixed(1)}% unspent`} />
+        <StatCard label="Total MOST Funding" value={formatMoney(selectedProject.funding_budget || 0)} sub={`${selectedProject.funding_agency || 'External funder'} grant`} />
+        <StatCard label="MSU Counterpart Funding" value={formatMoney(selectedProject.counterpart_budget || 0)} sub="MSU-Marawi share" />
+        <StatCard label="Total Disbursed" value={formatMoney(totalSpent)} sub={`${utilization.toFixed(1)}% of total budget`} />
+        <StatCard label="Remaining Balance" value={formatMoney(remaining)} sub={`${(totalAlloc ? ((remaining / totalAlloc) * 100) : 0).toFixed(1)}% unspent`} />
       </div>
 
       {/* Live preview */}
