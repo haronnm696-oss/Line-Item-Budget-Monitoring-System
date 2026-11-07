@@ -56,6 +56,12 @@ class ApprovalController extends Controller
     {
         $this->authorizeReviewer($request);
 
+        if ((int) $approval->requested_by === (int) $request->user()->id) {
+            return response()->json([
+                'message' => 'You cannot approve or reject a request you created.',
+            ], 403);
+        }
+
         if (! $approval->isPending()) {
             return response()->json([
                 'message' => 'This approval request has already been reviewed.',
@@ -143,7 +149,7 @@ class ApprovalController extends Controller
             $to->increment('allocated_amount', $amount);
         }
 
-        if ($approval->project_tranche_id && $approval->tranche) {
+        if ($approval->type === 'disbursement' && $approval->project_tranche_id && $approval->tranche) {
             $approval->tranche->update([
                 'status' => 'released',
                 'released_at' => $approval->tranche->released_at ?? now()->toDateString(),

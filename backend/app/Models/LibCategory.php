@@ -30,13 +30,10 @@ class LibCategory extends Model
         return $this->hasMany(Payroll::class);
     }
 
-    /** Verified expenses + approved/released payroll charged to this line item. */
+    /** Verified expenses charged to this line item (payroll is excluded). */
     public function spentAmount(): float
     {
-        $expenseSpent = $this->expenses()->where('status', 'verified')->sum('amount');
-        $payrollSpent = $this->payrolls()->whereIn('status', ['approved', 'released'])->sum('net_pay');
-
-        return (float) ($expenseSpent + $payrollSpent);
+        return (float) $this->expenses()->where('status', 'verified')->sum('amount');
     }
 
     public function remainingAmount(): float

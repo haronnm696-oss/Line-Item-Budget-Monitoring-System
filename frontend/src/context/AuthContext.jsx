@@ -58,9 +58,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signUp = useCallback(async (credentials) => {
-    const u = await registerApi(credentials);
-    persistUser(u);
-    return withNormalizedRole(u);
+    // Registration creates a pending account. It deliberately does not start
+    // a session or persist a user until a Program Leader assigns a role.
+    return registerApi(credentials);
   }, []);
 
   const requestPasswordReset = useCallback(async (email) => {

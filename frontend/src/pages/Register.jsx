@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ROUTE_BY_ROLE } from './Dashboard';
 
 const COLLEGES = [
   { name: 'College of Computing and Information Sciences', departments: ['Computer Science', 'Information Technology', 'Data Science'] },
@@ -22,16 +21,7 @@ function getPasswordStrength(pw) {
 
 const STRENGTH_LABELS = ['', 'Weak', 'Weak', 'Fair', 'Good', 'Strong'];
 
-const POSITION_BY_ROLE = {
-  'program-leader': 'Program Leader',
-  'project-leader': 'Project Leader',
-  'research-assistant': 'Research Assistant',
-  'researcher': 'Researcher',
-  'finance-admin': 'Finance Officer',
-};
-
 export default function Register() {
-  const navigate = useNavigate();
   const { signUp } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
@@ -43,7 +33,6 @@ export default function Register() {
     department: '',
     password: '',
     confirmPassword: '',
-    role: 'project-leader',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -51,6 +40,7 @@ export default function Register() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -96,7 +86,7 @@ export default function Register() {
     setSubmitting(true);
     setError('');
     try {
-      const user = await signUp({
+      await signUp({
         first_name: formData.firstName,
         last_name: formData.lastName,
         email,
@@ -105,17 +95,92 @@ export default function Register() {
         contact_number: formData.contactNumber || undefined,
         college: formData.college || undefined,
         department: formData.department || undefined,
-        role: formData.role,
-        position: POSITION_BY_ROLE[formData.role] || 'Research Assistant',
       });
-      const path = user?.role ? ROUTE_BY_ROLE[user.role] || '/dashboard' : '/dashboard';
-      navigate(path, { replace: true });
+      setSuccess(true);
     } catch (err) {
       setError(err?.message || 'Registration failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (success) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          width: '100%',
+          background: 'radial-gradient(circle at top left, #5a061c, #26020b, #110005)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 16px',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '520px',
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '20px',
+            padding: '36px',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+            boxSizing: 'border-box',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: '54px',
+              height: '54px',
+              margin: '0 auto 20px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(34, 197, 94, 0.15)',
+              border: '1px solid rgba(34, 197, 94, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#86efac',
+              fontSize: '26px',
+            }}
+          >
+            ✓
+          </div>
+          <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff', margin: '0 0 10px' }}>
+            Account submitted
+          </h2>
+          <p style={{ fontSize: '13px', lineHeight: '1.6', color: 'rgba(254, 205, 211, 0.8)', margin: '0 0 10px' }}>
+            Your registration is now <strong style={{ color: '#fcd34d' }}>Pending approval</strong>.
+            A Program Leader or Finance/Admin staff member must approve the account and assign your role before you can sign in.
+          </p>
+          <p style={{ fontSize: '12px', color: 'rgba(254, 205, 211, 0.6)', margin: '0 0 24px' }}>
+            You will not be signed in automatically.
+          </p>
+          <Link
+            to="/login"
+            style={{
+              display: 'inline-block',
+              background: 'linear-gradient(to right, #f59e0b, #e11d48)',
+              color: '#ffffff',
+              fontWeight: '700',
+              fontSize: '13px',
+              padding: '12px 28px',
+              borderRadius: '10px',
+              textDecoration: 'none',
+              boxShadow: '0 10px 15px -3px rgba(225, 29, 72, 0.3)',
+            }}
+          >
+            Back to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const inputStyle = {
     width: '100%',
@@ -214,11 +279,11 @@ export default function Register() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(251, 191, 36, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', fontSize: '11px', fontWeight: 'bold' }}>✓</span>
-                <span>Assign a role for project tracking access</span>
+                <span>A Program Leader reviews and assigns your role</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.1)', border: '1px solid rgba(251, 191, 36, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', fontSize: '11px', fontWeight: 'bold' }}>✓</span>
-                <span>Start monitoring funded research programs</span>
+                <span>Sign in after your account is approved</span>
               </div>
             </div>
           </div>
@@ -292,22 +357,10 @@ export default function Register() {
                 </div>
               </div>
 
-              {/* Employee ID & Role */}
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Employee ID</label>
-                  <input type="text" name="employeeId" value={formData.employeeId} onChange={handleChange} placeholder="e.g. MSU-04182" style={inputStyle} autoComplete="off" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={fieldLabelStyle}>Role</label>
-                  <select name="role" value={formData.role} onChange={handleChange} style={{ ...inputStyle, appearance: 'auto' }}>
-                    <option value="program-leader">Program Leader</option>
-                    <option value="project-leader">Project Leader</option>
-                    <option value="research-assistant">Research Assistant</option>
-                    <option value="researcher">Researcher</option>
-                    <option value="finance-admin">Finance/Admin Staff</option>
-                  </select>
-                </div>
+              {/* Employee ID */}
+              <div>
+                <label style={fieldLabelStyle}>Employee ID</label>
+                <input type="text" name="employeeId" value={formData.employeeId} onChange={handleChange} placeholder="e.g. MSU-04182" style={inputStyle} autoComplete="off" />
               </div>
 
               {/* College & Department */}
