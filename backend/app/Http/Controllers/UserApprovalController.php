@@ -24,6 +24,7 @@ class UserApprovalController extends Controller
 
         $users = User::query()
             ->whereNull('role_id')
+            ->whereNull('registration_rejected_at')
             ->orderBy('created_at')
             ->get();
 
@@ -60,7 +61,7 @@ class UserApprovalController extends Controller
             $user->update([
                 'role_id' => $role->id,
                 'is_active' => true,
-                'position' => $role->name,
+                // Keep the person's actual position; the role is stored in role_id.
             ]);
 
             AuditTrail::create([

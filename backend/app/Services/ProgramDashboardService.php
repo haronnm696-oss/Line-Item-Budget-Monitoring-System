@@ -37,6 +37,8 @@ class ProgramDashboardService
         $approvals = $this->approvalRows($projects, $today);
         $expenseCount = (int) $rows->sum('expenses_count');
         $receiptCount = (int) $rows->sum('receipts_count');
+        $oldestWaiting = (int) ($approvals->max('days_waiting') ?? 0);
+        $forecast = $this->forecast($projects, $today);
 
         return [
             'meta' => [
@@ -52,19 +54,142 @@ class ProgramDashboardService
                     'healthy' => $rows->where('health', 'Healthy')->count(),
                     'watch' => $rows->where('health', 'Watch')->count(),
                     'at_risk' => $rows->where('health', 'At risk')->count(),
+                    'closed' => $rows->where('health', 'Closed')->count(),
                 ],
                 'avg_receipt_compliance' => $expenseCount > 0
                     ? round(($receiptCount / $expenseCount) * 100, 1)
                     : null,
                 'pending_approvals' => $approvals->count(),
+                'pending_approvals_total' => $approvals->count(),
+                'oldest_waiting_days' => $oldestWaiting,
             ],
             'projects' => $rows->all(),
-            'approvals' => $approvals->all(),
-            'forecast' => $this->forecast($projects, $today),
+            // The dashboard inbox is intentionally short; the Approvals page
+            // exposes the full queue.
+            'approvals' => $approvals->take(3)->values()->all(),
+            'forecast' => $forecast,
+            'scheduled_releases' => $forecast,
             'funders' => $this->funderOptions(),
             'funding_sources' => $this->fundingSources($rows),
             'deadlines' => $this->deadlines($projects, $today),
             'exceptions' => $this->exceptions($projects, $rows),
+        ];
+    }
+
+    /**
+     * Approval workspace: filtered rows, tab counts, recently decided rows,
+     * and the options needed by the filter bar.
+     *
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    public function approvalList(array $filters = []): array
+    {
+        $today = now()->startOfDay();
+
+        $query = ApprovalRequest::query()
+            ->with(['project.fundingAgency', 'requestedBy.primaryRole', 'reviewedBy', 'tranche', 'liquidation'])
+            ->when($filters['type'] ?? null, function ($query, $type) {
+                if ($type === 'fund-release') {
+                    $query->whereIn('type', ['disbursement', 'payroll']);
+                } elseif (in_array($type, ['realignment', 'budget-change'], true)) {
+                    $query->where('type', 'budget_realignment');
+                } else {
+                    $query->where('type', $type);
+                }
+            })
+            ->when($filters['project'] ?? null, fn ($query, $project) => $query->where('project_id', $project))
+            ->when($filters['funder'] ?? null, function ($query, $funder) {
+                if (ctype_digit((string) $funder)) {
+                    $query->whereHas('project', fn ($project) => $project->where('funding_agency_id', (int) $funder));
+                } else {
+                    $query->whereHas('project.fundingAgency', function ($agency) use ($funder) {
+                        $agency->where('acronym', $funder)->orWhere('name', $funder);
+                    });
+                }
+            });
+
+        $all = $query->orderBy('created_at')->get();
+
+        $counts = [
+            'pending' => $all->where('status', 'pending')->count(),
+            'approved' => $all->where('status', 'approved')->count(),
+            'rejected' => $all->where('status', 'rejected')->count(),
+        ];
+
+        $status = $filters['status'] ?? 'pending';
+        $rows = $all->where('status', $status)
+            ->sortBy(fn (ApprovalRequest $approval) => $approval->created_at?->timestamp ?? 0)
+            ->map(fn (ApprovalRequest $approval) => $this->approvalListRow($approval, $today))
+            ->values();
+
+        $recent = $all->whereIn('status', ['approved', 'rejected'])
+            ->sortByDesc(fn (ApprovalRequest $approval) => $approval->reviewed_at?->timestamp ?? 0)
+            ->take(10)
+            ->map(fn (ApprovalRequest $approval) => $this->approvalListRow($approval, $today))
+            ->values();
+
+        return [
+            'counts' => $counts,
+            'approvals' => $rows->all(),
+            'recent' => $recent->all(),
+            'projects' => Project::query()
+                ->orderBy('title')
+                ->get(['id', 'code', 'title'])
+                ->map(fn (Project $project) => [
+                    'id' => $project->id,
+                    'code' => $project->code,
+                    'title' => $project->title,
+                ])
+                ->values()
+                ->all(),
+            'funders' => $this->funderOptions(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function approvalListRow(ApprovalRequest $approval, Carbon $today): array
+    {
+        $kind = 'other';
+
+        if (in_array($approval->type, ['disbursement', 'payroll'], true)) {
+            $kind = 'tranche';
+        } elseif ($approval->type === 'budget_realignment') {
+            $kind = 'realignment';
+        } elseif ($approval->type === 'liquidation') {
+            $kind = 'liquidation';
+        }
+
+        $created = $approval->created_at
+            ? $approval->created_at->copy()->startOfDay()
+            : $today->copy();
+
+        return [
+            'id' => $approval->id,
+            'kind' => $kind,
+            'type' => $approval->type,
+            'type_label' => $approval->typeLabel(),
+            'title' => $approval->type === 'liquidation'
+                ? ($approval->liquidation?->title ?? $approval->title)
+                : $approval->title,
+            'description' => $approval->description,
+            'project_id' => $approval->project_id,
+            'project' => $approval->project?->title,
+            'project_code' => $approval->project?->code,
+            'funder' => $approval->project?->fundingAgency?->acronym
+                ?? $approval->project?->fundingAgency?->name,
+            'amount' => $approval->amount !== null ? (float) $approval->amount : null,
+            'requested_by' => $approval->requestedBy?->name,
+            'requested_by_id' => $approval->requested_by,
+            'requested_by_role' => $approval->requestedBy?->primaryRole?->name,
+            'days_waiting' => max(0, (int) $created->diffInDays($today)),
+            'status' => $approval->status,
+            'review_notes' => $approval->review_notes,
+            'created_at' => $approval->created_at?->toIso8601String(),
+            'reviewed_at' => $approval->reviewed_at?->toIso8601String(),
+            'reviewed_by' => $approval->reviewedBy?->name,
         ];
     }
 
@@ -110,6 +235,20 @@ class ProgramDashboardService
 
             $this->applyDecision($locked, $decision, $remarks, $actor);
 
+            if (($locked->type ?? '') === 'budget_realignment') {
+                AuditTrail::create([
+                    'user_id' => $actor->id,
+                    'action' => 'budget_changed',
+                    'model_type' => 'ApprovalRequest',
+                    'model_id' => $locked->id,
+                    'old_values' => $oldValues,
+                    'new_values' => $locked->fresh()->toArray(),
+                    'reason' => $remarks,
+                    'ip_address' => request()->ip(),
+                    'created_at' => now(),
+                ]);
+            }
+
             AuditTrail::create([
                 'user_id' => $actor->id,
                 'action' => $decision,
@@ -134,6 +273,8 @@ class ProgramDashboardService
                 'reports',
                 'liquidations',
                 'libCategories',
+                'projectUsers.role',
+                'projectUsers.user',
                 'approvalRequests' => function ($query) {
                     $query->where('status', 'pending')
                         ->with(['requestedBy', 'tranche', 'liquidation']);
@@ -169,12 +310,15 @@ class ProgramDashboardService
         $withReceipt = $metrics['receipts_count'];
         $receiptPct = $metrics['receipt_compliance_pct'];
 
-        $tranche = $this->trancheMetric($project, $today, $spentPct);
-        $report = $this->reportMetric($project, $today);
         $status = $this->financials->derivedStatus($project);
         $closed = $status === 'completed'
             || ($project->end_date && $project->end_date->lt($today));
-        [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct, $closed);
+        $tranche = $this->trancheMetric($project, $today, $spentPct, $closed);
+        $report = $this->reportMetric($project, $today);
+        $terminalFiled = $project->reports->contains(
+            fn (ProjectReport $row) => $row->type === 'terminal' && $row->submitted_at !== null
+        );
+        [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct, $closed, $terminalFiled);
 
         return [
             'id' => $project->id,
@@ -200,6 +344,9 @@ class ProgramDashboardService
             'next_report' => $report['next'],
             'health' => $health,
             'health_reason' => $reason,
+            'project_leader' => $project->projectUsers
+                ->first(fn ($assignment) => $assignment->role?->slug === 'project-leader')
+                ?->user?->name,
             'start_date' => $project->start_date?->toDateString(),
             'end_date' => $project->end_date?->toDateString(),
         ];
@@ -234,8 +381,12 @@ class ProgramDashboardService
     /**
      * @return array{status: string, overdue: bool}
      */
-    protected function trancheMetric(Project $project, Carbon $today, float $spentPct): array
+    protected function trancheMetric(Project $project, Carbon $today, float $spentPct, bool $closed = false): array
     {
+        if ($closed) {
+            return ['status' => 'Closed', 'overdue' => false];
+        }
+
         $tranches = $project->tranches->sortBy('sequence')->values();
         $last = $tranches->last();
         $earlierReleased = $last
@@ -297,21 +448,22 @@ class ProgramDashboardService
     /**
      * @return array{0: string, 1: string}
      */
-    protected function health(bool $overdue, float $spentPct, float $gap, ?float $receiptPct, bool $closed): array
-    {
-        if ($overdue) {
-            return ['At risk', 'Tranche release overdue'];
+    protected function health(
+        bool $overdue,
+        float $spentPct,
+        float $gap,
+        ?float $receiptPct,
+        bool $closed,
+        bool $terminalFiled = false
+    ): array {
+        // Closed projects are never scored for under-spending. They keep a
+        // neutral status instead of a health risk.
+        if ($closed) {
+            return ['Closed', $terminalFiled ? 'Terminal report filed' : 'Project completed'];
         }
 
-        // Completed projects and projects past their end date cannot be
-        // "under-spending" risks: the timeline is over. Receipt problems
-        // still matter, but normal end-of-project depletion is not a risk.
-        if ($closed) {
-            if ($receiptPct !== null && $receiptPct < 80) {
-                return ['Watch', 'Receipt compliance at ' . $receiptPct . '%'];
-            }
-
-            return ['Healthy', 'Project completed or past end date'];
+        if ($overdue) {
+            return ['At risk', 'Tranche release overdue'];
         }
 
         if ($spentPct >= 95) {
