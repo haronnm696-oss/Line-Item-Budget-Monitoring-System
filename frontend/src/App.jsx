@@ -6,6 +6,7 @@ import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
+import Policy from './pages/Policy';
 import Dashboard from './pages/Dashboard';
 import ProgramLeaderDashboard from './pages/dashboards/ProgramLeaderDashboard';
 import ProjectLeaderDashboard from './pages/dashboards/ProjectLeaderDashboard';
@@ -28,6 +29,8 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/terms" element={<Policy type="terms" />} />
+          <Route path="/privacy" element={<Policy type="privacy" />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
