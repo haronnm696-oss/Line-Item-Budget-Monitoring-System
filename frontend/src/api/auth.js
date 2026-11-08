@@ -1,6 +1,7 @@
 import client from './client';
 import { ENDPOINTS } from './endpoints';
 import { ROLE_MAP, normalizeRole } from '../data/mockData';
+import { mapRegisterFieldErrors, normalizePhMobile } from '../lib/authValidation';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -92,9 +93,13 @@ export async function register({ name: _name, email, password, first_name, last_
     throw new Error('Password must be at least 8 characters.');
   }
 
+  const cleanContact = contact_number ? normalizePhMobile(contact_number) : '';
+
   if (USE_MOCK) {
     if (MOCK_USERS.find((u) => u.email === cleanEmail)) {
-      throw new Error('An account with this email already exists.');
+      throw Object.assign(new Error('An account with this email already exists.'), {
+        fieldErrors: { email: 'An account with this email already exists.' },
+      });
     }
     const initials = (cleanName.match(/\b\w/g) || []).slice(0, 2).join('').toUpperCase() || 'U';
     return {
@@ -122,7 +127,7 @@ export async function register({ name: _name, email, password, first_name, last_
       email: cleanEmail,
       password,
       employee_id: employee_id || undefined,
-      contact_number: contact_number || undefined,
+      contact_number: cleanContact || undefined,
       college: college || undefined,
       department: department || undefined,
       position: position || undefined,
@@ -130,16 +135,30 @@ export async function register({ name: _name, email, password, first_name, last_
     return res.data;
   } catch (err) {
     const status = err.response?.status;
+    const rawFieldErrors = err.response?.data?.errors || null;
+    const fieldErrors = rawFieldErrors ? mapRegisterFieldErrors(rawFieldErrors) : null;
+    const serverMessage = err.response?.data?.message;
+    const safeServerMessage = serverMessage && !/server error/i.test(serverMessage)
+      ? serverMessage
+      : 'Registration failed. Check your connection and try again.';
+
     if (status === 422) {
-      const firstError = err.response?.data?.errors
-        ? Object.values(err.response.data.errors).flat()[0]
-        : null;
-      throw new Error(firstError || err.response?.data?.message || 'Registration failed.');
+      const firstError = fieldErrors ? Object.values(fieldErrors)[0] : null;
+      const error = new Error(firstError || safeServerMessage || 'Registration failed.');
+      error.fieldErrors = fieldErrors;
+      error.status = status;
+      throw error;
     }
     if (status === 409) {
-      throw new Error(err.response?.data?.message || 'An account with this email already exists.');
+      const message = err.response?.data?.message || 'An account with this email already exists.';
+      const error = new Error(message);
+      error.fieldErrors = { email: 'An account with this email already exists.' };
+      error.status = status;
+      throw error;
     }
-    throw new Error(err.response?.data?.message || 'Registration failed. Check your connection and try again.');
+    const error = new Error(safeServerMessage || 'Registration failed. Check your connection and try again.');
+    error.status = status;
+    throw error;
   }
 }
 
