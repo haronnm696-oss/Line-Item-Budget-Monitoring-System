@@ -26,8 +26,8 @@ use App\Http\Controllers\UserApprovalController;
 // Gmail + password auth (Sanctum SPA cookie flow).
 // Email is globally unique; each user has one primary role that
 // decides which dashboard they land on after login.
-Route::post('/login', [AuthController::class, 'login'])->middleware('web');
-Route::post('/register', [AuthController::class, 'register'])->middleware('web');
+Route::post('/login', [AuthController::class, 'login'])->middleware('web', 'throttle:10,1');
+Route::post('/register', [AuthController::class, 'register'])->middleware('web', 'throttle:5,1');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('web', 'throttle:5,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('web');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('web');
