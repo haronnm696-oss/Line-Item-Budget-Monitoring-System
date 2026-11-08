@@ -3,9 +3,24 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 class Payroll extends Model
 {
+    protected static function booted()
+    {
+        // Deactivation must stop new payroll entries while preserving history.
+        static::creating(function (Payroll $payroll) {
+            $personnel = User::find($payroll->personnel_id);
+
+            if ($personnel && ! $personnel->is_active) {
+                throw ValidationException::withMessages([
+                    'personnel_id' => 'Deactivated users cannot receive new payroll entries.',
+                ]);
+            }
+        });
+    }
+
     protected $fillable = [
         'project_id', 'lib_category_id', 'personnel_id', 'computed_by',
         'pay_month', 'pay_year', 'basic_rate', 'gross_pay',
