@@ -16,6 +16,7 @@ class AuditTrail extends Model
         'model_id',
         'old_values', 
         'new_values', 
+        'reason',
         'ip_address', 
         'created_at',
     ];
@@ -40,6 +41,32 @@ class AuditTrail extends Model
             'model_id' => $model->getKey(),
             'old_values' => $oldValues,
             'new_values' => $newValues,
+            'ip_address' => request()->ip(),
+            'created_at' => now(),
+        ]);
+    }
+
+    /**
+     * Record an administrative change with an explicit actor and reason.
+     * Used by Program Leader user management so the log is complete even when
+     * the action runs inside a queued/background context.
+     */
+    public static function record(
+        User $actor,
+        string $action,
+        Model $model,
+        array $oldValues = [],
+        array $newValues = [],
+        ?string $reason = null
+    ): self {
+        return self::create([
+            'user_id' => $actor->id,
+            'action' => $action,
+            'model_type' => class_basename($model),
+            'model_id' => $model->getKey(),
+            'old_values' => $oldValues ?: null,
+            'new_values' => $newValues ?: null,
+            'reason' => $reason,
             'ip_address' => request()->ip(),
             'created_at' => now(),
         ]);

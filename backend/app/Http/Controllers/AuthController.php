@@ -65,6 +65,11 @@ class AuthController extends Controller
         $email = strtolower(trim($data['email']));
 
         $user = User::where('email', $email)->first();
+        if ($user && $user->registration_rejected_at !== null) {
+            return response()->json([
+                'message' => 'Your registration was not approved. Contact the Program Leader.',
+            ], 403);
+        }
         if ($user && $user->role_id === null) {
             return response()->json([
                 'message' => 'Your account is awaiting Program Leader approval.',
@@ -84,7 +89,10 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        return response()->json(['user' => self::toUserPayload(Auth::guard('web')->user())]);
+        $authenticated = Auth::guard('web')->user();
+        $authenticated->forceFill(['last_login_at' => now()])->save();
+
+        return response()->json(['user' => self::toUserPayload($authenticated)]);
     }
 
     public function register(Request $request)

@@ -7,7 +7,9 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramDashboardController;
+use App\Http\Controllers\ProgramUserController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserApprovalController;
@@ -60,7 +62,19 @@ Route::middleware('auth:sanctum')->group(function () {
     // Program-wide dashboard: all projects visible to a Program Leader.
     Route::middleware('role.program-leader')->group(function () {
         Route::get('/program/overview', [ProgramDashboardController::class, 'overview']);
+        Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
         Route::post('/program/approvals/{approval}/decision', [ProgramDashboardController::class, 'decision']);
+
+        // Account review and per-project role management.
+        Route::get('/program/registrations', [ProgramUserController::class, 'registrations']);
+        Route::post('/program/registrations/{user}/decision', [ProgramUserController::class, 'decideRegistration']);
+        Route::get('/program/users', [ProgramUserController::class, 'index']);
+        Route::post('/program/users', [ProgramUserController::class, 'store']);
+        Route::patch('/program/users/{user}/status', [ProgramUserController::class, 'updateStatus']);
+        Route::patch('/program/users/{user}/role', [ProgramUserController::class, 'updateRole']);
+        Route::post('/program/assignments', [ProgramUserController::class, 'assign']);
+        Route::patch('/program/assignments/{user}/{project}', [ProgramUserController::class, 'updateAssignment']);
+        Route::delete('/program/assignments/{user}/{project}', [ProgramUserController::class, 'removeAssignment']);
     });
 });
 
