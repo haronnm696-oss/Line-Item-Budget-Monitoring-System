@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import RoleRoute from './routes/RoleRoute';
 import AppLayout from './layouts/AppLayout';
+import ProgramLayout from './layouts/ProgramLayout';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
@@ -19,7 +20,11 @@ import Expenses from './pages/Expenses';
 import Payroll from './pages/Payroll';
 import Reports from './pages/Reports';
 import AuditTrail from './pages/AuditTrail';
-import Users from './pages/Users';
+import ProgramApprovals from './pages/program/ProgramApprovals';
+import ProgramProjects from './pages/program/ProgramProjects';
+import ProgramReports from './pages/program/ProgramReports';
+import ProgramAudit from './pages/program/ProgramAudit';
+import ProgramUsers from './pages/program/ProgramUsers';
 
 export default function App() {
   return (
@@ -35,10 +40,6 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route
-                path="/program-dashboard"
-                element={<RoleRoute allow={['PRG']}><ProgramLeaderDashboard /></RoleRoute>}
-              />
               <Route
                 path="/program-leader-dashboard"
                 element={<Navigate to="/program-dashboard" replace />}
@@ -63,7 +64,23 @@ export default function App() {
               <Route path="/payroll" element={<Payroll />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/audit" element={<AuditTrail />} />
-              <Route path="/users" element={<Users />} />
+            </Route>
+
+            {/* Program Leader-only shell. Other roles are redirected by RoleRoute. */}
+            <Route
+              element={<RoleRoute allow={['PRG']}><ProgramLayout /></RoleRoute>}
+            >
+              <Route path="/program-dashboard" element={<ProgramLeaderDashboard />} />
+              <Route path="/program-approvals" element={<ProgramApprovals />} />
+              <Route path="/program-projects" element={<ProgramProjects />} />
+              <Route path="/program-projects/:id" element={<ProjectDetail />} />
+              <Route path="/program-reports" element={<ProgramReports />} />
+              <Route path="/program-audit" element={<ProgramAudit />} />
+              <Route path="/program-users" element={<ProgramUsers />} />
+
+              {/* Legacy bookmarks land inside the new shell. */}
+              <Route path="/users" element={<Navigate to="/program-users" replace />} />
+              <Route path="/approvals" element={<Navigate to="/program-approvals" replace />} />
             </Route>
           </Route>
 

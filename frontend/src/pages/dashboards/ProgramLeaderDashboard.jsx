@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { fetchProgramOverview, decideApproval } from '../../api/program';
-import ApprovalInbox from '../../components/program/ApprovalInbox';
-import ExceptionsPanel from '../../components/program/ExceptionsPanel';
-import FundingSources from '../../components/program/FundingSources';
-import ProgramKpis from '../../components/program/ProgramKpis';
-import ProjectHealthMatrix from '../../components/program/ProjectHealthMatrix';
-import RejectModal from '../../components/program/RejectModal';
-import ReleaseForecast from '../../components/program/ReleaseForecast';
-import ReportingCalendar from '../../components/program/ReportingCalendar';
+import ProgramPill from '../../components/program/ProgramPill';
+import ProgramRejectModal from '../../components/program/ProgramRejectModal';
+import { formatPct, peso } from '../../components/money';
 
-function updatedLabel(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+function compactAmount(value) {
+  const amount = Number(value) || 0;
+  if (amount >= 1000000) return `₱${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `₱${(amount / 1000).toFixed(1)}K`;
+  return `₱${amount.toFixed(0)}`;
+}
+
+function clampPct(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
 function messageFor(error, fallback) {
@@ -23,6 +24,7 @@ function messageFor(error, fallback) {
 
 export default function ProgramLeaderDashboard() {
   const { user } = useAuth();
+  const { refreshPending } = useProgramRefresh();
   const [data, setData] = useState(null);
   const [funders, setFunders] = useState([]);
   const [funder, setFunder] = useState('');
@@ -68,9 +70,9 @@ export default function ProgramLeaderDashboard() {
     load(funder);
   }, [funder, load]);
 
-  function handleFunderChange(event) {
-    setFunder(event.target.value);
-    setFeedback(null);
+  async function refreshAll() {
+    await load(funder, true);
+    refreshPending();
   }
 
   async function handleApprove(approval) {
@@ -81,11 +83,11 @@ export default function ProgramLeaderDashboard() {
 
     try {
       await decideApproval(approval.id, { decision: 'approved' });
-      setFeedback({ tone: 'ok', text: `Approved “${approval.title}”. Related records were updated.` });
-      await load(funder, true);
+      setFeedback({ tone: 'ok', text: `Approved “${approval.title}”.` });
+      await refreshAll();
     } catch (requestError) {
       setFeedback({
-        tone: 'over',
+        tone: 'error',
         text: messageFor(requestError, 'Unable to approve this request. Please try again.'),
       });
     } finally {
@@ -93,124 +95,300 @@ export default function ProgramLeaderDashboard() {
     }
   }
 
-  function openReject(approval) {
-    setRejectError('');
-    setRejectTarget(approval);
-  }
-
-  async function submitReject(remarks) {
+  async function submitReject(reason) {
     if (!rejectTarget || rejectBusy) return;
 
     setRejectBusy(true);
     setRejectError('');
 
     try {
-      await decideApproval(rejectTarget.id, { decision: 'rejected', remarks });
+      await decideApproval(rejectTarget.id, { decision: 'rejected', remarks: reason });
       setFeedback({ tone: 'ok', text: `Rejected “${rejectTarget.title}”.` });
       setRejectTarget(null);
-      await load(funder, true);
+      await refreshAll();
     } catch (requestError) {
       const validationError = requestError?.response?.data?.errors?.remarks?.[0];
-      if (validationError) {
-        setRejectError(validationError);
-      } else {
-        setRejectTarget(null);
-        setFeedback({
-          tone: 'over',
-          text: messageFor(requestError, 'Unable to reject this request. Please try again.'),
-        });
-      }
+      setRejectError(
+        validationError || messageFor(requestError, 'Unable to reject this request. Please try again.')
+      );
     } finally {
       setRejectBusy(false);
     }
   }
 
-  const hasData = Boolean(data);
-  const isEmpty = hasData && Number(data.meta?.project_count ?? data.projects?.length ?? 0) === 0;
+  const kpis = data?.kpis;
+  const projects = Array.isArray(data?.projects) ? data.projects : [];
+  const approvals = Array.isArray(data?.approvals) ? data.approvals : [];
+  const releases = Array.isArray(data?.scheduled_releases)
+    ? data.scheduled_releases
+    : Array.isArray(data?.forecast)
+      ? data.forecast
+      : [];
+  const health = kpis?.health ?? {};
+  const isEmpty = Boolean(data) && projects.length === 0;
+  const tallest = Math.max(...releases.map((month) => Number(month.amount) || 0), 1);
 
   return (
-    <div className="dashboard pd-page">
-      <div className="page-head pd-head">
+    <>
+      <div className="program-page-head">
         <div>
-          <div className="pd-eyebrow">MOST R&amp;D · Program-wide oversight</div>
-          <h2>Program Leader Dashboard</h2>
-          <p>
-            {user?.name ? `${user.name} · ` : ''}
-            All projects, every funding source, one decision queue.
-          </p>
+          <div className="program-eyebrow">Program overview · Program Leader</div>
+          <h1 className="program-h1">Externally funded research portfolio</h1>
+          <p className="program-sub">All projects, every funding source, one decision queue.</p>
         </div>
 
-        <div className="pd-filter">
-          <label htmlFor="pd-funder">Funding source</label>
+        <div className="program-field">
+          <label htmlFor="program-funder">Funding source</label>
           <select
-            id="pd-funder"
+            id="program-funder"
+            className="program-select"
             value={funder}
-            onChange={handleFunderChange}
+            onChange={(event) => {
+              setFunder(event.target.value);
+              setFeedback(null);
+            }}
             disabled={loading && funders.length === 0}
           >
             <option value="">All funders</option>
             {funders.map((agency) => (
               <option value={agency.id} key={agency.id}>
-                {agency.label} ({agency.project_count})
+                {agency.label}
               </option>
             ))}
           </select>
-          <span className="pd-updated">
-            {refreshing
-              ? 'Updating…'
-              : data?.meta?.generated_at
-                ? `Updated ${updatedLabel(data.meta.generated_at)}`
-                : 'Live data'}
+          <span className="program-muted" aria-live="polite">
+            {refreshing ? 'Updating…' : 'Live data'}
           </span>
         </div>
       </div>
 
       {error && (
-        <div className="banner over pd-error">
-          <span>{error}</span>
-          <button type="button" className="btn sm" onClick={() => load(funder)}>
+        <div className="program-banner error" role="alert">
+          <span>{error}</span>{' '}
+          <button type="button" className="program-btn sm" onClick={() => load(funder)}>
             Retry
           </button>
         </div>
       )}
 
-      {feedback && <div className={`banner ${feedback.tone}`}>{feedback.text}</div>}
-
-      {loading && !data ? (
-        <div className="panel pd-loading">
-          <span className="pd-loading-dot" aria-hidden="true" />
-          Loading program data…
+      {feedback && (
+        <div className={`program-banner ${feedback.tone}`} role="status" aria-live="polite">
+          {feedback.text}
         </div>
-      ) : isEmpty ? (
-        <div className="panel pd-loading">
+      )}
+
+      {loading && !data && (
+        <div className="program-card program-empty">Loading program data…</div>
+      )}
+
+      {isEmpty && !loading && (
+        <div className="program-card program-empty">
           No projects match the selected funding source.
         </div>
-      ) : hasData ? (
+      )}
+
+      {data && !isEmpty && (
         <>
-          <ProgramKpis kpis={data.kpis} />
+          <div className="program-kpis">
+            <section className="program-kpi">
+              <div className="program-kpi-label">Portfolio budget</div>
+              <div className="program-kpi-value">{peso(kpis?.portfolio_budget ?? 0)}</div>
+              <div className="program-kpi-sub">
+                {data.meta?.project_count ?? projects.length} projects, all funders
+              </div>
+            </section>
 
-          <div className="grid pd-split">
-            <ApprovalInbox
-              approvals={data.approvals}
-              busyId={busyApprovalId}
-              onApprove={handleApprove}
-              onReject={openReject}
-            />
-            <ReleaseForecast forecast={data.forecast} />
+            <section className="program-kpi">
+              <div className="program-kpi-label">Total disbursed</div>
+              <div className="program-kpi-value">{peso(kpis?.total_disbursed ?? 0)}</div>
+              <div className="program-kpi-sub">
+                {formatPct(kpis?.utilization_pct ?? 0)} of portfolio
+              </div>
+            </section>
+
+            <section className="program-kpi">
+              <div className="program-kpi-label">Project health</div>
+              <div className="program-kpi-pills">
+                <ProgramPill value="Healthy" label={`${health.healthy ?? 0} Healthy`} />
+                <ProgramPill value="Watch" label={`${health.watch ?? 0} Watch`} />
+                <ProgramPill value="At risk" label={`${health.at_risk ?? 0} At risk`} />
+              </div>
+              <div className="program-kpi-sub">{health.closed ?? 0} project(s) closed</div>
+            </section>
+
+            <section className="program-kpi">
+              <div className="program-kpi-label">Pending approvals</div>
+              <div className="program-kpi-value">{kpis?.pending_approvals_total ?? kpis?.pending_approvals ?? 0}</div>
+              <div className="program-kpi-sub">
+                Oldest waiting {kpis?.oldest_waiting_days ?? 0} days
+              </div>
+            </section>
           </div>
 
-          <ProjectHealthMatrix projects={data.projects} />
+          <div className="program-grid-2">
+            <section className="program-card">
+              <div className="program-card-head">
+                <div>
+                  <div className="program-card-title">Approval inbox</div>
+                  <div className="program-card-sub">All projects, oldest first</div>
+                </div>
+                <Link className="program-card-link" to="/program-approvals">View all</Link>
+              </div>
 
-          <div className="grid pd-bottom">
-            <FundingSources sources={data.funding_sources} />
-            <ReportingCalendar deadlines={data.deadlines} />
+              {approvals.length === 0 ? (
+                <div className="program-empty">All caught up. No pending approvals.</div>
+              ) : (
+                approvals.map((approval) => {
+                  const isOwn = Number(approval.requested_by_id) === Number(user?.id);
+                  const busy = busyApprovalId === approval.id;
+                  return (
+                    <div className="program-row" key={approval.id}>
+                      <div className="program-row-main">
+                        <div className="program-row-title">
+                          <span>{approval.title}</span>
+                          <ProgramPill value={approval.type_label} />
+                        </div>
+                        <div className="program-row-sub">
+                          {approval.project}
+                          {approval.amount != null ? ` · ${peso(approval.amount)}` : ''}
+                          {` · waiting ${approval.days_waiting ?? 0} days`}
+                          {approval.requested_by ? ` · requested by ${approval.requested_by_role ?? approval.requested_by}` : ''}
+                        </div>
+                        {isOwn && (
+                          <div className="program-warning" style={{ marginTop: 6 }}>
+                            ⚠ You cannot approve a request you created
+                          </div>
+                        )}
+                      </div>
+                      <div className="program-row-actions">
+                        <button
+                          type="button"
+                          className="program-btn primary"
+                          disabled={busy || isOwn}
+                          aria-disabled={busy || isOwn}
+                          onClick={() => handleApprove(approval)}
+                        >
+                          {busy ? '…' : 'Approve'}
+                        </button>
+                        <button
+                          type="button"
+                          className="program-btn"
+                          disabled={busy || isOwn}
+                          aria-disabled={busy || isOwn}
+                          onClick={() => {
+                            setRejectError('');
+                            setRejectTarget(approval);
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </section>
+
+            <section className="program-card">
+              <div className="program-card-head">
+                <div>
+                  <div className="program-card-title">Scheduled releases</div>
+                  <div className="program-card-sub">Planned tranches, next four months</div>
+                </div>
+              </div>
+
+              <div className="program-bars">
+                {releases.map((month) => {
+                  const amount = Number(month.amount) || 0;
+                  return (
+                    <div className="program-bar-col" key={month.month}>
+                      <span className="program-bar-amount">
+                        {amount > 0 ? compactAmount(amount) : 'None'}
+                      </span>
+                      <div
+                        className={`program-bar${amount > 0 ? '' : ' none'}`}
+                        style={amount > 0 ? { height: `${Math.max(4, (amount / tallest) * 120)}px` } : undefined}
+                        aria-hidden="true"
+                      />
+                      <span className="program-bar-month">{month.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="program-footnote">Overdue tranches count in the current month.</p>
+            </section>
           </div>
 
-          <ExceptionsPanel exceptions={data.exceptions} />
+          <section className="program-card">
+            <div className="program-card-head">
+              <div>
+                <div className="program-card-title">Project health matrix</div>
+                <div className="program-card-sub">Spending against time elapsed, tranche, receipts</div>
+              </div>
+            </div>
+
+            <div className="program-scroll">
+              <table className="program-table" style={{ minWidth: 900 }}>
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Funder</th>
+                    <th>Spent and time elapsed</th>
+                    <th>Tranche</th>
+                    <th>Receipts</th>
+                    <th>Health</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.map((project) => (
+                    <tr key={project.id}>
+                      <td>
+                        <div className="project-name">{project.title}</div>
+                        <div className="project-code">{project.code}</div>
+                      </td>
+                      <td>{project.funder}</td>
+                      <td>
+                        <div className="program-bar-stack">
+                          <div>
+                            <div className="program-label-row">
+                              <span>Spent {formatPct(project.spent_pct)}</span>
+                            </div>
+                            <div className="program-progress">
+                              <span style={{ width: `${clampPct(project.spent_pct)}%` }} />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="program-label-row">
+                              <span>Time {formatPct(project.time_pct)}</span>
+                            </div>
+                            <div className="program-progress time">
+                              <span style={{ width: `${clampPct(project.time_pct)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td><ProgramPill value={project.tranche_status} /></td>
+                      <td className="num">
+                        {project.expenses_count > 0 && project.receipt_compliance_pct != null
+                          ? formatPct(project.receipt_compliance_pct)
+                          : '—'}
+                      </td>
+                      <td>
+                        <ProgramPill value={project.health} />
+                        <div className="program-muted" style={{ marginTop: 4 }}>
+                          {project.health_reason}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
-      ) : null}
+      )}
 
-      <RejectModal
+      <ProgramRejectModal
         key={rejectTarget?.id ?? 'closed'}
         approval={rejectTarget}
         busy={rejectBusy}
@@ -220,6 +398,6 @@ export default function ProgramLeaderDashboard() {
         }}
         onConfirm={submitReject}
       />
-    </div>
+    </>
   );
 }

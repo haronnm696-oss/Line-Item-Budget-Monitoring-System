@@ -79,7 +79,7 @@ function downloadCSV(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-export default function Reports() {
+export default function Reports({ programMode = false }) {
   const [selectedCode, setSelectedCode] = useState('');
   const [projectList, setProjectList] = useState([]);
   const [detail, setDetail] = useState(null);
@@ -593,12 +593,25 @@ export default function Reports() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h2>Reports</h2>
-          <p>Generated from verified expense records only · MOST R&D Form B</p>
+      {!programMode && (
+        <div className="page-head">
+          <div>
+            <h2>Reports</h2>
+            <p>Generated from verified expense records only · MOST R&D Form B</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {programMode && (
+        <div className="program-card-head" style={{ marginTop: 8 }}>
+          <div>
+            <div className="program-card-title">Per-project reports</div>
+            <div className="program-card-sub">
+              Pick one project. PDF and CSV exports use the same verified financial detail as the dashboard.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

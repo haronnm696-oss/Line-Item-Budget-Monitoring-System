@@ -21,7 +21,7 @@ const NAV = [
   { section: 'Oversight', items: [
     { key: 'reports', to: '/reports', icon: '▨', label: 'Reports', roles: ['PRG', 'PL', 'RES', 'FIN'] },
     { key: 'audit', to: '/audit', icon: '≡', label: 'Audit trail', roles: ['PRG', 'PL', 'FIN'] },
-    { key: 'users', to: '/users', icon: '◉', label: 'Users & roles', roles: ['PRG', 'PL'] },
+    // Users and roles is Program Leader-only and lives in the program shell.
   ]},
 ];
 

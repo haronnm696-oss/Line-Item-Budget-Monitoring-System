@@ -13,7 +13,8 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name', 'first_name', 'last_name', 'email', 'password', 'employee_id', 'contact_number', 'college', 'department', 'role_id',
-        'position', 'email_verified_at', 'is_active',
+        'position', 'email_verified_at', 'is_active', 'registration_reviewed_by', 'registration_rejected_at',
+        'registration_rejection_reason', 'last_login_at',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -21,7 +22,18 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'is_active' => 'boolean',
+        'registration_rejected_at' => 'datetime',
+        'last_login_at' => 'datetime',
     ];
+
+    /**
+     * A self-registered account is pending until a Program Leader approves or
+     * rejects it. Rejected accounts stay on record for audit purposes.
+     */
+    public function isPendingRegistration(): bool
+    {
+        return $this->role_id === null && $this->registration_rejected_at === null;
+    }
 
     // Projects this user is attached to, with role pivot data
     public function projects()
