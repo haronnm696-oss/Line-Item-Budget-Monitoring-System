@@ -32,6 +32,8 @@ class AuditTrailController extends Controller
         ]);
 
         $query = AuditTrail::with('user');
+        $from = $validated['from'] ?? null;
+        $to = $validated['to'] ?? null;
 
         if ($validated['action'] ?? null) {
             $query->where('action', $validated['action']);
@@ -39,8 +41,12 @@ class AuditTrailController extends Controller
         if ($validated['date'] ?? null) {
             $query->whereDate('created_at', $validated['date']);
         }
-        if ($validated['from'] ?? null && $validated['to'] ?? null) {
-            $query->whereBetween('created_at', [$validated['from'] . ' 00:00:00', $validated['to'] . ' 23:59:59']);
+        if ($from && $to) {
+            $query->whereBetween('created_at', [$from . ' 00:00:00', $to . ' 23:59:59']);
+        } elseif ($from) {
+            $query->where('created_at', '>=', $from . ' 00:00:00');
+        } elseif ($to) {
+            $query->where('created_at', '<=', $to . ' 23:59:59');
         }
         if ($validated['record_type'] ?? null) {
             $query->where('model_type', $validated['record_type']);
@@ -74,7 +80,7 @@ class AuditTrailController extends Controller
             'action' => $entry->action,
             'record' => $this->recordLabel($entry, $new, $old),
             'recordType' => $entry->model_type,
-            'change' => $this->changeSummary($entry->action, $old, $new),
+            'change' => $this->changeSummary($entry->action, $old, $new, $entry->reason),
             'ip' => $entry->ip_address ?: '—',
             'date' => $entry->created_at?->toDateString(),
             'ts' => $entry->created_at?->format('M j, Y g:i A'),
@@ -121,7 +127,7 @@ class AuditTrailController extends Controller
         return Project::find($projectId)?->title ?? 'Project #' . $projectId;
     }
 
-    private function changeSummary(string $action, array $old, array $new): string
+    private function changeSummary(string $action, array $old, array $new, ?string $reason = null): string
     {
         if ($action === 'created') {
             return 'Record created';
@@ -132,11 +138,11 @@ class AuditTrailController extends Controller
         }
 
         if ($action === 'budget_changed') {
-            $reason = $new['reason'] ?? 'Budget allocation changed';
+            $summary = $reason ?? $new['reason'] ?? 'Budget allocation changed';
 
             return isset($old['total_approved_budget'], $new['total_approved_budget'])
-                ? $reason . ' (' . $old['total_approved_budget'] . ' → ' . $new['total_approved_budget'] . ')'
-                : $reason;
+                ? $summary . ' (' . $old['total_approved_budget'] . ' → ' . $new['total_approved_budget'] . ')'
+                : $summary;
         }
 
         $changes = [];
@@ -147,6 +153,10 @@ class AuditTrailController extends Controller
             if (! array_key_exists($key, $old) || $old[$key] !== $value) {
                 $changes[] = $key . ': ' . $this->stringify($value);
             }
+        }
+
+        if ($reason) {
+            $changes[] = 'reason: ' . $reason;
         }
 
         return $changes ? implode('; ', array_slice($changes, 0, 4)) : ucfirst($action) . ' recorded';

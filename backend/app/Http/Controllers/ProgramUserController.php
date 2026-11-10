@@ -153,9 +153,10 @@ class ProgramUserController extends Controller
     {
         $data = $request->validate([
             'role' => ['required', 'string', Rule::in(ProgramUserService::PROJECT_ROLES)],
+            'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $this->users->updateAssignment($user, $project, $data['role'], $request->user());
+        $this->users->updateAssignment($user, $project, $data['role'], $request->user(), $data['reason'] ?? null);
 
         return response()->json([
             'message' => 'Project role updated.',
@@ -165,7 +166,11 @@ class ProgramUserController extends Controller
 
     public function removeAssignment(Request $request, User $user, Project $project)
     {
-        $this->users->removeAssignment($user, $project, $request->user());
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $this->users->removeAssignment($user, $project, $request->user(), $data['reason'] ?? null);
 
         return response()->json([
             'message' => 'User removed from project.',

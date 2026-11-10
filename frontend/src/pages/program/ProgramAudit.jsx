@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import client from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
-import { getWithFallback } from '../../api/http';
-import { auditLog as mockAuditLog } from '../../data/mockData';
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
@@ -15,18 +14,11 @@ export default function ProgramAudit() {
   const [to, setTo] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [action, setAction] = useState('');
-  const [auditMock] = useState(mockAuditLog);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await getWithFallback(
-        ENDPOINTS.audit,
-        (params) => getWithFallback(ENDPOINTS.audit, null, { params })
-      );
-      // getWithFallback only accepts (url, fallback, config); call client directly instead.
-      const client = (await import('../../api/client')).default;
       const response = await client.get(ENDPOINTS.audit, {
         params: {
           from: from || undefined,
@@ -38,7 +30,6 @@ export default function ProgramAudit() {
       setRows(Array.isArray(response.data) ? response.data : []);
     } catch (requestError) {
       setError(messageFor(requestError, 'Unable to load the audit trail.'));
-      if (false) setRows([]);
     } finally {
       setLoading(false);
     }
@@ -48,13 +39,8 @@ export default function ProgramAudit() {
     load();
   }, [load]);
 
-  const filtered = rows.filter((row) => {
-    if (action && row.action !== action) return false;
-    if (flaggedOnly && !['rejected', 'budget_changed'].includes(row.action)) return false;
-    if (from && row.date < from) return false;
-    if (to && row.date > to) return false;
-    return true;
-  });
+  // The API already applies the action, date-range and flagged filters.
+  const filtered = rows;
 
   return (
     <>
@@ -71,21 +57,28 @@ export default function ProgramAudit() {
       <div className="program-filter-row">
         <div className="program-field">
           <label htmlFor="audit-action">Action</label>
-          <select id="audit-action" className="program-select" value={action} onChange={(e) => setAction(e.target.value)}>
+          <select id="audit-action" className="program-select" value={action} onChange={(event) => setAction(event.target.value)}>
             <option value="">All actions</option>
+            <option value="requested">requested</option>
             <option value="approved">approved</option>
             <option value="rejected">rejected</option>
             <option value="created">created</option>
             <option value="budget_changed">budget_changed</option>
+            <option value="role_changed">role_changed</option>
+            <option value="activated">activated</option>
+            <option value="deactivated">deactivated</option>
+            <option value="assignment_created">assignment_created</option>
+            <option value="assignment_updated">assignment_updated</option>
+            <option value="assignment_removed">assignment_removed</option>
           </select>
         </div>
         <div className="program-field">
           <label htmlFor="audit-from">From</label>
-          <input id="audit-from" className="program-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <input id="audit-from" className="program-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
         </div>
         <div className="program-field">
           <label htmlFor="audit-to">To</label>
-          <input id="audit-to" className="program-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          <input id="audit-to" className="program-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
         </div>
         <button
           type="button"
@@ -98,6 +91,8 @@ export default function ProgramAudit() {
         <span className="spacer" />
         <button type="button" className="program-btn" onClick={load}>Refresh</button>
       </div>
+
+      {error && <div className="program-banner error" role="alert">{error}</div>}
 
       <section className="program-card">
         {loading ? (
@@ -120,13 +115,21 @@ export default function ProgramAudit() {
                   <tr key={row.id}>
                     <td className="num">{row.ts}</td>
                     <td>{row.user}</td>
-                    <td><span className={`program-pill ${row.action === 'rejected' ? 'risk' : row.action === 'approved' || row.action === 'created' ? 'healthy' : 'neutral'}`}>{row.action}</span></td>
+                    <td>
+                      <span className={`program-pill ${row.action === 'rejected' ? 'risk' : row.action === 'approved' || row.action === 'created' ? 'healthy' : 'neutral'}`}>
+                        {row.action}
+                      </span>
+                    </td>
                     <td>{row.record}</td>
                     <td>{row.project || '—'}</td>
                     <td>{row.change}</td>
                   </tr>
                 ))}
-                {filtered.length === 0 && <tr><td className="program-empty">No audit entries match these filters.</td></tr>}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td className="program-empty">No audit entries match these filters.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

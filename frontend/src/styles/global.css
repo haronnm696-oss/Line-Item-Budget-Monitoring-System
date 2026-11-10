@@ -988,6 +988,8 @@ select.auth-input{padding-right:36px}
   .program-form-grid{grid-template-columns:1fr}
   .program-row{flex-wrap:wrap}
   .program-row-actions{width:100%;justify-content:flex-end}
+  .program-card-head{flex-wrap:wrap}
+  .program-modal-actions{flex-wrap:wrap}
   .program-pending-row{flex-direction:column}
   .program-pending-actions{width:100%}
   .program-pending-actions .program-field{flex:1}

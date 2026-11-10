@@ -223,11 +223,11 @@ class ProgramUserService
         });
     }
 
-    public function updateAssignment(User $user, Project $project, string $roleSlug, User $actor): ProjectUser
+    public function updateAssignment(User $user, Project $project, string $roleSlug, User $actor, ?string $reason = null): ProjectUser
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
-        return DB::transaction(function () use ($user, $project, $role, $actor) {
+        return DB::transaction(function () use ($user, $project, $role, $actor, $reason) {
             $assignment = ProjectUser::query()
                 ->where('user_id', $user->id)
                 ->where('project_id', $project->id)
@@ -246,15 +246,15 @@ class ProgramUserService
                 'project_id' => $project->id,
                 'role' => $role->slug,
                 'role_label' => $role->name,
-            ]);
+            ], $reason);
 
             return $assignment->fresh();
         });
     }
 
-    public function removeAssignment(User $user, Project $project, User $actor): void
+    public function removeAssignment(User $user, Project $project, User $actor, ?string $reason = null): void
     {
-        DB::transaction(function () use ($user, $project, $actor) {
+        DB::transaction(function () use ($user, $project, $actor, $reason) {
             $assignment = ProjectUser::query()
                 ->where('user_id', $user->id)
                 ->where('project_id', $project->id)
@@ -270,7 +270,7 @@ class ProgramUserService
                 'project' => $project->title,
                 'role' => $role?->slug,
                 'role_label' => $role?->name,
-            ], []);
+            ], [], $reason);
         });
     }
 
