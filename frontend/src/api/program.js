@@ -77,12 +77,12 @@ export async function assignToProject(payload) {
   return response.data;
 }
 
-export async function updateProjectAssignment(userId, projectId, role) {
-  const response = await client.patch(ENDPOINTS.programAssignment(userId, projectId), { role });
+export async function updateProjectAssignment(userId, projectId, role, reason = null) {
+  const response = await client.patch(ENDPOINTS.programAssignment(userId, projectId), { role, reason });
   return response.data;
 }
 
-export async function removeProjectAssignment(userId, projectId) {
-  const response = await client.delete(ENDPOINTS.programAssignment(userId, projectId));
+export async function removeProjectAssignment(userId, projectId, reason = null) {
+  const response = await client.delete(ENDPOINTS.programAssignment(userId, projectId), { data: { reason } });
   return response.data;
 }

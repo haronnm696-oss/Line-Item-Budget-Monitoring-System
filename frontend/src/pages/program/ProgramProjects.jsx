@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchProgramOverview } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
-import { formatPct, peso } from '../../components/money';
+import { formatPct } from '../../components/money';
 
 function projectPeriod(start, end) {
   if (!start || !end) return '—';
