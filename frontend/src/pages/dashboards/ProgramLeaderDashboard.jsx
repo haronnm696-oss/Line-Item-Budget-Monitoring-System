@@ -39,6 +39,41 @@ function approvalGlyph(approval) {
   return '•';
 }
 
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.7,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+};
+
+const KPI_ICONS = {
+  budget: (
+    <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true">
+      <rect x="3" y="6" width="18" height="12" rx="2.5" />
+      <circle cx="12" cy="12" r="2.4" />
+      <path d="M6.5 12h.01M17.5 12h.01" />
+    </svg>
+  ),
+  disbursed: (
+    <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9 15l6-6M10 9h5v5" />
+    </svg>
+  ),
+  health: (
+    <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true">
+      <path d="M3 12h4l2.5-6 4 12 2.5-6H21" />
+    </svg>
+  ),
+  approvals: (
+    <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  ),
+};
+
 export default function ProgramLeaderDashboard() {
   const { user } = useAuth();
   const { refreshPending } = useProgramRefresh();
@@ -145,6 +180,11 @@ export default function ProgramLeaderDashboard() {
   const deadlines = Array.isArray(data?.deadlines) ? data.deadlines : [];
 
   const health = kpis.health ?? {};
+  const healthyCount = Number(health.healthy) || 0;
+  const watchCount = Number(health.watch) || 0;
+  const riskCount = Number(health.at_risk) || 0;
+  const healthTotal = healthyCount + watchCount + riskCount;
+  const healthPct = (value) => (healthTotal ? (value / healthTotal) * 100 : 0);
   const budget = Number(kpis.portfolio_budget) || 0;
   const disbursed = Number(kpis.total_disbursed) || 0;
   const utilization = Number(kpis.utilization_pct) || 0;
@@ -196,7 +236,6 @@ export default function ProgramLeaderDashboard() {
               ))}
             </select>
           </div>
-          <Link className="program-btn" to="/program-reports">Reports</Link>
           <Link className="program-btn primary" to="/program-approvals">
             Review approvals
             {pending > 0 && <span className="pl-count">{pending}</span>}
@@ -239,7 +278,10 @@ export default function ProgramLeaderDashboard() {
         <>
           <div className="pl-kpi-grid">
             <section className="program-card pl-kpi pl-kpi-hero">
-              <div className="pl-kpi-label">Portfolio budget</div>
+              <div className="pl-kpi-head">
+                <span className="pl-kpi-ic">{KPI_ICONS.budget}</span>
+                <span className="pl-kpi-label">Portfolio budget</span>
+              </div>
               <div className="pl-kpi-value">
                 <AnimatedNumber value={budget} format={peso} />
               </div>
@@ -255,7 +297,10 @@ export default function ProgramLeaderDashboard() {
             </section>
 
             <section className="program-card pl-kpi">
-              <div className="pl-kpi-label">Total disbursed</div>
+              <div className="pl-kpi-head">
+                <span className="pl-kpi-ic">{KPI_ICONS.disbursed}</span>
+                <span className="pl-kpi-label">Total disbursed</span>
+              </div>
               <div className="pl-kpi-value">
                 <AnimatedNumber value={disbursed} format={peso} />
               </div>
@@ -271,17 +316,32 @@ export default function ProgramLeaderDashboard() {
             </section>
 
             <section className="program-card pl-kpi">
-              <div className="pl-kpi-label">Project health</div>
-              <div className="pl-health-row">
-                <ProgramPill value="Healthy" label={`${health.healthy ?? 0} healthy`} />
-                <ProgramPill value="Watch" label={`${health.watch ?? 0} watch`} />
-                <ProgramPill value="At risk" label={`${health.at_risk ?? 0} at risk`} />
+              <div className="pl-kpi-head">
+                <span className="pl-kpi-ic">{KPI_ICONS.health}</span>
+                <span className="pl-kpi-label">Project health</span>
               </div>
-              <div className="pl-kpi-sub">{health.closed ?? 0} closed · {projects.length} tracked</div>
+              <div className="pl-kpi-value">
+                {riskCount}
+                <span className="pl-kpi-unit">at risk</span>
+              </div>
+              <div className="pl-kpi-sub">
+                <AnimatedNumber value={healthyCount} /> healthy · <AnimatedNumber value={watchCount} /> on watch
+              </div>
+              <div className="pl-health-bar" aria-hidden="true">
+                <span className="is-healthy" style={{ width: `${healthPct(healthyCount)}%` }} />
+                <span className="is-watch" style={{ width: `${healthPct(watchCount)}%` }} />
+                <span className="is-risk" style={{ width: `${healthPct(riskCount)}%` }} />
+              </div>
+              <div className="pl-kpi-foot">
+                {health.closed ?? 0} closed · {projects.length} tracked
+              </div>
             </section>
 
             <section className="program-card pl-kpi">
-              <div className="pl-kpi-label">Pending approvals</div>
+              <div className="pl-kpi-head">
+                <span className="pl-kpi-ic">{KPI_ICONS.approvals}</span>
+                <span className="pl-kpi-label">Pending approvals</span>
+              </div>
               <div className="pl-kpi-value">
                 <AnimatedNumber value={pending} />
               </div>
