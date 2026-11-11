@@ -25,6 +25,8 @@ import ProgramProjects from './pages/program/ProgramProjects';
 import ProgramReports from './pages/program/ProgramReports';
 import ProgramAudit from './pages/program/ProgramAudit';
 import ProgramUsers from './pages/program/ProgramUsers';
+import HomeRoute from './routes/HomeRoute';
+import NotFound from './pages/NotFound';
 
 export default function App() {
   return (
@@ -84,8 +86,8 @@ export default function App() {
             </Route>
           </Route>
 
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<HomeRoute />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
