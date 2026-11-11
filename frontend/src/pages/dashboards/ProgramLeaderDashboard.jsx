@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { fetchProgramOverview, decideApproval } from '../../api/program';
+import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import ProgramRejectModal from '../../components/program/ProgramRejectModal';
 import { compactPeso, formatPct, peso } from '../../components/money';
@@ -239,24 +240,34 @@ export default function ProgramLeaderDashboard() {
           <div className="pl-kpi-grid">
             <section className="program-card pl-kpi pl-kpi-hero">
               <div className="pl-kpi-label">Portfolio budget</div>
-              <div className="pl-kpi-value">{peso(budget)}</div>
+              <div className="pl-kpi-value">
+                <AnimatedNumber value={budget} format={peso} />
+              </div>
               <div className="pl-kpi-sub">
                 {projectCount} project{projectCount === 1 ? '' : 's'} across all funders
               </div>
               <div className="pl-track pl-track-gold">
                 <span style={{ width: `${clampPct(utilization)}%` }} />
               </div>
-              <div className="pl-kpi-foot">{formatPct(utilization)} utilized</div>
+              <div className="pl-kpi-foot">
+                <AnimatedNumber value={utilization} format={formatPct} /> utilized
+              </div>
             </section>
 
             <section className="program-card pl-kpi">
               <div className="pl-kpi-label">Total disbursed</div>
-              <div className="pl-kpi-value">{peso(disbursed)}</div>
-              <div className="pl-kpi-sub">{formatPct(utilization)} of the portfolio</div>
+              <div className="pl-kpi-value">
+                <AnimatedNumber value={disbursed} format={peso} />
+              </div>
+              <div className="pl-kpi-sub">
+                <AnimatedNumber value={utilization} format={formatPct} /> of the portfolio
+              </div>
               <div className="pl-track">
                 <span style={{ width: `${clampPct(utilization)}%` }} />
               </div>
-              <div className="pl-kpi-foot">Remaining {peso(Math.max(remaining, 0))}</div>
+              <div className="pl-kpi-foot">
+                Remaining <AnimatedNumber value={Math.max(remaining, 0)} format={peso} />
+              </div>
             </section>
 
             <section className="program-card pl-kpi">
@@ -271,7 +282,9 @@ export default function ProgramLeaderDashboard() {
 
             <section className="program-card pl-kpi">
               <div className="pl-kpi-label">Pending approvals</div>
-              <div className="pl-kpi-value">{pending}</div>
+              <div className="pl-kpi-value">
+                <AnimatedNumber value={pending} />
+              </div>
               <div className="pl-kpi-sub">
                 Oldest waiting {kpis.oldest_waiting_days ?? 0} day{Number(kpis.oldest_waiting_days) === 1 ? '' : 's'}
               </div>
@@ -470,13 +483,13 @@ export default function ProgramLeaderDashboard() {
 
                 <div className="pl-wallet-hero">
                   <span>Ready to disburse</span>
-                  <b>{peso(Math.max(remaining, 0))}</b>
+                  <b><AnimatedNumber value={Math.max(remaining, 0)} format={peso} /></b>
                   <div className="pl-track pl-track-gold">
                     <span style={{ width: `${clampPct(utilization)}%` }} />
                   </div>
                   <div className="pl-wallet-split">
-                    <div><span>Allocated</span><b>{peso(budget)}</b></div>
-                    <div><span>Disbursed</span><b>{peso(disbursed)}</b></div>
+                    <div><span>Allocated</span><b><AnimatedNumber value={budget} format={peso} /></b></div>
+                    <div><span>Disbursed</span><b><AnimatedNumber value={disbursed} format={peso} /></b></div>
                   </div>
                 </div>
 
@@ -492,7 +505,7 @@ export default function ProgramLeaderDashboard() {
                       </div>
                       <div className="pl-fund-meta">
                         <span>{formatPct(source.utilization_pct)} utilized</span>
-                        <b>{compactPeso(source.allocated)}</b>
+                        <b><AnimatedNumber value={source.allocated} format={compactPeso} /></b>
                       </div>
                     </div>
                   ))}
