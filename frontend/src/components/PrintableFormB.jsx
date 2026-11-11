@@ -76,7 +76,7 @@ function buildFormBHTML(p, categoriesPS = libCategoriesPS, categoriesMOOE = libC
           #form-b-print-area { position: absolute; left: 0; top: 0; width: 100%; }
         }
         .fb-letterhead { border-bottom: 3px solid #5E1B25; padding-bottom: 10px; margin-bottom: 14px; display: flex; gap: 12px; align-items: center; }
-        .fb-seal { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #C9A227, #8a6d12); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #3d2f06; font-size: 12px; flex-shrink: 0; }
+        .fb-seal { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #BE9A3E, #8a6d12); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #3d2f06; font-size: 12px; flex-shrink: 0; }
         .fb-org h1 { font-size: 15px; font-weight: 800; margin: 0; color: #5E1B25; }
         .fb-org p { font-size: 9.5px; color: #6E655E; margin: 2px 0 0; }
         .fb-title { font-size: 16px; font-weight: 800; margin: 12px 0 2px; color: #5E1B25; }
