@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchProgramApprovals } from '../api/program';
@@ -74,6 +74,11 @@ const ICONS = {
       <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 8l-4 4 4 4M6 12h10" />
     </svg>
   ),
+  chevron: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  ),
 };
 
 const NAV_GROUPS = [
@@ -111,7 +116,9 @@ export default function ProgramLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const profileRef = useRef(null);
 
   const refreshPending = useCallback(async () => {
     try {
@@ -128,7 +135,26 @@ export default function ProgramLayout() {
 
   useEffect(() => {
     setMenuOpen(false);
+    setProfileOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!profileOpen) return undefined;
+
+    const onPointerDown = (event) => {
+      if (!profileRef.current?.contains(event.target)) setProfileOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setProfileOpen(false);
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [profileOpen]);
 
   async function handleSignOut() {
     await signOut();
@@ -188,23 +214,6 @@ export default function ProgramLayout() {
               </div>
             ))}
           </nav>
-
-          <div className="program-nav-foot">
-            <span className="program-avatar" aria-hidden="true">{initials}</span>
-            <div>
-              <b>{user?.name ?? 'Program Leader'}</b>
-              <span>{roleInfo?.label ?? 'Program Leader'}</span>
-            </div>
-            <button
-              type="button"
-              className="program-signout"
-              title="Sign out"
-              aria-label="Sign out"
-              onClick={handleSignOut}
-            >
-              {ICONS.logout}
-            </button>
-          </div>
         </aside>
 
         <div className="program-main">
@@ -238,23 +247,44 @@ export default function ProgramLayout() {
               {pendingCount > 0 && <span className="program-icon-dot" aria-hidden="true" />}
             </button>
 
-            <div className="program-user-chip">
-              <span className="program-avatar" aria-hidden="true">{initials}</span>
-              <div>
-                <b>{user?.name ?? 'Program Leader'}</b>
-                <span>{roleInfo?.label ?? 'Program Leader'}</span>
-              </div>
-            </div>
+            <div className="program-user-menu" ref={profileRef}>
+              <button
+                type="button"
+                className="program-user-chip"
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                onClick={() => setProfileOpen((open) => !open)}
+              >
+                <span className="program-avatar" aria-hidden="true">{initials}</span>
+                <span className="program-user-chip-text">
+                  <b>{user?.name ?? 'Program Leader'}</b>
+                  <span>{roleInfo?.label ?? 'Program Leader'}</span>
+                </span>
+                <span className="program-user-caret" aria-hidden="true">{ICONS.chevron}</span>
+              </button>
 
-            <button
-              type="button"
-              className="program-icon-btn program-signout-top"
-              title="Sign out"
-              aria-label="Sign out"
-              onClick={handleSignOut}
-            >
-              {ICONS.logout}
-            </button>
+              {profileOpen && (
+                <div className="program-user-dropdown" role="menu">
+                  <div className="program-user-dropdown-head">
+                    <span className="program-avatar" aria-hidden="true">{initials}</span>
+                    <div>
+                      <b>{user?.name ?? 'Program Leader'}</b>
+                      <span>{user?.email ?? ''}</span>
+                      <em>{roleInfo?.label ?? 'Program Leader'}</em>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="program-user-menu-item danger"
+                    role="menuitem"
+                    onClick={handleSignOut}
+                  >
+                    {ICONS.logout}
+                    <span>Sign out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </header>
 
           <main className="program-content">
