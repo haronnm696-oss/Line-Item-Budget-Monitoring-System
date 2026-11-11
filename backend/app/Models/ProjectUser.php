@@ -17,6 +17,8 @@ class ProjectUser extends Pivot
 
     protected $fillable = ['project_id', 'user_id', 'role_id', 'assigned_at'];
 
+    protected $casts = ['assigned_at' => 'datetime'];
+
     public function project()
     {
         return $this->belongsTo(Project::class);
