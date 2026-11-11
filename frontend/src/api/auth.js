@@ -72,6 +72,7 @@ export async function login(email, password) {
       throw new Error(firstError || err.response?.data?.message || 'Invalid email or password.');
     }
     if (status === 403) throw new Error(err.response?.data?.message || 'This account is deactivated.');
+    if (status === 429) throw new Error('Too many sign-in attempts. Please wait a minute and try again.');
     if (status === 401) throw new Error('Invalid email or password.');
     throw new Error(err.response?.data?.message || 'Sign in failed. Check your connection and try again.');
   }

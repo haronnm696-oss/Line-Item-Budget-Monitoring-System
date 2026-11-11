@@ -425,7 +425,7 @@ export default function Reports({ programMode = false }) {
           body { font-family: 'Public Sans', system-ui, sans-serif; font-size: 11px; color: #221D1A; line-height: 1.4; }
           .no-print { display: none !important; }
           .letterhead { border-bottom: 3px solid #5E1B25; padding-bottom: 10px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
-          .seal { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #C9A227, #8a6d12); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #3d2f06; font-size: 12px; }
+          .seal { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #BE9A3E, #8a6d12); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #3d2f06; font-size: 12px; }
           .org h1 { font-size: 17px; font-weight: 800; margin: 0; color: #5E1B25; }
           .org p { font-size: 10px; color: #6E655E; margin: 2px 0 0; }
           .report-title { font-size: 15px; font-weight: 700; margin: 10px 0 4px; color: #221D1A; }
