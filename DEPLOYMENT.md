@@ -108,8 +108,25 @@ CORS_ALLOWED_ORIGINS=https://<your-app>.vercel.app
 CACHE_DRIVER=file
 FILESYSTEM_DRIVER=local
 QUEUE_CONNECTION=sync
-MAIL_MAILER=log
+
+# Password-reset email. Replace every placeholder with your SMTP provider.
+FRONTEND_URL=https://<your-app>.vercel.app
+MAIL_MAILER=smtp
+MAIL_HOST=<smtp-host>
+MAIL_PORT=587
+MAIL_USERNAME=<smtp-username>
+MAIL_PASSWORD=<smtp-password>
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=no-reply@<your-domain>
+MAIL_FROM_NAME="LIB Monitoring System"
 ```
+
+### Testing password-reset mail locally
+
+Set `MAIL_MAILER=log` in `backend/.env`, request a reset, then open
+`backend/storage/logs/laravel.log` and copy the `/reset-password?token=...`
+link. This is local-only: log mode writes the reset link to disk, so use SMTP
+in production and never commit real mail credentials.
 
 Generate `APP_KEY` locally:
 
@@ -192,8 +209,8 @@ If your Render service is not named `lib-monitoring-api`, update the three
 - Aiven Free may power off after inactivity; power it back on in the Aiven
   console before redeploying. `max_connections` is capped at 76, so keep the
   worker count low (the shipped `mpm_prefork.conf` uses 15 workers).
-- `MAIL_MAILER=log` means password-reset emails are written to Render logs.
-  Configure SMTP if real email delivery is required.
+- For local testing, `MAIL_MAILER=log` writes the reset link to
+  `storage/logs/laravel.log`. Production should use the SMTP settings above.
 - Render's filesystem is ephemeral. Add S3/R2 storage or a paid persistent disk
   before relying on uploaded files.
 - **Cookie domain note:** `SESSION_DOMAIN` must stay unset so the session cookie

@@ -67,8 +67,8 @@ export function AuthProvider({ children }) {
     return await forgotPasswordApi(email);
   }, []);
 
-  const resetPassword = useCallback(async ({ email, token, password }) => {
-    return await resetPasswordApi({ email, token, password });
+  const resetPassword = useCallback(async (payload) => {
+    return await resetPasswordApi(payload);
   }, []);
 
   useEffect(() => {
