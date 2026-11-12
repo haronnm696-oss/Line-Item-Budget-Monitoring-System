@@ -214,6 +214,14 @@ export default function ProgramLayout() {
               </div>
             ))}
           </nav>
+
+          <div className="program-nav-foot">
+            <span className="program-avatar" aria-hidden="true">{initials}</span>
+            <div>
+              <b>{user?.name ?? 'Program Leader'}</b>
+              <span>{roleInfo?.label ?? 'Program Leader'}</span>
+            </div>
+          </div>
         </aside>
 
         <div className="program-main">

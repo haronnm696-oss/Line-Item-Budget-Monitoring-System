@@ -416,6 +416,26 @@ select.auth-input{padding-right:36px}
   right:48px;
   bottom:110px;
 }
+/* Ambient drift for the panel shapes; still, for reduced-motion users. */
+@media (prefers-reduced-motion: no-preference){
+  .signin-brand__shape--circle{
+    animation:signinBlob 20s ease-in-out infinite alternate;
+  }
+  .signin-brand__shape--diamond-top{
+    animation:signinDiamond 15s ease-in-out infinite alternate;
+  }
+  .signin-brand__shape--diamond-bottom{
+    animation:signinDiamond 11s ease-in-out infinite alternate-reverse;
+  }
+}
+@keyframes signinBlob{
+  from{transform:translate3d(0,0,0) scale(1);opacity:.22}
+  to{transform:translate3d(46px,-34px,0) scale(1.12);opacity:.34}
+}
+@keyframes signinDiamond{
+  from{transform:translate3d(0,0,0) rotate(45deg)}
+  to{transform:translate3d(-30px,34px,0) rotate(80deg)}
+}
 .signin-brand__inner{
   position:relative;
   z-index:1;
@@ -1872,6 +1892,17 @@ select.signin-input:disabled{
   background:linear-gradient(135deg,#BE9A3E,#8A6D12);color:#2A0A11;
   border:1px solid rgba(255,255,255,.3);font-size:11px;
 }
+.program-shell .program-nav-foot{
+  margin-top:auto;padding:12px;gap:10px;
+  border:1px solid rgba(255,255,255,.14);border-radius:14px;
+  background:rgba(255,255,255,.08);
+}
+.program-shell .program-nav-foot b{display:block;color:#fff;font-size:12.5px;line-height:1.25}
+.program-shell .program-nav-foot>div span{display:block;color:rgba(255,255,255,.58);font-size:11px;margin-top:1px}
+.program-shell .program-nav-foot>div{min-width:0;flex:1}
+.program-shell .program-nav-foot b,.program-shell .program-nav-foot>div span{
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 
 /* Topbar */
 .program-shell .program-main{background:var(--pg2-page)}
@@ -2021,6 +2052,31 @@ select.signin-input:disabled{
   color:var(--pg2-brand);text-decoration:none;font-size:12.5px;font-weight:650;white-space:nowrap;
 }
 .program-shell .program-card-link:hover{color:var(--pg2-brand-deep);text-decoration:underline}
+
+/* Motion — quick ease for interactive states, pop-in for overlays. */
+.program-shell .program-card,
+.program-shell .program-kpi{
+  transition:box-shadow .22s ease,border-color .22s ease;
+}
+.program-shell .program-btn,
+.program-shell .program-icon-btn,
+.program-shell .program-nav a,
+.program-user-chip,
+.program-user-menu-item{
+  transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.program-shell .program-btn:hover,
+.program-shell .program-icon-btn:hover{transform:translateY(-1px)}
+.program-shell .program-btn:active,
+.program-shell .program-icon-btn:active{transform:translateY(0)}
+@media (prefers-reduced-motion: no-preference){
+  .program-shell .program-modal-overlay{animation:programFade .18s ease-out}
+  .program-shell .program-modal{animation:programPop .22s cubic-bezier(.2,.8,.25,1)}
+  .program-shell .program-user-dropdown{animation:programDrop .16s ease-out}
+}
+@keyframes programFade{from{opacity:0}to{opacity:1}}
+@keyframes programPop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes programDrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 
 /* Reports KPI strip and tabs */
 .program-shell .program-kpi{
