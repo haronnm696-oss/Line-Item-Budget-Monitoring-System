@@ -291,6 +291,24 @@ class ProgramUsersTest extends TestCase
         Notification::assertSentTo($user, AccountSetupNotification::class);
     }
 
+    public function test_add_user_accepts_the_student_msu_domain(): void
+    {
+        Notification::fake();
+        $leader = $this->userWithRole('program-leader');
+
+        $this->actingAs($leader)
+            ->postJson('/api/program/users', array_merge($this->addUserPayload(), [
+                'email' => 'new.student@s.msumain.edu.ph',
+                'employee_id' => 'MSU-54322',
+            ]))
+            ->assertCreated();
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'new.student@s.msumain.edu.ph',
+            'employee_id' => 'MSU-54322',
+        ]);
+    }
+
     public function test_add_user_validates_msu_email_and_unique_employee_id(): void
     {
         $leader = $this->userWithRole('program-leader');

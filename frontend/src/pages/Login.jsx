@@ -98,7 +98,7 @@ export default function Login() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@msumain.edu.ph"
+            placeholder="name@s.msumain.edu.ph"
             autoComplete="email"
             required
           />
