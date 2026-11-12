@@ -3,15 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
 use App\Models\User;
 use App\Notifications\NewRegistrationPendingNotification;
+use App\Notifications\PasswordChangedNotification;
+use App\Rules\StrongPassword;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -107,7 +112,15 @@ class AuthController extends Controller
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email:rfc', 'max:255', 'regex:/^[^@\s]+@msumain\.edu\.ph$/i', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => [
+                'required',
+                'string',
+                new StrongPassword(
+                    (string) $request->input('first_name'),
+                    (string) $request->input('last_name'),
+                    (string) $request->input('email')
+                ),
+            ],
             'employee_id' => ['nullable', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
             'contact_number' => ['required', 'string', 'size:11', 'regex:/^09[0-9]{9}$/'],
             'college' => ['nullable', 'string', 'max:255'],
@@ -186,32 +199,53 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $data = $request->validate([
-            'email' => ['required', 'email', 'exists:users,email'],
+            'email' => ['required', 'email:rfc', 'max:255'],
         ]);
 
         $email = strtolower(trim($data['email']));
-        $token = Str::random(60);
 
-        DB::table('password_resets')->updateOrInsert(
-            ['email' => $email],
-            ['token' => $token, 'created_at' => now()]
-        );
+        // Apply the per-email limits to every valid email, whether or not an
+        // account exists. That keeps throttling from becoming an enumeration
+        // signal.
+        $emailKey = 'password-reset-email:' . hash('sha256', $email);
+        $cooldownKey = 'password-reset-cooldown:' . hash('sha256', $email);
 
-        $resetUrl = rtrim(config('app.url', ''), '/')
-            . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($email);
+        if (RateLimiter::tooManyAttempts($emailKey, 3)) {
+            return $this->passwordResetThrottleResponse(RateLimiter::availableIn($emailKey));
+        }
 
-        try {
-            Mail::send([], [], function ($message) use ($email, $resetUrl) {
-                $message->to($email)
-                    ->subject('Reset your LIB Monitoring System password')
-                    ->html(
-                        '<p>You requested a password reset for your LIB Monitoring System account.</p>' .
-                        '<p><a href="' . e($resetUrl) . '">Reset your password</a></p>' .
-                        '<p>This link expires in 60 minutes. If you did not request this, you can safely ignore this email.</p>'
-                    );
+        if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
+            return $this->passwordResetThrottleResponse(RateLimiter::availableIn($cooldownKey));
+        }
+
+        RateLimiter::hit($emailKey, 3600);
+        RateLimiter::hit($cooldownKey, 60);
+
+        $user = User::where('email', $email)->first();
+        $eligible = $user
+            && $user->is_active
+            && $user->role_id !== null
+            && $user->registration_rejected_at === null;
+
+        if ($eligible) {
+            // Create the token and send the mail after the response has gone
+            // out, so active and unknown addresses take the same time.
+            app()->terminating(function () use ($email) {
+                static $sent = false;
+
+                if ($sent) {
+                    return;
+                }
+
+                $sent = true;
+
+                try {
+                    Password::sendResetLink(['email' => $email]);
+                } catch (\Throwable $e) {
+                    // Never log the token, password, or whether the address exists.
+                    Log::error('Password reset notification failed.');
+                }
             });
-        } catch (\Throwable $e) {
-            Log::error('Password reset email failed: ' . $e->getMessage());
         }
 
         return response()->json([
@@ -222,29 +256,101 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         $data = $request->validate([
-            'email' => ['required', 'email', 'exists:users,email'],
+            'email' => ['required', 'email:rfc', 'max:255'],
             'token' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8'],
         ]);
 
-        $record = DB::table('password_resets')
-            ->where('email', $data['email'])
-            ->where('token', $data['token'])
-            ->first();
+        $email = strtolower(trim($data['email']));
+        $token = $data['token'];
+        $user = User::where('email', $email)->first();
 
-        if (! $record || $record->created_at < now()->subMinutes(60)) {
+        // Check the one-time token before the password policy so a bad,
+        // expired, or already-used link always maps to the "Link expired"
+        // screen instead of a password error.
+        if (! $user || ! Password::broker()->tokenExists($user, $token)) {
             throw ValidationException::withMessages([
-                'token' => ['This password reset token is invalid or expired.'],
+                'token' => ['This password reset link is invalid or has expired.'],
             ]);
         }
 
-        $user = User::where('email', $data['email'])->first();
-        $user->update(['password' => Hash::make($data['password'])]);
+        $data = $request->validate([
+            'password' => [
+                'required',
+                'string',
+                'confirmed',
+                new StrongPassword(
+                    $user->first_name ?? '',
+                    $user->last_name ?? '',
+                    $email
+                ),
+            ],
+        ]);
 
-        DB::table('password_resets')->where('email', $data['email'])->delete();
+        $status = Password::reset(
+            [
+                'email' => $email,
+                'password' => $data['password'],
+                'password_confirmation' => $request->input('password_confirmation'),
+                'token' => $token,
+            ],
+            function (User $user, string $password) use ($request) {
+                $user->forceFill([
+                    'password' => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+
+                $this->revokeUserSessionsAndTokens($user);
+                $this->recordPasswordResetAudit($user, $request);
+
+                try {
+                    $user->notify(new PasswordChangedNotification());
+                } catch (\Throwable $e) {
+                    Log::error('Password changed notification failed.');
+                }
+            }
+        );
+
+        if ($status !== Password::PASSWORD_RESET) {
+            throw ValidationException::withMessages([
+                'token' => ['This password reset link is invalid or has expired.'],
+            ]);
+        }
 
         return response()->json([
             'message' => 'Your password has been reset. You can now sign in.',
         ], 200);
+    }
+
+    private function passwordResetThrottleResponse(int $retryAfter)
+    {
+        return response()->json([
+            'message' => 'Too many reset requests. Please wait before requesting another link.',
+        ], 429)->header('Retry-After', max(1, $retryAfter));
+    }
+
+    private function revokeUserSessionsAndTokens(User $user): void
+    {
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        if (Schema::hasTable('personal_access_tokens')) {
+            $user->tokens()->delete();
+        }
+    }
+
+    private function recordPasswordResetAudit(User $user, Request $request): void
+    {
+        AuditTrail::create([
+            'user_id' => $user->id,
+            'action' => 'Password reset',
+            'model_type' => 'User',
+            'model_id' => $user->id,
+            'old_values' => null,
+            'new_values' => null,
+            'reason' => 'Password reset via emailed link',
+            'ip_address' => $request->ip(),
+            'created_at' => now(),
+        ]);
     }
 }

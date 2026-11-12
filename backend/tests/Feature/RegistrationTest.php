@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -18,7 +19,7 @@ class RegistrationTest extends TestCase
             'first_name' => 'Norjannah',
             'last_name' => 'Haron',
             'email' => 'new.user@msumain.edu.ph',
-            'password' => 'haron12345_0',
+            'password' => 'Str0ng!Pass2026',
             'employee_id' => 'MSU-99999',
             'contact_number' => '09096254046',
             'college' => 'College of Business and Finance',
@@ -59,7 +60,7 @@ class RegistrationTest extends TestCase
 
         $this->postJson('/api/login', [
             'email' => 'new.user@msumain.edu.ph',
-            'password' => 'haron12345_0',
+            'password' => 'Str0ng!Pass2026',
         ])
             ->assertForbidden()
             ->assertJsonPath('message', 'Your account is awaiting Program Leader approval.');
@@ -77,6 +78,34 @@ class RegistrationTest extends TestCase
         $this->postJson('/api/register', $this->payload(['contact_number' => '12345678901']))
             ->assertStatus(422)
             ->assertJsonValidationErrors('contact_number');
+    }
+
+    public function test_registration_rejects_passwords_that_do_not_meet_the_shared_policy(): void
+    {
+        $cases = [
+            ['email' => 'weak.0@msumain.edu.ph', 'password' => 'short1!'],
+            ['email' => 'weak.1@msumain.edu.ph', 'password' => 'NoNumbers!'],
+            ['email' => 'weak.2@msumain.edu.ph', 'password' => 'NoSymbols2026'],
+            ['email' => 'weak.3@msumain.edu.ph', 'password' => 'Norjannah!2026'],
+            ['email' => 'weak.4@msumain.edu.ph', 'password' => 'Haron!2026'],
+            ['email' => 'new.user@msumain.edu.ph', 'password' => 'new.user!2026'],
+        ];
+
+        foreach ($cases as $case) {
+            // These cases exercise password validation, not the per-IP route
+            // throttle, so reset the limiter between requests.
+            Cache::flush();
+
+            $this->postJson('/api/register', $this->payload([
+                'email' => $case['email'],
+                'employee_id' => null,
+                'password' => $case['password'],
+            ]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('password');
+        }
+
+        $this->assertDatabaseCount('users', 0);
     }
 
     public function test_program_leader_can_approve_a_pending_account_and_assign_a_role(): void
@@ -106,7 +135,7 @@ class RegistrationTest extends TestCase
 
         $this->postJson('/api/login', [
             'email' => 'new.user@msumain.edu.ph',
-            'password' => 'haron12345_0',
+            'password' => 'Str0ng!Pass2026',
         ])
             ->assertOk()
             ->assertJsonPath('user.role', 'PL');

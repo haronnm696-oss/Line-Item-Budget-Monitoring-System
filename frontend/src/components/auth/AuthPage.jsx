@@ -45,6 +45,13 @@ const ICONS = {
     </>
   ),
   chevron: <path d="m6 9 6 6 6-6" />,
+  alert: (
+    <>
+      <path d="M12 3 2.5 20.5h19L12 3Z" />
+      <path d="M12 9v5" />
+      <path d="M12 17.5h.01" />
+    </>
+  ),
 };
 
 function hideBrokenImage(event) {

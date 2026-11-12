@@ -5,6 +5,7 @@ import RoleRoute from './routes/RoleRoute';
 import AppLayout from './layouts/AppLayout';
 import ProgramLayout from './layouts/ProgramLayout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
 import Policy from './pages/Policy';
@@ -35,6 +36,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/terms" element={<Policy type="terms" />} />
           <Route path="/privacy" element={<Policy type="privacy" />} />
