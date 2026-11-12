@@ -1,155 +1,245 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { isValidEmail, normalizeEmail } from '../api/auth';
+import { normalizeEmail } from '../api/auth';
+import { isValidLoginEmail, passwordRules } from '../lib/authValidation';
+import {
+  AuthAlert,
+  AuthField,
+  AuthIcon,
+  AuthPage,
+  AuthPasswordFeedback,
+  AuthPillButton,
+  CheckIcon,
+} from '../components/auth/AuthPage';
+
+const BRAND_FORM = {
+  title: 'Choose a new password',
+  lead: 'Pick a strong password that you do not use anywhere else.',
+  cta: { to: '/login', label: 'Back to sign in' },
+};
+
+const BRAND_SUCCESS = {
+  title: 'All set',
+  lead: 'Your password has been updated.',
+  cta: { to: '/login', label: 'Back to sign in' },
+};
+
+const BRAND_EXPIRED = {
+  title: 'Reset your password',
+  lead: 'Reset links work once and expire after 60 minutes.',
+  cta: { to: '/login', label: 'Back to sign in' },
+};
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
-  const email = searchParams.get('email') || '';
-  const token = searchParams.get('token') || '';
+  const navigate = useNavigate();
+  const { resetPassword } = useAuth();
 
+  const email = normalizeEmail(searchParams.get('email') || '');
+  const token = searchParams.get('token') || '';
+  const linkIsUsable = Boolean(token) && isValidLoginEmail(email);
+
+  const [view, setView] = useState(linkIsUsable ? 'form' : 'expired');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
   const [error, setError] = useState('');
-  const [status, setStatus] = useState(''); // '' | 'done'
   const [submitting, setSubmitting] = useState(false);
 
-  const { resetPassword } = useAuth();
-  const navigate = useNavigate();
+  const rules = useMemo(
+    () => passwordRules(password, '', '', email),
+    [password, email],
+  );
+  const allRulesMet = rules.every((rule) => rule.met);
+  const showPasswordFeedback = password.length > 0;
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (submitting) return;
     setError('');
-    setStatus('');
-    if (!isValidEmail(normalizeEmail(email))) {
-      setError('Invalid or missing email in reset link.');
+    setPasswordError('');
+    setConfirmError('');
+
+    if (!linkIsUsable) {
+      setView('expired');
       return;
     }
-    if (!token) {
-      setError('Invalid or missing reset token.');
+
+    if (!allRulesMet) {
+      setPasswordError('Your password must meet all four rules below.');
       return;
     }
-    if (!password || password.length < 8) {
-      setError('Password must be at least 8 characters.');
+
+    if (!confirmPassword) {
+      setConfirmError('Confirm your new password.');
       return;
     }
+
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setConfirmError('Passwords do not match.');
       return;
     }
+
     setSubmitting(true);
+
     try {
-      await resetPassword({ email: normalizeEmail(email), token, password });
-      setStatus('done');
+      await resetPassword({
+        email,
+        token,
+        password,
+        passwordConfirmation: confirmPassword,
+      });
+      setView('success');
     } catch (err) {
-      setError(err.message || 'Reset failed. Please request a new link.');
+      const errors = err?.errors || {};
+
+      if (errors.token || errors.email) {
+        setView('expired');
+        return;
+      }
+
+      if (errors.password) {
+        const message = Array.isArray(errors.password) ? errors.password[0] : errors.password;
+
+        if (/confirmation/i.test(String(message || ''))) {
+          setConfirmError('Passwords do not match.');
+        } else {
+          setPasswordError(message || 'Your password must meet all four rules below.');
+        }
+        return;
+      }
+
+      setError(err?.message || 'We could not reset your password. Please request a new link.');
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (status === 'done') {
+  if (view === 'success') {
     return (
-      <div className="login-screen">
-        <div className="login-card">
-          <div className="login-brand">
-            <div className="seal">MSU</div>
-            <h2>LIB Monitoring System</h2>
-            <p>Password reset</p>
+      <AuthPage brand={BRAND_SUCCESS}>
+        <div className="signin-state" role="status" aria-live="polite">
+          <div className="signin-state__icon signin-state__icon--success" aria-hidden="true">
+            <CheckIcon className="signin-state__glyph" />
           </div>
-          <div className="login-body">
-            <div className="banner ok">Your password has been reset. You can now sign in.</div>
-            <div className="login-foot">
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => navigate('/login', { replace: true })}
-              >
-                Sign in
-              </button>
-            </div>
-          </div>
+          <h1 className="signin-state__title">Password updated</h1>
+          <p className="signin-state__text">
+            You can now sign in with your new password. For your security, you were signed out on all other devices.
+          </p>
+          <AuthPillButton type="button" onClick={() => navigate('/login', { replace: true })}>
+            Sign in
+          </AuthPillButton>
         </div>
-      </div>
+      </AuthPage>
+    );
+  }
+
+  if (view === 'expired') {
+    return (
+      <AuthPage brand={BRAND_EXPIRED}>
+        <div className="signin-state" role="alert">
+          <div className="signin-state__icon signin-state__icon--warning" aria-hidden="true">
+            <AuthIcon name="alert" className="signin-state__glyph" />
+          </div>
+          <h1 className="signin-state__title">This link has expired</h1>
+          <p className="signin-state__text">
+            Reset links can be used only once and expire after 60 minutes. Request a new one to continue.
+          </p>
+          <AuthPillButton type="button" onClick={() => navigate('/forgot-password', { replace: true })}>
+            Request a new link
+          </AuthPillButton>
+          <p className="signin-switch">
+            <Link to="/login" className="signin-link">Back to sign in</Link>
+          </p>
+        </div>
+      </AuthPage>
     );
   }
 
   return (
-    <div className="login-screen">
-      <div className="login-card">
-        <div className="login-brand">
-          <div className="seal">MSU</div>
-          <h2>LIB Monitoring System</h2>
-          <p>Reset your password</p>
-        </div>
-        <form className="login-body" onSubmit={handleSubmit} noValidate>
-          <div className="field">
-            <label htmlFor="email">Email Address</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              readOnly
-            />
-            {email && (
-              <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-                Reset link sent to {email}
-              </p>
-            )}
-          </div>
-          <div className="field">
-            <label htmlFor="pw">New Password</label>
-            <input
-              id="pw"
-              type="password"
-              autoComplete="new-password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {password && password.length < 8 && (
-              <div className="role-preview err">Password must be at least 8 characters.</div>
-            )}
-          </div>
-          <div className="field">
-            <label htmlFor="pw2">Confirm Password</label>
-            <input
-              id="pw2"
-              type="password"
-              autoComplete="new-password"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-            {confirmPassword && confirmPassword !== password && (
-              <div className="role-preview err">Passwords do not match.</div>
-            )}
-          </div>
-          {error && <div className="banner over">{error}</div>}
-          <button className="btn primary" type="submit" disabled={submitting}>
-            {submitting && <span className="spin" />}Reset password
-          </button>
-          <div className="login-foot">
-            Remember your password?{' '}
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => navigate('/login', { replace: true })}
-            >
-              Sign in
-            </button>
-            &nbsp;|&nbsp;
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => navigate('/login', { replace: true })}
-            >
-              Request a new link
-            </button>
-          </div>
-        </form>
+    <AuthPage brand={BRAND_FORM}>
+      <div className="signin-head">
+        <h1 className="signin-title">Choose a new password</h1>
+        <p className="signin-subtitle">
+          Create a new password for <strong>{email}</strong>.
+        </p>
       </div>
-    </div>
+
+      {error && <AuthAlert>{error}</AuthAlert>}
+
+      <form className="signin-form" onSubmit={handleSubmit} noValidate>
+        <AuthField id="reset-password" label="New password" icon="lock" error={passwordError}>
+          <input
+            id="reset-password"
+            className={`signin-input signin-input--password${passwordError ? ' is-invalid' : ''}`}
+            type={showPasswords ? 'text' : 'password'}
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (passwordError) setPasswordError('');
+            }}
+            placeholder="Enter a new password"
+            autoComplete="new-password"
+            aria-invalid={Boolean(passwordError)}
+            aria-describedby={[
+              passwordError ? 'reset-password-error' : null,
+              showPasswordFeedback ? 'reset-password-rules' : null,
+            ].filter(Boolean).join(' ') || undefined}
+            required
+          />
+          <button
+            type="button"
+            className="signin-reveal"
+            onClick={() => setShowPasswords((value) => !value)}
+            aria-pressed={showPasswords}
+            aria-controls="reset-password reset-confirm-password"
+            aria-label={showPasswords ? 'Hide both passwords' : 'Show both passwords'}
+          >
+            {showPasswords ? 'Hide' : 'Show'}
+          </button>
+        </AuthField>
+
+        <AuthField
+          id="reset-confirm-password"
+          label="Confirm new password"
+          icon="lock"
+          error={confirmError}
+        >
+          <input
+            id="reset-confirm-password"
+            className={`signin-input${confirmError ? ' is-invalid' : ''}`}
+            type={showPasswords ? 'text' : 'password'}
+            value={confirmPassword}
+            onChange={(event) => {
+              setConfirmPassword(event.target.value);
+              if (confirmError) setConfirmError('');
+            }}
+            onBlur={() => {
+              if (confirmPassword && confirmPassword !== password) {
+                setConfirmError('Passwords do not match.');
+              }
+            }}
+            placeholder="Re-enter your new password"
+            autoComplete="new-password"
+            aria-invalid={Boolean(confirmError)}
+            aria-describedby={confirmError ? 'reset-confirm-password-error' : undefined}
+            required
+          />
+        </AuthField>
+
+        {showPasswordFeedback && <AuthPasswordFeedback rules={rules} id="reset-password-rules" />}
+
+        <AuthPillButton type="submit" disabled={submitting}>
+          {submitting ? 'Resetting…' : 'Reset password'}
+        </AuthPillButton>
+
+        <p className="signin-switch">
+          <Link to="/login" className="signin-link">Back to sign in</Link>
+        </p>
+      </form>
+    </AuthPage>
   );
 }

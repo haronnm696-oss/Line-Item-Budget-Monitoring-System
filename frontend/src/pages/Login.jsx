@@ -98,7 +98,7 @@ export default function Login() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@msumain.edu.ph"
+            placeholder="name@s.msumain.edu.ph"
             autoComplete="email"
             required
           />
@@ -148,7 +148,7 @@ export default function Login() {
             <span>Keep me signed in</span>
           </label>
 
-          <Link to="/reset-password" className="signin-link">Forgot password?</Link>
+          <Link to="/forgot-password" className="signin-link">Forgot password?</Link>
         </div>
 
         <AuthPillButton type="submit" disabled={submitting}>

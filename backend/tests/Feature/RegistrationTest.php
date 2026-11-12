@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -17,8 +18,8 @@ class RegistrationTest extends TestCase
         return array_merge([
             'first_name' => 'Norjannah',
             'last_name' => 'Haron',
-            'email' => 'new.user@msumain.edu.ph',
-            'password' => 'haron12345_0',
+            'email' => 'new.user@s.msumain.edu.ph',
+            'password' => 'Str0ng!Pass2026',
             'employee_id' => 'MSU-99999',
             'contact_number' => '09096254046',
             'college' => 'College of Business and Finance',
@@ -33,7 +34,7 @@ class RegistrationTest extends TestCase
 
         return User::create([
             'name' => ucfirst($slug) . ' User',
-            'email' => $slug . '.' . uniqid() . '@msumain.edu.ph',
+            'email' => $slug . '.' . uniqid() . '@s.msumain.edu.ph',
             'password' => Hash::make('password123'),
             'role_id' => $role->id,
             'is_active' => true,
@@ -45,24 +46,33 @@ class RegistrationTest extends TestCase
         $this->postJson('/api/register', $this->payload())
             ->assertCreated()
             ->assertJsonPath('pending', true)
-            ->assertJsonPath('user.email', 'new.user@msumain.edu.ph')
+            ->assertJsonPath('user.email', 'new.user@s.msumain.edu.ph')
             ->assertJsonPath('user.role', null)
             ->assertJsonPath('user.status', 'Pending');
 
         $this->assertGuest();
 
         $this->assertDatabaseHas('users', [
-            'email' => 'new.user@msumain.edu.ph',
+            'email' => 'new.user@s.msumain.edu.ph',
             'role_id' => null,
             'is_active' => false,
         ]);
 
         $this->postJson('/api/login', [
-            'email' => 'new.user@msumain.edu.ph',
-            'password' => 'haron12345_0',
+            'email' => 'new.user@s.msumain.edu.ph',
+            'password' => 'Str0ng!Pass2026',
         ])
             ->assertForbidden()
             ->assertJsonPath('message', 'Your account is awaiting Program Leader approval.');
+    }
+
+    public function test_registration_requires_the_student_email_domain(): void
+    {
+        $this->postJson('/api/register', $this->payload([
+            'email' => 'new.user@msumain.edu.ph',
+        ]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email');
     }
 
     public function test_registration_requires_a_contact_number(): void
@@ -79,19 +89,47 @@ class RegistrationTest extends TestCase
             ->assertJsonValidationErrors('contact_number');
     }
 
+    public function test_registration_rejects_passwords_that_do_not_meet_the_shared_policy(): void
+    {
+        $cases = [
+            ['email' => 'weak.0@s.msumain.edu.ph', 'password' => 'short1!'],
+            ['email' => 'weak.1@s.msumain.edu.ph', 'password' => 'NoNumbers!'],
+            ['email' => 'weak.2@s.msumain.edu.ph', 'password' => 'NoSymbols2026'],
+            ['email' => 'weak.3@s.msumain.edu.ph', 'password' => 'Norjannah!2026'],
+            ['email' => 'weak.4@s.msumain.edu.ph', 'password' => 'Haron!2026'],
+            ['email' => 'new.user@s.msumain.edu.ph', 'password' => 'new.user!2026'],
+        ];
+
+        foreach ($cases as $case) {
+            // These cases exercise password validation, not the per-IP route
+            // throttle, so reset the limiter between requests.
+            Cache::flush();
+
+            $this->postJson('/api/register', $this->payload([
+                'email' => $case['email'],
+                'employee_id' => null,
+                'password' => $case['password'],
+            ]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('password');
+        }
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
     public function test_program_leader_can_approve_a_pending_account_and_assign_a_role(): void
     {
         $leader = $this->userWithRole('program-leader');
 
         $this->postJson('/api/register', $this->payload())->assertCreated();
 
-        $pending = User::where('email', 'new.user@msumain.edu.ph')->firstOrFail();
+        $pending = User::where('email', 'new.user@s.msumain.edu.ph')->firstOrFail();
 
         $this->actingAs($leader)
             ->getJson('/api/users/pending')
             ->assertOk()
             ->assertJsonCount(1, 'users')
-            ->assertJsonPath('users.0.email', 'new.user@msumain.edu.ph');
+            ->assertJsonPath('users.0.email', 'new.user@s.msumain.edu.ph');
 
         $this->actingAs($leader)
             ->patchJson("/api/users/{$pending->id}/approve", ['role' => 'project-leader'])
@@ -105,8 +143,8 @@ class RegistrationTest extends TestCase
         $this->postJson('/api/logout')->assertNoContent();
 
         $this->postJson('/api/login', [
-            'email' => 'new.user@msumain.edu.ph',
-            'password' => 'haron12345_0',
+            'email' => 'new.user@s.msumain.edu.ph',
+            'password' => 'Str0ng!Pass2026',
         ])
             ->assertOk()
             ->assertJsonPath('user.role', 'PL');
@@ -118,7 +156,7 @@ class RegistrationTest extends TestCase
 
         User::create([
             'name' => 'Existing User',
-            'email' => 'new.user@msumain.edu.ph',
+            'email' => 'new.user@s.msumain.edu.ph',
             'password' => Hash::make('password123'),
             'role_id' => $role->id,
             'is_active' => true,

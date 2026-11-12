@@ -16,7 +16,7 @@ const CONTENT = {
     sections: [
       {
         heading: 'Accounts',
-        body: 'Access is requested with an official @msumain.edu.ph email address. New accounts remain pending until a Program Leader reviews the request and assigns a role. Keep your credentials private and do not share your account with anyone else.',
+        body: 'Access is requested with an official @s.msumain.edu.ph (student) or @msumain.edu.ph (faculty/staff) email address. New accounts remain pending until a Program Leader reviews the request and assigns a role. Keep your credentials private and do not share your account with anyone else.',
       },
       {
         heading: 'Authorized use',
