@@ -1,4 +1,7 @@
-const MSU_EMAIL_RE = /^[^\s@]+@msumain\.edu\.ph$/i;
+const STUDENT_EMAIL_RE = /^[^\s@]+@s\.msumain\.edu\.ph$/i;
+const MSU_EMAIL_RE = /^[^\s@]+@(?:s\.)?msumain\.edu\.ph$/i;
+const LOGIN_EMAIL_RE = /^[^\s@]+@(?:gmail\.com|(?:s\.)?msumain\.edu\.ph)$/i;
+const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PH_MOBILE_RE = /^(09\d{9}|\+639\d{9})$/;
 const EMPLOYEE_ID_RE = /^MSU-\d{5}$/;
 
@@ -15,8 +18,16 @@ export function normalizePhMobile(value) {
   return raw;
 }
 
+export function isValidStudentEmail(value) {
+  return STUDENT_EMAIL_RE.test(String(value || '').trim());
+}
+
 export function isValidMsuEmail(value) {
   return MSU_EMAIL_RE.test(String(value || '').trim());
+}
+
+export function isValidLoginEmail(value) {
+  return LOGIN_EMAIL_RE.test(String(value || '').trim());
 }
 
 export function isValidPhMobile(value) {
@@ -25,6 +36,10 @@ export function isValidPhMobile(value) {
 
 export function isValidEmployeeId(value) {
   return EMPLOYEE_ID_RE.test(String(value || '').trim());
+}
+
+export function isEmailFormat(value) {
+  return EMAIL_FORMAT_RE.test(String(value || '').trim());
 }
 
 export function isPersonalPassword(password, firstName, lastName, email) {
@@ -68,8 +83,8 @@ export function friendlyRegisterError(field, message) {
     if (/already|taken|exists|unique/i.test(text)) {
       return 'An account with this email already exists.';
     }
-    if (/msumain|institutional|domain/i.test(text)) {
-      return 'Use your @msumain.edu.ph email address.';
+    if (/msumain|institutional|domain|format|regex/i.test(text)) {
+      return 'Use your @s.msumain.edu.ph student email address.';
     }
     return text || 'Enter a valid email address.';
   }
