@@ -3059,3 +3059,44 @@ select.signin-input:disabled{
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23BE9A3E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
+/* Chrome's customizable select: brand the open option panel, not just the closed control. */
+@supports (appearance: base-select){
+  .app select,
+  .program-shell select{appearance:base-select}
+  .app select::picker-icon,
+  .program-shell select::picker-icon{display:none}
+  .program-shell select::picker(select){
+    appearance:base-select;
+    margin-top:6px;padding:6px;
+    border:1px solid #E7DFD2;border-radius:14px;
+    background:#fff;color:var(--pg2-ink);
+    box-shadow:0 24px 60px -24px rgba(34,29,26,.45);
+    font-family:inherit;font-size:13.5px;
+  }
+  .app select::picker(select){
+    appearance:base-select;
+    margin-top:6px;padding:6px;
+    border:1px solid var(--line-strong);border-radius:10px;
+    background:var(--panel);color:var(--ink);
+    box-shadow:0 18px 40px -20px rgba(0,0,0,.35);
+    font-family:inherit;font-size:13px;
+  }
+  .program-shell select option{
+    padding:9px 12px;border-radius:8px;background:#fff;color:var(--pg2-ink);
+    font-size:13.5px;font-weight:500;
+  }
+  .app select option{
+    padding:8px 10px;border-radius:6px;background:var(--panel);color:var(--ink);font-size:13px;
+  }
+  .program-shell select option:hover,
+  .program-shell select option:focus{background:#FBF3DF;color:#511420}
+  .app select option:hover,
+  .app select option:focus{background:var(--gold-soft);color:var(--ink)}
+  .program-shell select option:checked{background:#FBF3DF;color:#511420;font-weight:650}
+  .app select option:checked{background:var(--gold-soft);color:var(--ink);font-weight:650}
+  .program-shell select option::checkmark{color:#8A6D12}
+  .app select option::checkmark{color:var(--gold)}
+  .program-shell select:open{border-color:var(--pg2-gold)}
+  .app select:open{border-color:var(--gold)}
+}
+
