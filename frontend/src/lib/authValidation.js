@@ -1,4 +1,5 @@
 const MSU_EMAIL_RE = /^[^\s@]+@msumain\.edu\.ph$/i;
+const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PH_MOBILE_RE = /^(09\d{9}|\+639\d{9})$/;
 const EMPLOYEE_ID_RE = /^MSU-\d{5}$/;
 
@@ -25,6 +26,10 @@ export function isValidPhMobile(value) {
 
 export function isValidEmployeeId(value) {
   return EMPLOYEE_ID_RE.test(String(value || '').trim());
+}
+
+export function isEmailFormat(value) {
+  return EMAIL_FORMAT_RE.test(String(value || '').trim());
 }
 
 export function isPersonalPassword(password, firstName, lastName, email) {

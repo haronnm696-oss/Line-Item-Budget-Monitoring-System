@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -25,6 +26,15 @@ class User extends Authenticatable
         'registration_rejected_at' => 'datetime',
         'last_login_at' => 'datetime',
     ];
+
+    /**
+     * Send the branded password-reset link through the custom notification.
+     * The parent CanResetPassword trait supplies getEmailForPasswordReset().
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        $this->notify(new ResetPasswordNotification($token));
+    }
 
     /**
      * A self-registered account is pending until a Program Leader approves or
