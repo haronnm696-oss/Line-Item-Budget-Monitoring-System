@@ -3062,7 +3062,7 @@ select.signin-input:disabled{
 /* Chrome's customizable select: brand the open option panel, not just the closed control. */
 @supports (appearance: base-select){
   .app select,
-  .program-shell select{appearance:base-select}
+  .program-shell select{appearance:base-select;align-items:center}
   .app select::picker-icon,
   .program-shell select::picker-icon{display:none}
   .program-shell select::picker(select){
