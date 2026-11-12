@@ -1,7 +1,7 @@
 import client from './client';
 import { ENDPOINTS } from './endpoints';
 import { ROLE_MAP, normalizeRole } from '../data/mockData';
-import { mapRegisterFieldErrors, normalizePhMobile } from '../lib/authValidation';
+import { isEmailFormat, mapRegisterFieldErrors, normalizePhMobile } from '../lib/authValidation';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -165,8 +165,8 @@ export async function register({ name: _name, email, password, first_name, last_
 
 export async function forgotPassword(email) {
   const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail or MSU-Main email address.');
+  if (!cleanEmail || !isEmailFormat(cleanEmail)) {
+    throw new Error('Enter a valid email address.');
   }
 
   if (USE_MOCK) {
@@ -182,35 +182,44 @@ export async function forgotPassword(email) {
     return res.data;
   } catch (err) {
     const status = err.response?.status;
+    const errors = err.response?.data?.errors;
     if (status === 422) {
-      const firstError = err.response?.data?.errors
-        ? Object.values(err.response.data.errors).flat()[0]
-        : null;
-      throw new Error(firstError || err.response?.data?.message || 'Invalid email address.');
+      const firstError = errors ? Object.values(errors).flat()[0] : null;
+      const error = new Error(firstError || err.response?.data?.message || 'Enter a valid email address.');
+      error.status = status;
+      error.errors = errors;
+      throw error;
     }
-    // Always surface a generic message to avoid email enumeration.
-    return {
-      message: 'If an account exists for that address, a password reset link has been sent.',
-    };
+    if (status === 429) {
+      const error = new Error('Too many reset requests. Please wait before requesting another link.');
+      error.status = status;
+      throw error;
+    }
+    const error = new Error('We could not send the reset link. Check your connection and try again.');
+    error.status = status;
+    throw error;
   }
 }
 
-export async function resetPassword({ email, token, password }) {
+export async function resetPassword({ email, token, password, passwordConfirmation }) {
   const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail or MSU-Main email address.');
-  }
-  if (!password || password.length < 8) {
-    throw new Error('Password must be at least 8 characters.');
+  if (!cleanEmail || !isEmailFormat(cleanEmail)) {
+    throw new Error('This reset link is invalid or has expired.');
   }
   if (!token) {
-    throw new Error('A valid reset token is required.');
+    throw new Error('This reset link is invalid or has expired.');
+  }
+  if (!password) {
+    throw new Error('Enter a new password.');
   }
 
   if (USE_MOCK) {
     const found = MOCK_USERS.find((u) => u.email === cleanEmail);
     if (!found) {
-      throw new Error('Invalid or expired reset token.');
+      const error = new Error('This reset link is invalid or has expired.');
+      error.status = 422;
+      error.errors = { token: ['This reset link is invalid or has expired.'] };
+      throw error;
     }
     found.password = password;
     return { message: 'Your password has been reset. You can now sign in.' };
@@ -222,17 +231,27 @@ export async function resetPassword({ email, token, password }) {
       email: cleanEmail,
       token,
       password,
+      password_confirmation: passwordConfirmation ?? password,
     });
     return res.data;
   } catch (err) {
     const status = err.response?.status;
+    const errors = err.response?.data?.errors;
     if (status === 422) {
-      const firstError = err.response?.data?.errors
-        ? Object.values(err.response.data.errors).flat()[0]
-        : null;
-      throw new Error(firstError || err.response?.data?.message || 'Password reset failed.');
+      const firstError = errors ? Object.values(errors).flat()[0] : null;
+      const error = new Error(firstError || err.response?.data?.message || 'This reset link is invalid or has expired.');
+      error.status = status;
+      error.errors = errors;
+      throw error;
     }
-    throw new Error(err.response?.data?.message || 'Invalid or expired reset token.');
+    if (status === 429) {
+      const error = new Error('Too many requests. Please wait before trying again.');
+      error.status = status;
+      throw error;
+    }
+    const error = new Error('We could not reset your password. Check your connection and try again.');
+    error.status = status;
+    throw error;
   }
 }
 

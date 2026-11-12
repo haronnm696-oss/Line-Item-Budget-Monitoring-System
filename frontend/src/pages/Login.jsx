@@ -148,7 +148,7 @@ export default function Login() {
             <span>Keep me signed in</span>
           </label>
 
-          <Link to="/reset-password" className="signin-link">Forgot password?</Link>
+          <Link to="/forgot-password" className="signin-link">Forgot password?</Link>
         </div>
 
         <AuthPillButton type="submit" disabled={submitting}>

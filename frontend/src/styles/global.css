@@ -932,6 +932,88 @@ select.signin-input:disabled{
   line-height:1.5;
   color:var(--signin-muted);
 }
+.signin-state{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
+  width:100%;
+  max-width:440px;
+  margin:auto;
+  text-align:center;
+}
+.signin-state__icon{
+  width:68px;
+  height:68px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.signin-state__icon--success{
+  background:var(--signin-success-bg);
+  color:var(--signin-success);
+}
+.signin-state__icon--warning{
+  background:var(--signin-warning-bg);
+  color:var(--signin-warning);
+}
+.signin-state__glyph{
+  width:30px;
+  height:30px;
+}
+.signin-state__title{
+  font-size:30px;
+  font-weight:700;
+  line-height:1.2;
+  color:var(--signin-brand);
+}
+.signin-state__text{
+  font-size:14px;
+  line-height:1.6;
+  color:var(--signin-muted);
+}
+.signin-state__hint{
+  font-size:12px;
+  line-height:1.5;
+  color:var(--signin-muted);
+}
+.signin-state .signin-alert,
+.signin-state .signin-secondary{
+  width:100%;
+}
+.signin-state .signin-alert{
+  text-align:left;
+}
+.signin-secondary{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:46px;
+  padding:0 30px;
+  border:2px solid var(--signin-brand);
+  border-radius:999px;
+  background:#FFFFFF;
+  color:var(--signin-brand);
+  font:inherit;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+  transition:background-color .15s ease,color .15s ease;
+}
+.signin-secondary:hover:not(:disabled){
+  background:var(--signin-brand);
+  color:#FFFFFF;
+}
+.signin-secondary:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+}
+.signin-secondary:focus-visible{
+  outline:3px solid var(--signin-focus);
+  outline-offset:2px;
+}
 
 @media (max-width: 799px){
   .signin-card--wide{
