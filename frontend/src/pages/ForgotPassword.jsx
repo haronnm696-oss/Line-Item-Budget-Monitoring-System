@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeEmail } from '../api/auth';
-import { isEmailFormat } from '../lib/authValidation';
+import { isValidLoginEmail } from '../lib/authValidation';
 import {
   AuthAlert,
   AuthField,
@@ -60,8 +60,8 @@ export default function ForgotPassword() {
     setError('');
 
     const cleanEmail = normalizeEmail(email);
-    if (!isEmailFormat(cleanEmail)) {
-      setEmailError('Enter a valid email address.');
+    if (!isValidLoginEmail(cleanEmail)) {
+      setEmailError('Enter a valid MSU-Main or Gmail email address.');
       return;
     }
 
@@ -157,7 +157,7 @@ export default function ForgotPassword() {
               setEmail(event.target.value);
               if (emailError) setEmailError('');
             }}
-            placeholder="name@msumain.edu.ph"
+            placeholder="name@s.msumain.edu.ph"
             autoComplete="email"
             aria-invalid={Boolean(emailError)}
             aria-describedby={emailError ? 'forgot-email-error' : undefined}

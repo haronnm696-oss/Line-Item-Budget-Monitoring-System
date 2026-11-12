@@ -71,7 +71,7 @@ class ProgramUserController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'email' => [
                 'required', 'email:rfc', 'max:255',
-                'regex:/^[^@\s]+@msumain\.edu\.ph$/i',
+                'regex:/^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i',
                 'unique:users,email',
             ],
             'employee_id' => ['required', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],

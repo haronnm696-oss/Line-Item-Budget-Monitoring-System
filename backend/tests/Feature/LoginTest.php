@@ -52,6 +52,30 @@ class LoginTest extends TestCase
         }
     }
 
+    public function test_student_and_staff_email_domains_can_sign_in(): void
+    {
+        $role = Role::where('slug', 'researcher')->firstOrFail();
+
+        foreach (['student@s.msumain.edu.ph', 'staff@msumain.edu.ph'] as $email) {
+            User::create([
+                'name' => 'Domain Test User',
+                'email' => $email,
+                'password' => Hash::make('password123'),
+                'role_id' => $role->id,
+                'is_active' => true,
+            ]);
+
+            $this->postJson('/api/login', [
+                'email' => $email,
+                'password' => 'password123',
+            ])
+                ->assertOk()
+                ->assertJsonPath('user.email', $email);
+
+            $this->postJson('/api/logout')->assertNoContent();
+        }
+    }
+
     public function test_deactivated_account_cannot_sign_in(): void
     {
         $role = Role::where('slug', 'researcher')->firstOrFail();

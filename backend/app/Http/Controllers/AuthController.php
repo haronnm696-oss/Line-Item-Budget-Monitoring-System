@@ -63,7 +63,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $data = $request->validate([
-            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|msumain\.edu\.ph)$/i'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|(?:s\.)?msumain\.edu\.ph)$/i'],
             'password' => ['required', 'string', 'min:8'],
         ]);
 
@@ -111,7 +111,7 @@ class AuthController extends Controller
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email:rfc', 'max:255', 'regex:/^[^@\s]+@msumain\.edu\.ph$/i', 'unique:users,email'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/^[^@\s]+@s\.msumain\.edu\.ph$/i', 'unique:users,email'],
             'password' => [
                 'required',
                 'string',
@@ -199,7 +199,7 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $data = $request->validate([
-            'email' => ['required', 'email:rfc', 'max:255'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|(?:s\.)?msumain\.edu\.ph)$/i'],
         ]);
 
         $email = strtolower(trim($data['email']));
@@ -256,7 +256,7 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         $data = $request->validate([
-            'email' => ['required', 'email:rfc', 'max:255'],
+            'email' => ['required', 'email:rfc', 'max:255', 'regex:/@(gmail\.com|(?:s\.)?msumain\.edu\.ph)$/i'],
             'token' => ['required', 'string'],
         ]);
 
