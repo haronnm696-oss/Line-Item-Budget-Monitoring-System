@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeEmail } from '../api/auth';
-import { isEmailFormat, passwordRules } from '../lib/authValidation';
+import { isValidLoginEmail, passwordRules } from '../lib/authValidation';
 import {
   AuthAlert,
   AuthField,
@@ -38,7 +38,7 @@ export default function ResetPassword() {
 
   const email = normalizeEmail(searchParams.get('email') || '');
   const token = searchParams.get('token') || '';
-  const linkIsUsable = Boolean(token) && isEmailFormat(email);
+  const linkIsUsable = Boolean(token) && isValidLoginEmail(email);
 
   const [view, setView] = useState(linkIsUsable ? 'form' : 'expired');
   const [password, setPassword] = useState('');
