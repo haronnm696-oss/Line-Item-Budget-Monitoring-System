@@ -156,7 +156,7 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
 :root[data-theme="dark"] .tabs button.active{border-bottom-color:var(--gold)}
 
 .filter-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-.filter-row select,.filter-row input{border:1px solid var(--line-strong);border-radius:6px;padding:7px 10px;font:inherit;font-size:13px;background:var(--panel);color:var(--ink)}
+.filter-row select,.filter-row input{border:1px solid var(--line-strong);border-radius:6px;padding:7px 10px;font:inherit;font-size:13px;background-color:var(--panel);color:var(--ink)}
 .filter-row input[type=search]{min-width:220px}
 
 .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);align-items:center}
@@ -180,7 +180,7 @@ tbody tr:hover{background:color-mix(in srgb, var(--gold) 5%, transparent)}
 .field>label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px}
 .field-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
 .field-head label{margin:0}
-.field input,.field select,.field textarea{width:100%;border:1px solid var(--line-strong);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background:var(--paper);color:var(--ink);transition:border-color .15s ease,box-shadow .15s ease}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--line-strong);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background-color:var(--paper);color:var(--ink);transition:border-color .15s ease,box-shadow .15s ease}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--maroon);box-shadow:0 0 0 3px color-mix(in srgb,var(--maroon) 16%,transparent)}
 .input-affix{position:relative}
 .input-affix input{padding-right:42px}
@@ -1117,7 +1117,7 @@ select.signin-input:disabled{
 .modal-panel .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
 .modal-panel .field input,.modal-panel .field select{
   width:100%;border:1px solid var(--line-strong);border-radius:6px;padding:9px 11px;font:inherit;font-size:13.5px;
-  background:var(--paper);color:var(--ink)
+  background-color:var(--paper);color:var(--ink)
 }
 .modal-panel .field input:focus,.modal-panel .field select:focus{
   outline:2px solid var(--gold);outline-offset:0;border-color:var(--gold)
@@ -1378,7 +1378,7 @@ select.signin-input:disabled{
 .pd-head p{max-width:680px}
 .pd-filter{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-left:auto}
 .pd-filter label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-.pd-filter select{border:1px solid var(--line-strong);border-radius:6px;padding:8px 11px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;min-width:190px}
+.pd-filter select{border:1px solid var(--line-strong);border-radius:6px;padding:8px 11px;background-color:var(--panel);color:var(--ink);font:inherit;font-size:13px;min-width:190px}
 .pd-filter select:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
 .pd-filter select:disabled{opacity:.6;cursor:not-allowed}
 .pd-updated{font-size:11px;color:var(--muted);padding-bottom:9px;white-space:nowrap}
@@ -1618,7 +1618,7 @@ select.signin-input:disabled{
 .program-field{display:flex;flex-direction:column;gap:6px}
 .program-field > label,.program-label{font-size:12px;font-weight:600;color:var(--pg-muted)}
 .program-input,.program-select{
-  min-height:44px;border:1px solid var(--pg-border);border-radius:8px;background:#fff;
+  min-height:44px;border:1px solid var(--pg-border);border-radius:8px;background-color:#fff;
   color:var(--pg-ink);padding:0 12px;font:inherit;font-size:14px;min-width:0;
 }
 .program-input::placeholder{color:var(--pg-muted)}
@@ -1626,7 +1626,7 @@ select.signin-input:disabled{
   min-height:84px;border:1px solid var(--pg-border);border-radius:8px;background:#fff;
   color:var(--pg-ink);padding:10px 12px;font:inherit;font-size:14px;resize:vertical;
 }
-.program-select:disabled,.program-input:disabled{background:var(--pg-surface);color:var(--pg-muted)}
+.program-select:disabled,.program-input:disabled{background-color:var(--pg-surface);color:var(--pg-muted)}
 
 .program-card{
   background:#fff;border:1px solid var(--pg-card-border);border-radius:12px;padding:18px 20px;
@@ -2012,7 +2012,7 @@ select.signin-input:disabled{
   color:var(--pg2-muted);font-weight:700;
 }
 .program-shell .program-input,.program-shell .program-select,.program-shell .program-textarea{
-  background:#fff;border-color:#E1D9CD;color:var(--pg2-ink);border-radius:10px;
+  background-color:#fff;border-color:#E1D9CD;color:var(--pg2-ink);border-radius:10px;
 }
 .program-shell .program-input::placeholder,.program-shell .program-textarea::placeholder{color:#9B9188}
 .program-shell .program-select:focus-visible,.program-shell .program-input:focus-visible,
@@ -2020,7 +2020,7 @@ select.signin-input:disabled{
   outline:2px solid rgba(190,154,62,.55);outline-offset:1px;border-color:var(--pg2-gold);
 }
 .program-shell .program-select:disabled,.program-shell .program-input:disabled{
-  background:#F6F2EA;color:#9B9188;
+  background-color:#F6F2EA;color:#9B9188;
 }
 .program-shell .program-btn{
   min-height:42px;padding:0 16px;border-radius:11px;
@@ -3023,5 +3023,39 @@ select.signin-input:disabled{
   .landing-sample__tile{
     padding:10px;
   }
+}
+
+/* ---------- Branded dropdowns ---------- */
+.app select,
+.program-shell select{
+  appearance:none;
+  -webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236F1D2A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 13px center;
+  background-size:14px 14px;
+  padding-right:38px;
+  cursor:pointer;
+}
+.app select option{
+  background:var(--panel);
+  color:var(--ink);
+}
+.program-shell select{
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+.program-shell select:hover:not(:disabled){border-color:#D3C8B7}
+.program-shell select:disabled{cursor:not-allowed}
+.program-shell select option{
+  background:#fff;
+  color:var(--pg2-ink);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .app select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23BE9A3E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] .app select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23BE9A3E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
