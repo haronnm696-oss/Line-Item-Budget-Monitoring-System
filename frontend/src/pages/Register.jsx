@@ -12,8 +12,8 @@ import {
 } from '../components/auth/AuthPage';
 import {
   isValidEmployeeId,
-  isValidMsuEmail,
   isValidPhMobile,
+  isValidStudentEmail,
   mapRegisterFieldErrors,
   normalizePhMobile,
   passwordRules,
@@ -73,7 +73,7 @@ function fieldError(name, data) {
       return value ? '' : 'Enter your last name.';
     case 'email':
       if (!value) return 'Enter your email address.';
-      return isValidMsuEmail(value) ? '' : 'Use your @msumain.edu.ph email address.';
+      return isValidStudentEmail(value) ? '' : 'Use your @s.msumain.edu.ph student email address.';
     case 'contactNumber':
       if (!value) return 'Enter your contact number.';
       return isValidPhMobile(value)
@@ -350,7 +350,7 @@ export default function Register() {
                 value={formData.email}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                placeholder="name@msumain.edu.ph"
+                placeholder="name@s.msumain.edu.ph"
                 autoComplete="email"
                 aria-invalid={Boolean(errorFor('email'))}
                 aria-describedby={describedBy('email', 'reg-email-error')}

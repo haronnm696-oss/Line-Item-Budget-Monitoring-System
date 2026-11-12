@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isValidMsuEmail } from '../../lib/authValidation';
 
 const ROLES = [
   ['program-leader', 'Program Leader'],
@@ -32,8 +33,8 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       setLocalError('First name, last name, email, employee ID, position and role are required.');
       return;
     }
-    if (!/^[^\s@]+@msumain\.edu\.ph$/i.test(form.email.trim())) {
-      setLocalError('Email must be a valid MSU-Marawi address (@msumain.edu.ph).');
+    if (!isValidMsuEmail(form.email.trim())) {
+      setLocalError('Email must be a valid MSU-Marawi address (@s.msumain.edu.ph or @msumain.edu.ph).');
       return;
     }
     if (!/^MSU-\d{5}$/i.test(form.empId.trim())) {
@@ -85,7 +86,7 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
             </div>
             <div className="program-field">
               <label htmlFor="pu-email">MSU email</label>
-              <input id="pu-email" className="program-input" type="email" value={form.email} disabled={busy} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="j.dela.cruz@msumain.edu.ph" autoComplete="email" />
+              <input id="pu-email" className="program-input" type="email" value={form.email} disabled={busy} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="j.dela.cruz@s.msumain.edu.ph" autoComplete="email" />
             </div>
             <div className="program-field">
               <label htmlFor="pu-emp">Employee ID</label>

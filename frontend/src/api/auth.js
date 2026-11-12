@@ -1,7 +1,12 @@
 import client from './client';
 import { ENDPOINTS } from './endpoints';
 import { ROLE_MAP, normalizeRole } from '../data/mockData';
-import { isEmailFormat, mapRegisterFieldErrors, normalizePhMobile } from '../lib/authValidation';
+import {
+  isValidLoginEmail,
+  isValidStudentEmail,
+  mapRegisterFieldErrors,
+  normalizePhMobile,
+} from '../lib/authValidation';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -10,10 +15,9 @@ export function normalizeEmail(raw) {
 }
 
 export function isValidEmail(raw) {
-  const email = normalizeEmail(raw);
-  // Keep this list aligned with the backend validation rule.
-  return /^[^\s@]+@gmail\.com$/.test(email)
-      || /^[^\s@]+@msumain\.edu\.ph$/.test(email);
+  // Keep this aligned with the backend login rule: Gmail demo accounts plus
+  // the student (@s.) and faculty/staff MSU domains.
+  return isValidLoginEmail(normalizeEmail(raw));
 }
 
 // Demo accounts used only when VITE_USE_MOCK=true. Passwords are verified
@@ -87,8 +91,8 @@ export async function register({ name: _name, email, password, first_name, last_
   if (!cleanFirstName || !cleanLastName) {
     throw new Error('First and last name are required.');
   }
-  if (!cleanEmail || !/^[^@\s]+@msumain\.edu\.ph$/i.test(cleanEmail)) {
-    throw new Error('Please use your institutional email address.');
+  if (!cleanEmail || !isValidStudentEmail(cleanEmail)) {
+    throw new Error('Please use your @s.msumain.edu.ph student email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -165,8 +169,8 @@ export async function register({ name: _name, email, password, first_name, last_
 
 export async function forgotPassword(email) {
   const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail || !isEmailFormat(cleanEmail)) {
-    throw new Error('Enter a valid email address.');
+  if (!cleanEmail || !isValidLoginEmail(cleanEmail)) {
+    throw new Error('Enter a valid MSU-Main or Gmail email address.');
   }
 
   if (USE_MOCK) {
@@ -203,7 +207,7 @@ export async function forgotPassword(email) {
 
 export async function resetPassword({ email, token, password, passwordConfirmation }) {
   const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail || !isEmailFormat(cleanEmail)) {
+  if (!cleanEmail || !isValidLoginEmail(cleanEmail)) {
     throw new Error('This reset link is invalid or has expired.');
   }
   if (!token) {

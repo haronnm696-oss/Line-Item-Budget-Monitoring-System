@@ -41,7 +41,7 @@ class PasswordResetTest extends TestCase
             'name' => 'Maria Santos',
             'first_name' => 'Maria',
             'last_name' => 'Santos',
-            'email' => 'maria.santos@msumain.edu.ph',
+            'email' => 'maria.santos@s.msumain.edu.ph',
             'password' => Hash::make('OldPass!2026'),
             'role_id' => $role->id,
             'is_active' => true,

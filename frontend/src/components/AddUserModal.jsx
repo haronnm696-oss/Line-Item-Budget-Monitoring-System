@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isValidMsuEmail } from '../lib/authValidation';
 
 const DEFAULT_ROLES = [
   'Program Leader',
@@ -28,8 +29,8 @@ export default function AddUserModal({ open, onSave, onClose }) {
     }
 
     const emailLower = form.email.trim().toLowerCase();
-    if (!/^[^\s@]+@msumain\.edu\.ph$/.test(emailLower)) {
-      setError('Email must be a valid MSU-Marawi address (@msumain.edu.ph).');
+    if (!isValidMsuEmail(emailLower)) {
+      setError('Email must be a valid MSU-Marawi address (@s.msumain.edu.ph or @msumain.edu.ph).');
       return;
     }
 
@@ -85,10 +86,10 @@ export default function AddUserModal({ open, onSave, onClose }) {
                   autoComplete="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="e.g. j.dela.cruz@msumain.edu.ph"
+                  placeholder="e.g. j.dela.cruz@s.msumain.edu.ph"
                 />
                 <small style={{ color: 'var(--muted)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
-                  Must be an @msumain.edu.ph address
+                  Must be an @s.msumain.edu.ph or @msumain.edu.ph address
                 </small>
               </div>
               <div className="field">
