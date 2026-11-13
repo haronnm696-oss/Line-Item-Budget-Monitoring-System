@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApprovalRequest;
 use App\Models\FundingAgency;
 use App\Models\Project;
 use App\Models\User;
@@ -148,7 +149,188 @@ class ProgramProjectsTest extends TestCase
     public function test_project_endpoints_require_authentication(): void
     {
         $this->getJson('/api/program/projects')->assertUnauthorized();
+        $this->getJson('/api/program/projects/export')->assertUnauthorized();
         $this->getJson('/api/program/projects/' . Project::firstOrFail()->id)->assertUnauthorized();
+    }
+
+    public function test_unfiltered_summary_equals_the_overview_totals_exactly(): void
+    {
+        $leader = $this->programLeader();
+        $overview = $this->actingAs($leader)->getJson('/api/program/overview')->assertOk();
+        $summary = $this->actingAs($leader)->getJson('/api/program/projects')->assertOk()->json('summary');
+
+        $this->assertSame($overview->json('meta.project_count'), $summary['projects']);
+        $this->assertEquals($overview->json('kpis.portfolio_budget'), $summary['allocated']);
+        $this->assertEquals($overview->json('kpis.total_disbursed'), $summary['spent']);
+        $this->assertEquals($overview->json('kpis.utilization_pct'), $summary['spent_pct']);
+        $this->assertEquals(
+            round($overview->json('kpis.portfolio_budget') - $overview->json('kpis.total_disbursed'), 2),
+            $summary['remaining']
+        );
+        $this->assertSame(
+            $summary['projects'],
+            $summary['ongoing'] + $summary['completed']
+                + collect($overview->json('projects'))->whereNotIn('status', ['Ongoing', 'Completed'])->count()
+        );
+        $this->assertNull($summary['funder_name']);
+    }
+
+    public function test_funder_filter_summary_only_counts_that_funders_projects(): void
+    {
+        $leader = $this->programLeader();
+
+        foreach (FundingAgency::all() as $agency) {
+            $response = $this->actingAs($leader)
+                ->getJson('/api/program/projects?funder=' . $agency->id)
+                ->assertOk();
+            $summary = $response->json('summary');
+            $projects = Project::where('funding_agency_id', $agency->id)->get();
+
+            $this->assertSame($projects->count(), $summary['projects'], $agency->name);
+            $this->assertSame($agency->name, $summary['funder_name']);
+            $this->assertEqualsCanonicalizing(
+                $projects->pluck('id')->all(),
+                collect($response->json('projects'))->pluck('id')->all(),
+                $agency->name
+            );
+
+            $budget = $projects->sum(fn (Project $project) => app(\App\Services\ProjectFinancialService::class)->budget($project));
+            $spent = $projects->sum(fn (Project $project) => app(\App\Services\ProjectFinancialService::class)->spent($project));
+            $this->assertEquals(round($budget, 2), $summary['allocated'], $agency->name);
+            $this->assertEquals(round($spent, 2), $summary['spent'], $agency->name);
+        }
+    }
+
+    public function test_pending_approval_counts_per_project_are_correct(): void
+    {
+        $project = Project::where('code', 'MOST-RD-2026-001')->firstOrFail();
+        $requester = User::where('email', 'project.leader@gmail.com')->firstOrFail();
+
+        ApprovalRequest::create([
+            'project_id' => $project->id,
+            'type' => 'budget_realignment',
+            'title' => 'Extra pending request for the count test',
+            'justification' => 'Needed to prove the per-project pending count.',
+            'amount' => 1000,
+            'status' => 'pending',
+            'requested_by' => $requester->id,
+        ]);
+        ApprovalRequest::create([
+            'project_id' => $project->id,
+            'type' => 'budget_realignment',
+            'title' => 'Already approved, must not count',
+            'justification' => 'Approved rows are not pending.',
+            'amount' => 500,
+            'status' => 'approved',
+            'requested_by' => $requester->id,
+        ]);
+
+        $rows = collect($this->actingAs($this->programLeader())
+            ->getJson('/api/program/projects')
+            ->assertOk()
+            ->json('projects'))->keyBy('id');
+
+        foreach (Project::all() as $row) {
+            $expected = ApprovalRequest::where('project_id', $row->id)->where('status', 'pending')->count();
+            $this->assertSame($expected, $rows[$row->id]['pending_approvals'], $row->code);
+        }
+
+        $this->assertGreaterThanOrEqual(1, $rows[$project->id]['pending_approvals']);
+    }
+
+    public function test_leader_year_search_and_risk_filters_narrow_rows_and_summary(): void
+    {
+        $leader = $this->programLeader();
+        $all = $this->actingAs($leader)->getJson('/api/program/projects')->assertOk();
+
+        $leaderOption = collect($all->json('leaders'))->firstWhere('name', 'Dr. Aminah Macarambon');
+        $this->assertNotNull($leaderOption);
+        $byLeader = $this->actingAs($leader)->getJson('/api/program/projects?leader=' . $leaderOption['id'])->assertOk();
+        $this->assertNotEmpty($byLeader->json('projects'));
+        foreach ($byLeader->json('projects') as $row) {
+            $this->assertSame('Dr. Aminah Macarambon', $row['project_leader']);
+        }
+        $this->assertSame(count($byLeader->json('projects')), $byLeader->json('summary.projects'));
+
+        $year = 2025;
+        $byYear = $this->actingAs($leader)->getJson('/api/program/projects?year=' . $year)->assertOk();
+        $expected = collect($all->json('projects'))->filter(fn ($row) => $row['start_date'] <= "$year-12-31"
+            && $row['end_date'] >= "$year-01-01")->pluck('id')->sort()->values()->all();
+        $this->assertSame($expected, collect($byYear->json('projects'))->pluck('id')->sort()->values()->all());
+
+        $search = $this->actingAs($leader)->getJson('/api/program/projects?q=most-rd-2026-001')->assertOk();
+        $this->assertSame(['MOST-RD-2026-001'], collect($search->json('projects'))->pluck('code')->all());
+
+        $risk = $this->actingAs($leader)->getJson('/api/program/projects?risk=1')->assertOk();
+        $this->assertSame($all->json('at_risk_count'), count($risk->json('projects')));
+        foreach ($risk->json('projects') as $row) {
+            $this->assertSame('At risk', $row['health']);
+        }
+        $this->assertEquals(round(collect($risk->json('projects'))->sum('budget'), 2), $risk->json('summary.allocated'));
+    }
+
+    public function test_sorting_is_applied_by_the_server(): void
+    {
+        $rows = $this->actingAs($this->programLeader())
+            ->getJson('/api/program/projects?sort=spent&dir=desc')
+            ->assertOk()
+            ->json('projects');
+
+        $pcts = array_column($rows, 'spent_pct');
+        $sorted = $pcts;
+        rsort($sorted);
+        $this->assertSame($sorted, $pcts);
+    }
+
+    public function test_closed_projects_are_not_tracked_and_reasons_use_schedule_wording(): void
+    {
+        $rows = collect($this->actingAs($this->programLeader())
+            ->getJson('/api/program/projects')
+            ->assertOk()
+            ->json('projects'));
+
+        foreach ($rows as $row) {
+            if ($row['health'] === 'Closed') {
+                $this->assertSame('Not tracked after completion', $row['health_note'], $row['code']);
+            }
+            if (str_starts_with($row['health_reason'], 'Under-spending')) {
+                $this->assertMatchesRegularExpression('/^Spending [\d.]+ pts behind schedule$/', $row['health_note'], $row['code']);
+            }
+            $this->assertArrayHasKey('utilization_pct', $row['ps']);
+            $this->assertArrayHasKey('utilization_pct', $row['mooe']);
+            $this->assertArrayHasKey('last_entry_date', $row);
+        }
+    }
+
+    public function test_excel_export_lists_the_filtered_projects_with_totals(): void
+    {
+        $agency = FundingAgency::firstOrFail();
+
+        $response = $this->actingAs($this->programLeader())
+            ->get('/api/program/projects/export?funder=' . $agency->id)
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8');
+
+        $body = $response->getContent();
+        $this->assertStringContainsString('<Workbook', $body);
+        $this->assertStringContainsString('Total allocated', $body);
+
+        foreach (Project::all() as $project) {
+            if ((int) $project->funding_agency_id === (int) $agency->id) {
+                $this->assertStringContainsString('>' . $project->code . '<', $body);
+            } else {
+                $this->assertStringNotContainsString('>' . $project->code . '<', $body);
+            }
+        }
+    }
+
+    public function test_projects_export_is_forbidden_for_other_roles(): void
+    {
+        foreach (['project.leader@gmail.com', 'finance@gmail.com', 'assistant@gmail.com', 'researcher@gmail.com'] as $email) {
+            $user = User::where('email', $email)->firstOrFail();
+
+            $this->actingAs($user)->getJson('/api/program/projects/export')->assertForbidden();
+        }
     }
 
     private function programLeader(): User

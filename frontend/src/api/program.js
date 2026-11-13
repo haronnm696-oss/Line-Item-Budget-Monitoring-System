@@ -12,15 +12,31 @@ export async function fetchProgramOverview(funder = '') {
   return response.data;
 }
 
+function cleanParams(params) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== '' && value != null && value !== false)
+  );
+}
+
 /**
- * Projects page rows. Built by the same backend code as the overview, so
- * spent %, health and the health reason always match.
+ * Projects page rows plus a summary for the same filters. Built by the same
+ * backend code as the overview, so spent %, health and totals always match.
+ * Filters: q, status, funder, leader, year, risk, sort, dir.
  */
-export async function fetchProgramProjects(funder = '') {
-  const response = await client.get(ENDPOINTS.programProjects, {
-    params: funder ? { funder } : undefined,
-  });
+export async function fetchProgramProjects(params = {}) {
+  const response = await client.get(ENDPOINTS.programProjects, { params: cleanParams(params) });
   return response.data;
+}
+
+/** Excel workbook (.xls) of the filtered projects list, built by the backend. */
+export async function downloadProgramProjectsExcel(params = {}) {
+  const response = await client.get(ENDPOINTS.programProjectsExport, {
+    params: cleanParams(params),
+    responseType: 'blob',
+  });
+  const disposition = response.headers?.['content-disposition'] ?? '';
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return { blob: response.data, filename: match?.[1] ?? 'program-projects.xls' };
 }
 
 /** Read-only project detail: header, line items, tranches, expenses, team, activity. */

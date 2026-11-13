@@ -143,6 +143,38 @@ class AuditTrailTest extends TestCase
         $this->assertSame($project->title, $flagged->json('0.project'));
     }
 
+    public function test_audit_feed_filters_by_project(): void
+    {
+        $leader = $this->userWithRole('program-leader');
+        $mine = $this->project();
+        $other = $this->project();
+
+        $mineCategory = LibCategory::create([
+            'project_id' => $mine->id,
+            'category_type' => 'MOOE',
+            'line_item_name' => 'Supplies',
+            'allocated_amount' => 1000,
+        ]);
+        $otherCategory = LibCategory::create([
+            'project_id' => $other->id,
+            'category_type' => 'MOOE',
+            'line_item_name' => 'Supplies',
+            'allocated_amount' => 1000,
+        ]);
+
+        AuditTrail::record($leader, 'created', $mineCategory, [], ['project_id' => $mine->id, 'line_item_name' => 'Supplies']);
+        AuditTrail::record($leader, 'created', $otherCategory, [], ['project_id' => $other->id, 'line_item_name' => 'Supplies']);
+        AuditTrail::record($leader, 'created', $mine, [], ['title' => $mine->title]);
+
+        $rows = $this->actingAs($leader)
+            ->getJson('/api/audit?project_id=' . $mine->id)
+            ->assertOk()
+            ->json();
+
+        $this->assertCount(2, $rows);
+        $this->assertCount(3, $this->actingAs($leader)->getJson('/api/audit')->json());
+    }
+
     private function project(): Project
     {
         $funder = FundingAgency::create([
