@@ -13,6 +13,23 @@ export async function fetchProgramOverview(funder = '') {
 }
 
 /**
+ * Projects page rows. Built by the same backend code as the overview, so
+ * spent %, health and the health reason always match.
+ */
+export async function fetchProgramProjects(funder = '') {
+  const response = await client.get(ENDPOINTS.programProjects, {
+    params: funder ? { funder } : undefined,
+  });
+  return response.data;
+}
+
+/** Read-only project detail: header, line items, tranches, expenses, team, activity. */
+export async function fetchProgramProject(id) {
+  const response = await client.get(ENDPOINTS.programProject(id));
+  return response.data;
+}
+
+/**
  * Approval workspace, filtered by tab, type, project and funder.
  */
 export async function fetchProgramApprovals(params = {}) {
