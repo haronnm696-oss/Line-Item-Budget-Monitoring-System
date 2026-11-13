@@ -2300,14 +2300,7 @@ select.signin-input:disabled{
 .program-shell .program-table .project-code,.program-shell .program-table .muted{
   color:var(--pg2-muted);font-size:11px;
 }
-.pl-mini-bars{display:flex;flex-direction:column;gap:6px;min-width:120px}
-.pl-mini-line{display:flex;align-items:center;gap:8px}
-.pl-mini-line .pl-track{height:4px;min-width:70px}
-.pl-mini-line b{
-  font-size:10.5px;color:var(--pg2-muted);min-width:38px;text-align:right;
-  font-variant-numeric:tabular-nums;
-}
-.pl-mini-line.is-time .pl-track>span{background:#CDBFAD}
+.pl-table{min-width:560px}
 .pl-health-reason{font-size:10.5px;color:var(--pg2-muted);margin-top:4px;max-width:190px;line-height:1.35}
 
 /* Wallet / funding sources */
@@ -2377,6 +2370,7 @@ select.signin-input:disabled{
   min-height:200px;color:var(--pg2-muted);font-size:13px;
 }
 .program-shell .program-empty{color:var(--pg2-muted);padding:22px 4px;font-size:12.5px}
+.pl-inbox-empty{margin:0;padding:12px 0;font-size:13px;color:var(--pg2-muted)}
 .program-shell .program-error{color:#8E1B1B}
 .program-shell .program-modal-overlay{background:rgba(34,29,26,.38);backdrop-filter:blur(4px)}
 .program-shell .program-modal{
