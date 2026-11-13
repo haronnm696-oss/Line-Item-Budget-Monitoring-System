@@ -8,7 +8,7 @@ class Expense extends Model
 {
     protected $fillable = [
         'project_id', 'lib_category_id', 'recorded_by', 'verified_by',
-        'reference_no', 'description', 'amount', 'expense_date',
+        'reference_no', 'payee', 'description', 'amount', 'expense_date',
         'attachment_path', 'status', 'remarks', 'verified_at',
     ];
 

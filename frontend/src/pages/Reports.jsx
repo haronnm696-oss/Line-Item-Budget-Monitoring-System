@@ -79,7 +79,7 @@ function downloadCSV(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-export default function Reports({ programMode = false }) {
+export default function Reports({ programMode = false, initialCode = '' }) {
   const [selectedCode, setSelectedCode] = useState('');
   const [projectList, setProjectList] = useState([]);
   const [detail, setDetail] = useState(null);
@@ -99,7 +99,8 @@ export default function Reports({ programMode = false }) {
         if (!alive) return;
         const rows = Array.isArray(list) ? list : [];
         setProjectList(rows);
-        if (rows[0]) setSelectedCode(rows[0].code);
+        const preselected = rows.find((row) => row.code === initialCode);
+        if (preselected || rows[0]) setSelectedCode((preselected ?? rows[0]).code);
       })
       .catch(() => {
         if (!alive) return;

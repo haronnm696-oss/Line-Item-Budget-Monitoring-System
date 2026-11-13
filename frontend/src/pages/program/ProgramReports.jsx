@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fetchProgramOverview } from '../../api/program';
 import { formatPct, peso } from '../../components/money';
 import ProgramPill from '../../components/program/ProgramPill';
@@ -22,6 +23,7 @@ function csvCell(value) {
 }
 
 export default function ProgramReports() {
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -233,7 +235,7 @@ export default function ProgramReports() {
         {loading ? (
           <div className="program-empty">Loading reports…</div>
         ) : (
-          <Reports programMode />
+          <Reports programMode initialCode={searchParams.get('project') ?? ''} />
         )}
       </section>
     </>

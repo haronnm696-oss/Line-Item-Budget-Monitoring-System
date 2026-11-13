@@ -306,7 +306,7 @@ export default function ProgramLeaderDashboard() {
               </div>
             </section>
 
-            <section className="program-card pl-kpi">
+            <Link className="program-card pl-kpi pl-kpi-link" to="/program-projects?risk=1" aria-label={`Project health: ${riskCount} at risk. View at-risk projects`}>
               <div className="pl-kpi-head">
                 <span className="pl-kpi-ic">{KPI_ICONS.health}</span>
                 <span className="pl-kpi-label">Project health</span>
@@ -326,7 +326,7 @@ export default function ProgramLeaderDashboard() {
               <div className="pl-kpi-foot">
                 {health.closed ?? 0} closed · {projects.length} tracked
               </div>
-            </section>
+            </Link>
 
             <section className="program-card pl-kpi">
               <div className="pl-kpi-head">
@@ -362,7 +362,7 @@ export default function ProgramLeaderDashboard() {
                   <div className="pl-spend-row" key={project.id}>
                     <div className="pl-spend-main">
                       <div className="pl-spend-title">
-                        <b>{project.title}</b>
+                        <Link className="pl-project-link" to={`/program-projects/${project.id}`}><b>{project.title}</b></Link>
                         <span>{project.code}</span>
                       </div>
                       <div className="pl-bar-line">
@@ -534,7 +534,7 @@ export default function ProgramLeaderDashboard() {
                   {projects.map((project) => (
                     <tr key={project.id}>
                       <td>
-                        <div className="project-name">{project.title}</div>
+                        <Link className="project-name pl-project-link" to={`/program-projects/${project.id}`}>{project.title}</Link>
                         <div className="project-code">{project.code} · {project.funder}</div>
                       </td>
                       <td><ProgramPill value={project.tranche_status} /></td>

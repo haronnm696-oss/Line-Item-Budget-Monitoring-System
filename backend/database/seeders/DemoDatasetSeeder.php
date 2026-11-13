@@ -13,6 +13,7 @@ use App\Models\ProjectReport;
 use App\Models\ProjectTranche;
 use App\Models\User;
 use Carbon\Carbon;
+use Database\Seeders\Concerns\AssignsDemoFunding;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class DemoDatasetSeeder extends Seeder
 {
+    use AssignsDemoFunding;
+
     public function run(): void
     {
         $today = now()->startOfDay();
@@ -105,6 +108,7 @@ class DemoDatasetSeeder extends Seeder
                 $finance,
                 $users['researcher@gmail.com'],
             ]);
+            $this->assignDemoFunding($project, $definition['key']);
 
             $categories = $this->seedLineItems($project, $definition['line_items']);
             $this->seedTranches($project, $definition, $today);
@@ -143,6 +147,7 @@ class DemoDatasetSeeder extends Seeder
     {
         return [
             [
+                'key' => 'urban',
                 'code' => 'MOST-RD-2026-001',
                 'title' => 'Enhancing Urban Mobility in Marawi City',
                 'description' => 'MOST-BARMM R&D project using IoT sensors and field validation to improve urban mobility in Marawi City, with an MSU-Marawi counterpart.',
@@ -193,6 +198,7 @@ class DemoDatasetSeeder extends Seeder
                 ],
             ],
             [
+                'key' => 'goat',
                 'code' => 'MOST-RD-2026-002',
                 'title' => 'Halal Goat Value Chain Development, Lanao del Sur',
                 'description' => 'DOST-PCAARRD project strengthening the halal goat value chain through production, processing, and market linkage studies.',
@@ -242,10 +248,11 @@ class DemoDatasetSeeder extends Seeder
                 ],
             ],
             [
+                'key' => 'nutrition',
                 'code' => 'MOST-RD-2026-003',
                 'title' => 'Community Nutrition Surveillance, Marawi Resettlement Sites',
-                'description' => 'DOST-PCHRD project tracking nutrition outcomes in Marawi resettlement communities and strengthening local health surveillance.',
-                'funder' => 'DOST-PCHRD',
+                'description' => 'CHED-funded project tracking nutrition outcomes in Marawi resettlement communities and strengthening local health surveillance.',
+                'funder' => 'CHED',
                 'budget' => 1210000.00,
                 'counterpart' => 0.00,
                 'start' => $today->copy()->subMonths(5)->startOfMonth(),
@@ -287,10 +294,11 @@ class DemoDatasetSeeder extends Seeder
                 ],
             ],
             [
+                'key' => 'weaving',
                 'code' => 'MOST-RD-2025-001',
                 'title' => 'Meranaw Weaving Heritage Digital Archive',
-                'description' => 'CHED-funded project digitizing Meranaw weaving heritage. The project is completed and every released tranche has been fully liquidated.',
-                'funder' => 'CHED',
+                'description' => 'MOST-BARMM project digitizing Meranaw weaving heritage. The project is completed and every released tranche has been fully liquidated.',
+                'funder' => 'MOST-BARMM',
                 'budget' => 940000.00,
                 'counterpart' => 0.00,
                 'start' => $today->copy()->subMonths(18)->startOfMonth(),
@@ -424,6 +432,7 @@ class DemoDatasetSeeder extends Seeder
                     'lib_category_id' => $category->id,
                     'recorded_by' => $ra->id,
                     'verified_by' => in_array($status, ['verified', 'rejected'], true) ? $finance->id : null,
+                    'payee' => $this->demoPayee($project, $category->line_item_name),
                     'description' => $description,
                     'amount' => $amount,
                     'expense_date' => $date->toDateString(),
