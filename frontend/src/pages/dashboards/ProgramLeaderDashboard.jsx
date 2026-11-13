@@ -209,7 +209,7 @@ export default function ProgramLeaderDashboard() {
       <div className="pl-head">
         <div>
           <div className="pl-greeting">{greeting()}, {firstName}</div>
-          <h1 className="program-h1">Research portfolio</h1>
+          <h1 className="program-h1">Externally funded research</h1>
           <p className="program-sub">
             {projectCount} project{projectCount === 1 ? '' : 's'} · {peso(disbursed)} disbursed of{' '}
             {peso(budget)} · {pending} waiting for your approval

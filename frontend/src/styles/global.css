@@ -1892,6 +1892,27 @@ select.signin-input:disabled{
   background:linear-gradient(135deg,#BE9A3E,#8A6D12);color:#2A0A11;
   border:1px solid rgba(255,255,255,.3);font-size:11px;
 }
+.program-brand-seal{width:54px;height:auto;flex-shrink:0;display:block}
+
+/* Sidebar footer: program period, help, version */
+.program-side-foot{
+  margin-top:auto;flex-shrink:0;padding:16px 14px 4px;border-top:1px solid rgba(255,255,255,.2);
+  display:flex;flex-direction:column;gap:12px;
+}
+.program-period{background:rgba(0,0,0,.18);border-radius:10px;padding:12px 14px}
+.program-period-label{font-size:12px;color:#EDE4D6}
+.program-period-title{font-size:15px;font-weight:700;color:#FAF7F2}
+.program-period-track{height:6px;border-radius:3px;background:rgba(255,255,255,.2);margin:10px 0 6px;overflow:hidden}
+.program-period-track span{display:block;height:100%;border-radius:3px;background:#BE9A3E}
+.program-period-meta{font-size:12px;color:#EDE4D6}
+.program-help-link{
+  display:flex;align-items:center;gap:10px;min-height:44px;padding:0 6px;
+  color:#FAF7F2;font-size:14px;font-weight:600;text-decoration:none;
+}
+.program-help-link svg{width:18px;height:18px;flex:0 0 18px}
+.program-help-link:focus-visible{outline:3px solid rgba(190,154,62,.45);outline-offset:2px;border-radius:6px}
+.program-version{font-size:12px;color:#EDE4D6;padding:0 6px}
+
 .program-shell .program-nav-foot{
   margin-top:auto;padding:12px;gap:10px;
   border:1px solid rgba(255,255,255,.14);border-radius:14px;
