@@ -99,7 +99,6 @@ const ICONS = {
 
 const NAV_GROUPS = [
   {
-    label: 'Portfolio',
     items: [
       { to: '/program-dashboard', label: 'Overview', icon: 'dashboard' },
       { to: '/program-projects', label: 'Projects', icon: 'projects' },
@@ -250,8 +249,10 @@ export default function ProgramLayout() {
 
           <nav className="program-nav">
             {NAV_GROUPS.map((group) => (
-              <div className="program-nav-group" key={group.label}>
-                <div className="program-nav-label"><span>{group.label}</span></div>
+              <div className="program-nav-group" key={group.label ?? 'main'}>
+                {group.label && (
+                  <div className="program-nav-label"><span>{group.label}</span></div>
+                )}
                 {group.items.map((item) => (
                   <NavLink
                     key={item.to}

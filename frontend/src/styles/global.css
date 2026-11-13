@@ -1855,7 +1855,7 @@ select.signin-input:disabled{
   border-right:1px solid rgba(0,0,0,.12);
   box-shadow:14px 0 40px -30px rgba(81,20,32,.65);
 }
-.program-shell .program-brand{padding:2px 12px 24px;gap:12px}
+.program-shell .program-brand{padding:2px 12px 12px;gap:12px}
 .program-shell .program-seal{
   width:46px;height:46px;flex-basis:46px;border-radius:50%;
   background:linear-gradient(145deg,#E8D9A8,#BE9A3E 60%,#8A6D12);
@@ -1919,7 +1919,7 @@ select.signin-input:disabled{
 @media (min-width: 901px){
   .program-shell .program-sidebar{width:270px;overflow-x:hidden;transition:width .2s ease}
   .program-shell .program-sidebar.is-collapsed{width:76px}
-  .program-sidebar.is-collapsed .program-brand{justify-content:center;padding:2px 0 24px}
+  .program-sidebar.is-collapsed .program-brand{justify-content:center;padding:2px 0 12px}
   .program-sidebar.is-collapsed .program-brand-seal{width:44px}
   .program-sidebar.is-collapsed .program-brand-text,
   .program-sidebar.is-collapsed .program-nav-text,
