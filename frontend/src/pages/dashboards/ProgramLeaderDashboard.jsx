@@ -452,7 +452,7 @@ export default function ProgramLeaderDashboard() {
             </div>
 
             {approvals.length === 0 ? (
-              <div className="program-empty">All caught up. No pending approvals.</div>
+              <p className="pl-inbox-empty">All caught up. No pending approvals.</p>
             ) : (
               <div className="pl-approval-list">
                 {approvals.map((approval) => {
@@ -521,11 +521,10 @@ export default function ProgramLeaderDashboard() {
             </div>
 
             <div className="program-scroll">
-              <table className="program-table pl-table" style={{ minWidth: 860 }}>
+              <table className="program-table pl-table">
                 <thead>
                   <tr>
                     <th>Project</th>
-                    <th>Spent / time</th>
                     <th>Tranche</th>
                     <th>Receipts</th>
                     <th>Health</th>
@@ -537,22 +536,6 @@ export default function ProgramLeaderDashboard() {
                       <td>
                         <div className="project-name">{project.title}</div>
                         <div className="project-code">{project.code} · {project.funder}</div>
-                      </td>
-                      <td>
-                        <div className="pl-mini-bars">
-                          <div className="pl-mini-line">
-                            <div className="pl-track">
-                              <span style={{ width: `${clampPct(project.spent_pct)}%` }} />
-                            </div>
-                            <b>{formatPct(project.spent_pct)}</b>
-                          </div>
-                          <div className="pl-mini-line is-time">
-                            <div className="pl-track">
-                              <span style={{ width: `${clampPct(project.time_pct)}%` }} />
-                            </div>
-                            <b>{formatPct(project.time_pct)}</b>
-                          </div>
-                        </div>
                       </td>
                       <td><ProgramPill value={project.tranche_status} /></td>
                       <td className="num">
