@@ -10,7 +10,7 @@ class Project extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'code', 'title', 'description', 'funding_agency_id',
+        'code', 'title', 'description', 'funding_agency_id', 'funder_reference',
         'total_approved_budget', 'implementing_agency_counterpart',
         'funding_agency_amount', 'start_date', 'end_date', 'status',
     ];
