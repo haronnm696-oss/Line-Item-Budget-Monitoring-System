@@ -271,7 +271,7 @@ export default function ProgramLeaderDashboard() {
             <section className="program-card pl-kpi pl-kpi-hero">
               <div className="pl-kpi-head">
                 <span className="pl-kpi-ic">{KPI_ICONS.budget}</span>
-                <span className="pl-kpi-label">Portfolio budget</span>
+                <span className="pl-kpi-label">Total budget</span>
               </div>
               <div className="pl-kpi-value">
                 <AnimatedNumber value={budget} format={peso} />
@@ -296,7 +296,7 @@ export default function ProgramLeaderDashboard() {
                 <AnimatedNumber value={disbursed} format={peso} />
               </div>
               <div className="pl-kpi-sub">
-                <AnimatedNumber value={utilization} format={formatPct} /> of the portfolio
+                <AnimatedNumber value={utilization} format={formatPct} /> of the total budget
               </div>
               <div className="pl-track">
                 <span style={{ width: `${clampPct(utilization)}%` }} />
@@ -431,7 +431,7 @@ export default function ProgramLeaderDashboard() {
                 </div>
 
                 <Link className="program-btn primary pl-wallet-cta" to="/program-projects">
-                  Open portfolio
+                  View all projects
                 </Link>
               </section>
             </div>

@@ -213,13 +213,13 @@ export default function Landing() {
 
             <aside className="landing-sample" aria-label="Sample dashboard preview">
               <div className="landing-sample__head">
-                <p className="landing-sample__title">Portfolio overview</p>
+                <p className="landing-sample__title">All projects overview</p>
                 <span className="landing-sample__note">Sample data</span>
               </div>
 
               <div className="landing-sample__tiles">
                 <div className="landing-sample__tile">
-                  <span>Portfolio budget</span>
+                  <span>Total budget</span>
                   <strong>₱7,198,376.00</strong>
                 </div>
                 <div className="landing-sample__tile">
