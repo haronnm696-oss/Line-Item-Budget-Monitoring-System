@@ -1583,9 +1583,11 @@ select.signin-input:disabled{
 }
 .program-nav-foot b{display:block;color:var(--pg-on-brand);font-size:13px}
 .program-avatar{
-  width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.16);
-  display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;
-  flex:0 0 34px;
+  width:36px;height:36px;min-width:36px;aspect-ratio:1/1;flex-shrink:0;border-radius:50%;
+  display:grid;place-items:center;
+  padding:0;margin:0;text-indent:0;text-align:center;line-height:1;letter-spacing:0;
+  box-sizing:border-box;overflow:hidden;
+  font-size:12px;font-weight:700;color:#fff;background:#6F1D2A;
 }
 
 .program-main{display:flex;flex-direction:column;min-width:0}
@@ -1887,11 +1889,6 @@ select.signin-input:disabled{
   background:#E8D9A8;color:#3A0F19;font-size:11.5px;font-weight:800;
   box-shadow:none;
 }
-.program-shell .program-avatar{
-  width:34px;height:34px;flex-basis:34px;
-  background:linear-gradient(135deg,#BE9A3E,#8A6D12);color:#2A0A11;
-  border:1px solid rgba(255,255,255,.3);font-size:11px;
-}
 .program-brand-seal{width:54px;height:auto;flex-shrink:0;display:block}
 
 /* Sidebar footer: help and collapse */
@@ -1998,9 +1995,8 @@ select.signin-input:disabled{
 }
 .program-user-chip:hover{border-color:#DCD3C4;background:#FBF8F3}
 .program-user-chip[aria-expanded="true"]{border-color:#D9C79A;background:#FDF9F0}
-.program-user-chip .program-avatar{background:linear-gradient(135deg,#7C2439,#511420);color:#fff}
 .program-user-chip b{display:block;font-size:12px;font-weight:650;line-height:1.2;white-space:nowrap;color:var(--pg2-ink)}
-.program-user-chip span{display:block;font-size:11px;color:var(--pg2-muted);margin-top:1px;white-space:nowrap}
+.program-user-chip span:not(.program-avatar){display:block;font-size:11px;color:var(--pg2-muted);margin-top:1px;white-space:nowrap}
 .program-user-caret{display:inline-flex;margin-left:2px;color:var(--pg2-muted);transition:transform .18s ease}
 .program-user-caret svg{width:14px;height:14px}
 .program-user-chip[aria-expanded="true"] .program-user-caret{transform:rotate(180deg)}
@@ -2013,16 +2009,12 @@ select.signin-input:disabled{
   display:flex;align-items:center;gap:10px;
   padding:10px 10px 12px;margin-bottom:4px;border-bottom:1px solid var(--pg2-line);
 }
-.program-user-dropdown-head .program-avatar{
-  width:38px;height:38px;flex:0 0 38px;
-  background:linear-gradient(135deg,#7C2439,#511420);color:#fff;
-}
 .program-user-dropdown-head div{min-width:0}
 .program-user-dropdown-head b{
   display:block;font-size:13px;font-weight:650;letter-spacing:-.01em;color:var(--pg2-ink);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.program-user-dropdown-head span{
+.program-user-dropdown-head span:not(.program-avatar){
   display:block;font-size:11.5px;color:var(--pg2-muted);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
