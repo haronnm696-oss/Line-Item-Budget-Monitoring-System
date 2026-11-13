@@ -2432,6 +2432,25 @@ select.signin-input:disabled{
 .pp-sort-icon{font-size:9px;opacity:.45}
 .pp-sort-icon.is-active{opacity:1;color:var(--pg2-brand)}
 
+/* Program project detail */
+.pd-back{display:inline-flex;align-items:center;min-height:44px}
+.pd-head{min-width:0}
+.pd-pills{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}
+.pd-reason{font-size:13px;color:var(--pg2-muted)}
+.program-shell .pd-kpi-value{font-size:24px}
+.pd-table{min-width:640px}
+.pd-table .num{text-align:right}
+.pd-group td{
+  background:#FAF7F2;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pg2-muted);
+}
+.pd-subtotal td{font-weight:700;background:#FDFBF7}
+.pd-total td{font-weight:800;border-top:2px solid #EDE4D6}
+.pd-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pd-list li{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-top:1px solid var(--pg2-line);min-width:0}
+.pd-list li:first-child{border-top:none;padding-top:0}
+.pd-list b{font-size:13px;font-weight:650;color:var(--pg2-ink);overflow-wrap:anywhere}
+.pd-list span{font-size:12px;color:var(--pg2-muted)}
+
 /* Responsive */
 @media (max-width: 1200px){
   .pl-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}

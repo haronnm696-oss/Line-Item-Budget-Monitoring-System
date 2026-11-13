@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { decideApproval, fetchProgramApprovals } from '../../api/program';
@@ -29,7 +30,8 @@ export default function ProgramApprovals() {
   const { refreshPending } = useProgramRefresh();
   const [status, setStatus] = useState('pending');
   const [type, setType] = useState('all');
-  const [project, setProject] = useState('');
+  const [searchParams] = useSearchParams();
+  const [project, setProject] = useState(() => searchParams.get('project') ?? '');
   const [funder, setFunder] = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
