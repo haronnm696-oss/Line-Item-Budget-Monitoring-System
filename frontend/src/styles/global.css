@@ -2190,15 +2190,22 @@ select.signin-input:disabled{
 }
 
 .program-shell .program-card.pl-chart-card{
-  display:flex;flex-direction:column;
+  display:flex;flex-direction:column;container-type:inline-size;
   background:#fff;border:1px solid #EDE4D6;border-radius:16px;padding:22px 24px;
 }
 .program-shell .pl-chart-card .program-card-title{font-size:20px;font-weight:800;color:#2B2023}
 .program-shell .pl-chart-card .program-card-sub{font-size:13px;color:#6B5F5F}
-.program-shell .pl-chart-card .pl-chart-empty{flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6B5F5F}
+.program-shell .pl-chart-card .program-card-head{margin-bottom:16px}
+/* Both chart areas share one fixed height so the two cards line up. */
+.pl-chart-body{height:190px;flex:none}
+.pl-chart-empty{display:flex;align-items:center;justify-content:center;font-size:13px;color:#6B5F5F}
 
 /* Budget by project donut */
-.pl-donut{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:20px 28px}
+.pl-donut{display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;gap:20px 28px}
+/* A narrow card stacks the legend under the donut; let that grow. */
+@container (max-width: 420px){
+  .pl-donut{height:auto}
+}
 .pl-donut-figure{position:relative;width:150px;height:150px;flex:0 0 150px}
 .pl-donut-figure svg{display:block}
 .pl-donut-center{
@@ -2214,14 +2221,11 @@ select.signin-input:disabled{
 .pl-donut-legend b{font-weight:800;font-variant-numeric:tabular-nums}
 
 /* Scheduled releases bars */
-.pl-release-chart{
-  flex:1;display:flex;justify-content:space-around;align-items:flex-end;gap:8px;
-  min-height:190px;padding-top:8px;
-}
+.pl-release-chart{display:flex;justify-content:space-around;align-items:stretch;gap:8px}
 .pl-release-col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0}
 .pl-release-plot{
-  width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;
-  height:160px;border-bottom:1px solid #EDE4D6;
+  flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;
+  border-bottom:1px solid #EDE4D6;
 }
 .pl-release-value{font-size:13px;font-weight:700;color:#2B2023;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pl-release-value.is-none{font-weight:600;color:#6B5F5F}
@@ -2343,7 +2347,9 @@ select.signin-input:disabled{
   font-size:10.5px;color:var(--pg2-muted);font-variant-numeric:tabular-nums;
 }
 .pl-fund-meta b{color:var(--pg2-ink);font-size:10.5px}
-.pl-wallet-cta{width:100%;margin-top:12px}
+.program-shell .program-card.pl-wallet{display:flex;flex-direction:column}
+.pl-wallet .pl-fund-list{margin-bottom:12px}
+.pl-wallet-cta{width:100%;margin-top:auto}
 
 /* Scheduled releases */
 .program-shell .program-bars.pl-bars{height:158px;gap:8px;padding:8px 0 0}

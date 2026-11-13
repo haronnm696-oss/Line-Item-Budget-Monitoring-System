@@ -5,6 +5,26 @@ const RADIUS = 60;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 /**
+ * Round shares to one decimal so the displayed values sum to exactly 100.0%
+ * (largest-remainder method). Works in tenths of a percent.
+ */
+function roundedShares(values, total) {
+  const raw = values.map((value) => (value / total) * 1000);
+  const tenths = raw.map(Math.floor);
+  let leftover = 1000 - tenths.reduce((sum, value) => sum + value, 0);
+  raw
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((a, b) => b.remainder - a.remainder)
+    .forEach(({ index }) => {
+      if (leftover > 0) {
+        tenths[index] += 1;
+        leftover -= 1;
+      }
+    });
+  return tenths.map((value) => value / 10);
+}
+
+/**
  * Share of the portfolio budget per project, drawn as an SVG donut.
  * `projects` is the Overview payload's project list (already funder-filtered).
  */
@@ -15,15 +35,17 @@ export default function BudgetByProjectDonut({ projects = [] }) {
     .sort((a, b) => b.budget - a.budget);
   const total = rows.reduce((sum, project) => sum + project.budget, 0);
 
+  const shares = total > 0 ? roundedShares(rows.map((project) => project.budget), total) : [];
   let offset = 0;
   const segments = total > 0
     ? rows.map((project, index) => {
+      // Segment length uses the exact share; only the label is rounded.
       const pct = project.budget / total;
       const length = pct * CIRCUMFERENCE;
       const segment = {
         id: project.id,
         name: project.title,
-        pct: pct * 100,
+        pct: shares[index],
         color: COLORS[index % COLORS.length],
         length,
         offset: -offset,
@@ -47,9 +69,9 @@ export default function BudgetByProjectDonut({ projects = [] }) {
       </div>
 
       {segments.length === 0 ? (
-        <div className="program-empty pl-chart-empty">No budget data yet</div>
+        <div className="pl-chart-body pl-chart-empty">No budget data yet</div>
       ) : (
-        <div className="pl-donut">
+        <div className="pl-chart-body pl-donut">
           <div className="pl-donut-figure">
             <svg
               width="150"
