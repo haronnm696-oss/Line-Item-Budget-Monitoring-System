@@ -74,6 +74,12 @@ const ICONS = {
       <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 8l-4 4 4 4M6 12h10" />
     </svg>
   ),
+  help: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9M12 17h.01" />
+    </svg>
+  ),
   chevron: (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke}>
       <path d="M6 9l6 6 6-6" />
@@ -102,6 +108,22 @@ const NAV_GROUPS = [
     items: [{ to: '/program-users', label: 'Users and roles', icon: 'users' }],
   },
 ];
+
+const APP_VERSION = '1.0';
+
+/** Share of the current calendar year that has elapsed, from today's date. */
+function programPeriod(now = new Date()) {
+  const year = now.getFullYear();
+  const startOfYear = new Date(year, 0, 1);
+  const startOfToday = new Date(year, now.getMonth(), now.getDate());
+  const daysInYear = Math.round((new Date(year + 1, 0, 1) - startOfYear) / 86400000);
+  const dayOfYear = Math.round((startOfToday - startOfYear) / 86400000) + 1;
+  return {
+    year,
+    pct: Math.round((dayOfYear / daysInYear) * 1000) / 10,
+    daysLeft: daysInYear - dayOfYear,
+  };
+}
 
 function todayLabel() {
   return new Date().toLocaleDateString('en-PH', {
@@ -161,6 +183,7 @@ export default function ProgramLayout() {
     navigate('/login', { replace: true });
   }
 
+  const period = programPeriod();
   const initials = user?.avatar_initials ?? user?.name?.slice(0, 2)?.toUpperCase() ?? 'U';
 
   return (
@@ -185,7 +208,7 @@ export default function ProgramLayout() {
           </button>
 
           <div className="program-brand">
-            <span className="program-seal" aria-hidden="true">MSU</span>
+            <img className="program-brand-seal" src="/images/msu-seal-outline.png" alt="MSU seal" />
             <div>
               <div className="program-brand-name">LIB Monitoring</div>
               <div className="program-brand-sub">MSU–Main Campus</div>
@@ -215,12 +238,24 @@ export default function ProgramLayout() {
             ))}
           </nav>
 
-          <div className="program-nav-foot">
-            <span className="program-avatar" aria-hidden="true">{initials}</span>
-            <div>
-              <b>{user?.name ?? 'Program Leader'}</b>
-              <span>{roleInfo?.label ?? 'Program Leader'}</span>
+          <div className="program-side-foot">
+            <div className="program-period">
+              <div className="program-period-label">Program period</div>
+              <div className="program-period-title">Calendar year {period.year}</div>
+              <div className="program-period-track" aria-hidden="true">
+                <span style={{ width: `${period.pct}%` }} />
+              </div>
+              <div className="program-period-meta">
+                {period.pct.toFixed(1)}% of the year elapsed · {period.daysLeft} day{period.daysLeft === 1 ? '' : 's'} left
+              </div>
             </div>
+
+            <a className="program-help-link" href="#">
+              {ICONS.help}
+              <span>Help &amp; guide</span>
+            </a>
+
+            <div className="program-version">LIB Monitoring System v{APP_VERSION} · MSU–Main Campus</div>
           </div>
         </aside>
 
