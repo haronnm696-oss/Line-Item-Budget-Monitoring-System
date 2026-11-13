@@ -3,14 +3,18 @@
 namespace Database\Seeders;
 
 use App\Models\Project;
+use Database\Seeders\Concerns\AssignsDemoFunding;
 use Illuminate\Database\Seeder;
 
 class ProjectsSeeder extends Seeder
 {
+    use AssignsDemoFunding;
+
     public function run(): void
     {
         $projects = [
             [
+                'key' => 'urban',
                 'code' => 'MOST-RD-2026-001',
                 'title' => 'Enhancing Urban Mobility',
                 'description' => 'Line-Item Budget (Form B) project for enhancing urban mobility in Marawi City, funded by MOST-BARMM with MSU-Marawi counterpart.',
@@ -22,6 +26,7 @@ class ProjectsSeeder extends Seeder
                 'status' => 'ongoing',
             ],
             [
+                'key' => 'goat',
                 'code' => 'RP-2026-009',
                 'title' => 'Halal Goat Value Chain Development, Lanao del Sur',
                 'description' => 'DOST-PCAARRD funded project on halal goat value chain development.',
@@ -33,9 +38,10 @@ class ProjectsSeeder extends Seeder
                 'status' => 'ongoing',
             ],
             [
+                'key' => 'weaving',
                 'code' => 'RP-2025-031',
                 'title' => 'Meranaw Weaving Heritage Digital Archive',
-                'description' => 'CHED funded project on digitizing Meranaw weaving heritage.',
+                'description' => 'MOST-BARMM funded project on digitizing Meranaw weaving heritage.',
                 'total_approved_budget' => 940000.00,
                 'implementing_agency_counterpart' => 0.00,
                 'funding_agency_amount' => 940000.00,
@@ -44,9 +50,10 @@ class ProjectsSeeder extends Seeder
                 'status' => 'completed',
             ],
             [
+                'key' => 'nutrition',
                 'code' => 'RP-2026-021',
                 'title' => 'Community Nutrition Surveillance, Marawi Resettlement Sites',
-                'description' => 'DOST-PCHRD funded community nutrition surveillance project.',
+                'description' => 'CHED funded community nutrition surveillance project.',
                 'total_approved_budget' => 1210000.00,
                 'implementing_agency_counterpart' => 0.00,
                 'funding_agency_amount' => 1210000.00,
@@ -57,10 +64,14 @@ class ProjectsSeeder extends Seeder
         ];
 
         foreach ($projects as $p) {
-            Project::updateOrCreate(
+            $key = $p['key'];
+            unset($p['key']);
+
+            $project = Project::updateOrCreate(
                 ['code' => $p['code']],
                 $p
             );
+            $this->assignDemoFunding($project, $key);
         }
     }
 }
