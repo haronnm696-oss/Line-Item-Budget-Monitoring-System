@@ -2407,6 +2407,12 @@ select.signin-input:disabled{
 .program-shell .program-reject label{color:var(--pg2-ink)}
 .program-shell .program-modal-actions{border-color:var(--pg2-line)}
 
+/* Overview links to project pages */
+.pl-project-link{color:inherit;text-decoration:none}
+.pl-project-link:hover,.pl-project-link:focus-visible{color:var(--pg2-brand);text-decoration:underline;text-underline-offset:2px}
+.program-shell a.pl-kpi-link{color:inherit;text-decoration:none;transition:border-color .16s ease,box-shadow .16s ease}
+.program-shell a.pl-kpi-link:hover{border-color:#D9C79A}
+
 /* Program Projects list */
 .program-shell .program-btn.pp-soon:disabled{
   opacity:1;background:#ECE7DD;border-color:#ECE7DD;color:#6B5F5F;box-shadow:none;
