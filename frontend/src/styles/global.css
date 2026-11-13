@@ -2178,9 +2178,6 @@ select.signin-input:disabled{
 .pl-kpi-hero .pl-track-gold>span{background:linear-gradient(90deg,#E8D9A8,#FBF3DF)}
 
 /* Main layout */
-.pl-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:16px;align-items:start}
-.pl-column,.pl-rail{display:flex;flex-direction:column;gap:16px;min-width:0}
-
 /* Overview rows: spending + funding, then the two charts */
 .pl-row{display:grid;gap:16px;align-items:stretch}
 .pl-row>*{min-width:0}
@@ -2361,39 +2358,6 @@ select.signin-input:disabled{
 .program-bar-month{font-size:11px;color:var(--pg2-ink);font-weight:600}
 .program-shell .program-footnote{font-size:10.5px;color:var(--pg2-muted);margin-top:12px}
 
-/* Coming up */
-.pl-deadline-list{display:flex;flex-direction:column}
-.pl-deadline{
-  display:flex;align-items:center;gap:12px;padding:10px 0;min-width:0;
-  border-top:1px solid var(--pg2-line);
-}
-.pl-deadline:first-child{border-top:none;padding-top:2px}
-.pl-date{
-  width:44px;height:46px;flex:0 0 44px;border-radius:12px;
-  background:#FBF8F3;border:1px solid #E9E2D6;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;
-}
-.pl-date span{font-size:8px;font-weight:800;letter-spacing:.08em;color:var(--pg2-muted)}
-.pl-date b{font-size:15px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
-.pl-date.warn{border-color:#EFD9A4;background:#FDF6E4}
-.pl-date.warn b{color:#8A5A0A}
-.pl-date.over{border-color:#F0CCC6;background:#FCEFED}
-.pl-date.over b{color:#8E1B1B}
-.pl-date.ok{border-color:#CFE8D9;background:#EEF7F1}
-.pl-date.ok b{color:#1E5A37}
-.pl-deadline-main{flex:1;min-width:0}
-.pl-deadline-main b{
-  display:block;font-size:11.5px;font-weight:650;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.pl-deadline-main span{
-  display:block;font-size:10.5px;color:var(--pg2-muted);margin-top:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.pl-deadline-status{font-size:10px;font-weight:700;white-space:nowrap;color:var(--pg2-muted)}
-.pl-deadline-status.warn{color:#8A5A0A}
-.pl-deadline-status.over{color:#8E1B1B}
-.pl-deadline-status.ok{color:#1E5A37}
 
 /* Banners, states, modal */
 .program-shell .program-banner{
@@ -2420,7 +2384,6 @@ select.signin-input:disabled{
 /* Responsive */
 @media (max-width: 1200px){
   .pl-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .pl-layout{grid-template-columns:1fr}
 }
 @media (max-width: 900px){
   .program-shell{grid-template-columns:1fr}
