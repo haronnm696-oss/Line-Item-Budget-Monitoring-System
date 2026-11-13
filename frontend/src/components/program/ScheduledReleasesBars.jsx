@@ -21,10 +21,10 @@ export default function ScheduledReleasesBars({ releases = [] }) {
       </div>
 
       {largest <= 0 ? (
-        <div className="program-empty pl-chart-empty">No scheduled releases</div>
+        <div className="pl-chart-body pl-chart-empty">No scheduled releases</div>
       ) : (
         <>
-          <div className="pl-release-chart">
+          <div className="pl-chart-body pl-release-chart">
             {months.map((month) => {
               const has = month.amount > 0;
               return (
