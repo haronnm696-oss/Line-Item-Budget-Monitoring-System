@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramDashboardController;
+use App\Http\Controllers\ProgramProjectController;
 use App\Http\Controllers\ProgramUserController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportController;
@@ -62,6 +63,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Program-wide dashboard: all projects visible to a Program Leader.
     Route::middleware('role.program-leader')->group(function () {
         Route::get('/program/overview', [ProgramDashboardController::class, 'overview']);
+        Route::get('/program/projects', [ProgramProjectController::class, 'index']);
+        Route::get('/program/projects/{project}', [ProgramProjectController::class, 'show']);
         Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
         Route::post('/program/approvals/{approval}/decision', [ProgramDashboardController::class, 'decision']);
 
