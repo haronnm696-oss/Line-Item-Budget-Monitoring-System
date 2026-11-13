@@ -77,6 +77,68 @@ class ProgramDashboardService
     }
 
     /**
+     * Projects page: the same project rows the overview builds, so spent %,
+     * health and the health reason can never differ between the two pages.
+     *
+     * @return array<string, mixed>
+     */
+    public function projectList(?string $funder = null): array
+    {
+        $today = now()->startOfDay();
+        $rows = $this->projects($funder)
+            ->map(fn (Project $project) => $this->projectRow($project, $today))
+            ->values();
+
+        return [
+            'meta' => [
+                'generated_at' => now()->toIso8601String(),
+                'funder' => $funder,
+                'project_count' => $rows->count(),
+            ],
+            'totals' => [
+                'budget' => round((float) $rows->sum('budget'), 2),
+                'spent' => round((float) $rows->sum('spent'), 2),
+            ],
+            'projects' => $rows->all(),
+            'funders' => $this->funderOptions(),
+        ];
+    }
+
+    /**
+     * Read-only project detail. The header numbers reuse projectRow(); line
+     * items reuse ProjectFinancialService::categoryRows().
+     *
+     * @return array<string, mixed>
+     */
+    public function projectDetail(Project $project): array
+    {
+        $today = now()->startOfDay();
+        $project = $this->projectQuery()->whereKey($project->getKey())->firstOrFail();
+        $row = $this->projectRow($project, $today);
+
+        return [
+            'project' => $row + [
+                'description' => $project->description,
+                'funder_name' => $project->fundingAgency?->name,
+            ],
+            'line_items' => $this->lineItemGroups($project),
+            'tranches' => $this->trancheRows($project, $today),
+            'expenses' => $this->recentExpenses($project),
+            'team' => $project->projectUsers
+                ->sortBy(fn ($assignment) => [$assignment->role?->name, $assignment->user?->name])
+                ->map(fn ($assignment) => [
+                    'user_id' => $assignment->user_id,
+                    'name' => $assignment->user?->name ?? 'Unknown user',
+                    'role' => $assignment->role?->name ?? 'Member',
+                    'role_slug' => $assignment->role?->slug,
+                ])
+                ->values()
+                ->all(),
+            'activity' => $this->projectActivity($project),
+        ];
+    }
+
+    /**
      * Approval workspace: filtered rows, tab counts, recently decided rows,
      * and the options needed by the filter bar.
      *
@@ -266,6 +328,23 @@ class ProgramDashboardService
 
     protected function projects(?string $funder): Collection
     {
+        return $this->projectQuery()
+            ->when($funder, function ($query) use ($funder) {
+                if (ctype_digit((string) $funder)) {
+                    $query->where('funding_agency_id', (int) $funder);
+                } else {
+                    $query->whereHas('fundingAgency', function ($agency) use ($funder) {
+                        $agency->where('acronym', $funder)->orWhere('name', $funder);
+                    });
+                }
+            })
+            ->orderBy('start_date')
+            ->orderBy('id')
+            ->get();
+    }
+
+    protected function projectQuery()
+    {
         return Project::query()
             ->with([
                 'fundingAgency',
@@ -279,19 +358,7 @@ class ProgramDashboardService
                     $query->where('status', 'pending')
                         ->with(['requestedBy', 'tranche', 'liquidation']);
                 },
-            ])
-            ->when($funder, function ($query) use ($funder) {
-                if (ctype_digit((string) $funder)) {
-                    $query->where('funding_agency_id', (int) $funder);
-                } else {
-                    $query->whereHas('fundingAgency', function ($agency) use ($funder) {
-                        $agency->where('acronym', $funder)->orWhere('name', $funder);
-                    });
-                }
-            })
-            ->orderBy('start_date')
-            ->orderBy('id')
-            ->get();
+            ]);
     }
 
     /**
@@ -326,6 +393,7 @@ class ProgramDashboardService
             'title' => $project->title,
             'funder' => $this->funderLabel($project),
             'funder_id' => $project->funding_agency_id,
+            'funder_reference' => $project->funder_reference,
             'status' => ucfirst($status),
             'budget' => round($budget, 2),
             'spent' => round($spent, 2),
@@ -881,6 +949,141 @@ class ProgramDashboardService
                 'released_at' => $approval->tranche->released_at ?? now()->toDateString(),
             ]);
         }
+    }
+
+    /**
+     * Line items grouped into PS and MOOE with subtotals and a grand total.
+     *
+     * @return array<string, mixed>
+     */
+    protected function lineItemGroups(Project $project): array
+    {
+        $rows = collect($this->financials->categoryRows($project));
+        $total = fn (Collection $items) => [
+            'allocated' => round((float) $items->sum('allocated'), 2),
+            'spent' => round((float) $items->sum('spent'), 2),
+            'remaining' => round((float) $items->sum('remaining'), 2),
+            'utilization_pct' => $this->pct((float) $items->sum('spent'), (float) $items->sum('allocated')),
+        ];
+
+        $groups = collect(['PS', 'MOOE'])
+            ->map(function (string $type) use ($rows, $total) {
+                $items = $rows->where('type', $type)->values();
+
+                return [
+                    'type' => $type,
+                    'label' => $type === 'PS' ? 'Personal Services (PS)' : 'Maintenance and Other Operating Expenses (MOOE)',
+                    'items' => $items->map(fn (array $item) => $item + [
+                        'over_budget' => $item['spent'] > $item['allocated'],
+                    ])->all(),
+                    'subtotal' => $total($items),
+                ];
+            })
+            ->filter(fn (array $group) => count($group['items']) > 0)
+            ->values()
+            ->all();
+
+        return [
+            'groups' => $groups,
+            'total' => $total($rows),
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    protected function trancheRows(Project $project, Carbon $today): array
+    {
+        return $project->tranches
+            ->sortBy('sequence')
+            ->map(function (ProjectTranche $tranche) use ($project, $today) {
+                $released = $tranche->status === 'released';
+                $overdue = ! $released
+                    && $tranche->planned_release_date
+                    && $tranche->planned_release_date->lt($today);
+                $liquidation = $project->liquidations
+                    ->where('project_tranche_id', $tranche->id)
+                    ->sortByDesc('id')
+                    ->first();
+
+                return [
+                    'id' => $tranche->id,
+                    'sequence' => $tranche->sequence,
+                    'name' => $tranche->name,
+                    'planned_release_date' => $tranche->planned_release_date?->toDateString(),
+                    'released_at' => $tranche->released_at?->toDateString(),
+                    'amount' => round((float) $tranche->amount, 2),
+                    'status' => $released ? 'Released' : ($overdue ? 'Overdue' : 'Scheduled'),
+                    'liquidation_status' => $liquidation
+                        ? ucfirst($liquidation->status)
+                        : ($released ? 'Not submitted' : null),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Latest verified expenses; verified records are what "spent" counts.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function recentExpenses(Project $project): array
+    {
+        return $project->expenses()
+            ->with('libCategory')
+            ->where('status', 'verified')
+            ->orderByDesc('expense_date')
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get()
+            ->map(fn ($expense) => [
+                'id' => $expense->id,
+                'date' => $expense->expense_date?->toDateString(),
+                'line_item' => $expense->libCategory?->line_item_name,
+                'description' => $expense->description,
+                'payee' => $expense->payee,
+                'amount' => round((float) $expense->amount, 2),
+                'reference_no' => $expense->reference_no,
+            ])
+            ->all();
+    }
+
+    /**
+     * Latest audit entries about this project: the project record itself and
+     * any record whose logged values carry its project_id.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function projectActivity(Project $project): array
+    {
+        return AuditTrail::with('user')
+            ->where(function ($query) use ($project) {
+                $query->where(function ($own) use ($project) {
+                    $own->where('model_type', 'Project')->where('model_id', $project->id);
+                })
+                    ->orWhere('new_values->project_id', $project->id)
+                    ->orWhere('old_values->project_id', $project->id);
+            })
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get()
+            ->map(fn (AuditTrail $entry) => [
+                'id' => $entry->id,
+                'action' => $entry->action,
+                'record_type' => $entry->model_type,
+                'record_id' => $entry->model_id,
+                'user' => $entry->user?->name ?? 'System',
+                'reason' => $entry->reason,
+                'summary' => $entry->new_values['title']
+                    ?? $entry->new_values['description']
+                    ?? $entry->new_values['reference_no']
+                    ?? $entry->new_values['name']
+                    ?? null,
+                'created_at' => $entry->created_at?->toIso8601String(),
+            ])
+            ->all();
     }
 
     protected function funderLabel(Project $project): string
