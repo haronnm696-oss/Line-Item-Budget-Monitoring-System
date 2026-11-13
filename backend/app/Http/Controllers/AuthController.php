@@ -215,7 +215,15 @@ class AuthController extends Controller
         }
 
         if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
-            return $this->passwordResetThrottleResponse(RateLimiter::availableIn($cooldownKey));
+            $retryAfter = RateLimiter::availableIn($cooldownKey);
+
+            // Allow the request when the cooldown is within the final second.
+            // The UI countdown and the server clock can disagree by a fraction
+            // of a second, which would otherwise turn a valid 60-second resend
+            // into a false 429.
+            if ($retryAfter > 1) {
+                return $this->passwordResetThrottleResponse($retryAfter);
+            }
         }
 
         RateLimiter::hit($emailKey, 3600);
