@@ -118,7 +118,7 @@ class PasswordResetTest extends TestCase
         $this->forgot($user->email)->assertStatus(429);
         Notification::assertSentToTimes($user, ResetPasswordNotification::class, 1);
 
-        $this->travel(61)->seconds();
+        $this->travel(60)->seconds();
 
         $this->forgot($user->email)->assertStatus(202);
         Notification::assertSentToTimes($user, ResetPasswordNotification::class, 2);

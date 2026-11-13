@@ -91,7 +91,11 @@ return [
             'provider' => 'users',
             'table' => 'password_resets',
             'expire' => 60,
-            'throttle' => 60,
+            // ForgotPasswordController enforces the 60-second resend cooldown
+            // and the 3-per-hour per-email limit. Disable the broker's own
+            // throttle so a resend at the end of the UI countdown is not
+            // silently suppressed.
+            'throttle' => 0,
         ],
     ],
 
