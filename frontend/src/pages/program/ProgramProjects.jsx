@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { fetchProgramOverview } from '../../api/program';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { fetchProgramProjects } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
 import { formatPct } from '../../components/money';
+
+const FILTER_KEYS = ['q', 'status', 'funder', 'risk'];
 
 function projectPeriod(start, end) {
   if (!start || !end) return '—';
@@ -21,20 +23,50 @@ function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function downloadCSV(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.setAttribute('href', url);
+  anchor.setAttribute('download', filename);
+  anchor.style.visibility = 'hidden';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+const SORTERS = {
+  title: (project) => (project.title ?? '').toLowerCase(),
+  spent: (project) => Number(project.spent_pct) || 0,
+  period: (project) => project.start_date ?? '',
+};
+
 export default function ProgramProjects() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
-  const [funder, setFunder] = useState('all');
-  const [atRiskOnly, setAtRiskOnly] = useState(false);
+  const [sort, setSort] = useState({ key: null, dir: 'asc' });
 
+  const search = params.get('q') ?? '';
+  const status = params.get('status') ?? '';
+  const funder = params.get('funder') ?? '';
+  const atRiskOnly = params.get('risk') === '1';
+  const hasFilters = FILTER_KEYS.some((key) => params.get(key));
+
+  // The funder filter runs on the server, exactly like the overview.
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchProgramOverview()
+    setError('');
+    fetchProgramProjects(funder)
       .then((payload) => {
         if (alive) setData(payload);
       })
@@ -45,25 +77,91 @@ export default function ProgramProjects() {
         if (alive) setLoading(false);
       });
     return () => { alive = false; };
-  }, []);
+  }, [funder]);
+
+  function setFilter(key, value) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  }
+
+  function clearFilters() {
+    const next = new URLSearchParams(params);
+    FILTER_KEYS.forEach((key) => next.delete(key));
+    setParams(next, { replace: true });
+  }
+
+  function toggleSort(key) {
+    setSort((current) => (current.key === key
+      ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' }));
+  }
 
   const projects = useMemo(() => (Array.isArray(data?.projects) ? data.projects : []), [data]);
   const funders = useMemo(() => (Array.isArray(data?.funders) ? data.funders : []), [data]);
-
   const atRiskCount = projects.filter((project) => project.health === 'At risk').length;
 
-  const filtered = projects.filter((project) => {
+  const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const matchesSearch = !query
-      || project.title?.toLowerCase().includes(query)
-      || project.code?.toLowerCase().includes(query);
-    const matchesStatus = status === 'all' || project.status === status;
-    const matchesFunder = funder === 'all'
-      || String(project.funder_id) === String(funder)
-      || project.funder === funder;
-    const matchesRisk = !atRiskOnly || project.health === 'At risk';
-    return matchesSearch && matchesStatus && matchesFunder && matchesRisk;
-  });
+    const filtered = projects.filter((project) => {
+      const matchesSearch = !query
+        || project.title?.toLowerCase().includes(query)
+        || project.code?.toLowerCase().includes(query);
+      const matchesStatus = !status || project.status === status;
+      const matchesRisk = !atRiskOnly || project.health === 'At risk';
+      return matchesSearch && matchesStatus && matchesRisk;
+    });
+
+    if (!sort.key) return filtered;
+    const value = SORTERS[sort.key];
+    const direction = sort.dir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const left = value(a);
+      const right = value(b);
+      if (left < right) return -1 * direction;
+      if (left > right) return 1 * direction;
+      return 0;
+    });
+  }, [projects, search, status, atRiskOnly, sort]);
+
+  function ariaSort(key) {
+    if (sort.key !== key) return 'none';
+    return sort.dir === 'asc' ? 'ascending' : 'descending';
+  }
+
+  function sortHeader(key, label) {
+    const active = sort.key === key;
+    return (
+      <th aria-sort={ariaSort(key)}>
+        <button type="button" className="pp-sort" onClick={() => toggleSort(key)}>
+          {label}
+          <span className={`pp-sort-icon${active ? ' is-active' : ''}`} aria-hidden="true">
+            {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        </button>
+      </th>
+    );
+  }
+
+  function exportCsv() {
+    const header = ['Project', 'Code', 'Funder', 'Reference', 'Project Leader', 'Budget', 'Spent %', 'Period', 'Status', 'Health'];
+    const lines = rows.map((project) => [
+      project.title,
+      project.code,
+      project.funder,
+      project.funder_reference,
+      project.project_leader,
+      Number(project.budget || 0).toFixed(2),
+      formatPct(project.spent_pct),
+      projectPeriod(project.start_date, project.end_date),
+      project.status,
+      project.health,
+    ].map(csvCell).join(','));
+    downloadCSV([header.map(csvCell).join(','), ...lines].join('\n'), 'program-projects.csv');
+  }
+
+  const detailState = { from: `${location.pathname}${location.search}` };
 
   return (
     <>
@@ -74,13 +172,11 @@ export default function ProgramProjects() {
           <p className="program-sub">Externally funded research projects across every funder.</p>
         </div>
         <div className="program-head-actions">
-          <button
-            type="button"
-            className="program-btn primary"
-            disabled
-            title="The project creation API is not implemented yet."
-          >
-            New project · Coming soon
+          <button type="button" className="program-btn" onClick={exportCsv} disabled={loading || rows.length === 0}>
+            Export CSV
+          </button>
+          <button type="button" className="program-btn pp-soon" disabled title="Available soon">
+            New project
           </button>
         </div>
       </div>
@@ -97,7 +193,7 @@ export default function ProgramProjects() {
             className="program-input"
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => setFilter('q', event.target.value)}
             placeholder="Search title or code"
           />
         </div>
@@ -108,9 +204,9 @@ export default function ProgramProjects() {
             id="project-status"
             className="program-select"
             value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            onChange={(event) => setFilter('status', event.target.value)}
           >
-            <option value="all">All statuses</option>
+            <option value="">All statuses</option>
             <option value="Ongoing">Ongoing</option>
             <option value="Completed">Completed</option>
             <option value="Planning">Planning</option>
@@ -124,9 +220,9 @@ export default function ProgramProjects() {
             id="project-funder"
             className="program-select"
             value={funder}
-            onChange={(event) => setFunder(event.target.value)}
+            onChange={(event) => setFilter('funder', event.target.value)}
           >
-            <option value="all">All funders</option>
+            <option value="">All funders</option>
             {funders.map((agency) => (
               <option key={agency.id} value={agency.id}>{agency.label}</option>
             ))}
@@ -135,42 +231,65 @@ export default function ProgramProjects() {
 
         <button
           type="button"
-          className="program-btn"
+          className={`program-btn pp-toggle${atRiskOnly ? ' is-active' : ''}`}
           aria-pressed={atRiskOnly}
-          onClick={() => setAtRiskOnly((value) => !value)}
+          onClick={() => setFilter('risk', atRiskOnly ? '' : '1')}
         >
           At risk · {atRiskCount}
         </button>
+
+        {hasFilters && (
+          <button type="button" className="pp-clear" onClick={clearFilters}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       <section className="program-card">
         {loading ? (
           <div className="program-empty">Loading projects…</div>
+        ) : rows.length === 0 ? (
+          <div className="program-empty pp-empty">
+            No projects match these filters.{' '}
+            {hasFilters && (
+              <button type="button" className="pp-clear" onClick={clearFilters}>Clear filters</button>
+            )}
+          </div>
         ) : (
           <div className="program-scroll">
-            <table className="program-table" style={{ minWidth: 900 }}>
+            <table className="program-table pp-table">
               <thead>
                 <tr>
-                  <th>Project</th>
+                  {sortHeader('title', 'Project')}
                   <th>Funder</th>
                   <th>Project Leader</th>
-                  <th>Spent</th>
-                  <th>Period</th>
+                  {sortHeader('spent', 'Spent')}
+                  {sortHeader('period', 'Period')}
                   <th>Status</th>
                   <th>Health</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((project) => (
+                {rows.map((project) => (
                   <tr
                     key={project.id}
-                    onClick={() => navigate(`/program-projects/${project.id}`)}
-                    style={{ cursor: 'pointer' }}
+                    className="pp-row"
+                    onClick={(event) => {
+                      // The title link handles its own click (and keyboard).
+                      if (event.target.closest('a')) return;
+                      navigate(`/program-projects/${project.id}`, { state: detailState });
+                    }}
                   >
                     <td>
-                      <div className="project-name">{project.title}</div>
+                      <Link
+                        className="project-name pp-link"
+                        to={`/program-projects/${project.id}`}
+                        state={detailState}
+                      >
+                        {project.title}
+                      </Link>
                       <div className="project-code">
-                        {project.code} · ref. {project.funding_reference || '—'}
+                        {project.code} · ref. {project.funder_reference || '—'}
                       </div>
                     </td>
                     <td>{project.funder}</td>
@@ -183,23 +302,16 @@ export default function ProgramProjects() {
                     </td>
                     <td>{projectPeriod(project.start_date, project.end_date)}</td>
                     <td><ProgramPill value={project.status} /></td>
-                    <td><ProgramPill value={project.health} /></td>
+                    <td>
+                      <ProgramPill value={project.health} />
+                      <div className="pl-health-reason">{project.health_reason}</div>
+                    </td>
                   </tr>
                 ))}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="program-empty">No projects match these filters.</td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
         )}
-
-        <p className="program-help" style={{ marginTop: 14 }}>
-          New project is not available yet. Missing: a project create/update API, validation,
-          funding-agency and Project Leader assignment, tranche setup, and an audit entry.
-        </p>
       </section>
     </>
   );
