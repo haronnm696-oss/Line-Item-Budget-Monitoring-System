@@ -25,15 +25,6 @@ function greeting() {
   return 'Good evening';
 }
 
-function shortDate(iso) {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return { month: '', day: '' };
-  return {
-    month: date.toLocaleDateString('en-PH', { month: 'short' }).toUpperCase(),
-    day: String(date.getDate()).padStart(2, '0'),
-  };
-}
-
 function approvalGlyph(approval) {
   if (approval.kind === 'liquidation') return '▤';
   if (approval.kind === 'realignment') return '⇄';
@@ -179,7 +170,6 @@ export default function ProgramLeaderDashboard() {
       ? data.forecast
       : [];
   const fundingSources = Array.isArray(data?.funding_sources) ? data.funding_sources : [];
-  const deadlines = Array.isArray(data?.deadlines) ? data.deadlines : [];
 
   const health = kpis.health ?? {};
   const healthyCount = Number(health.healthy) || 0;
@@ -452,173 +442,134 @@ export default function ProgramLeaderDashboard() {
             <ScheduledReleasesBars releases={releases} />
           </div>
 
-          <div className="pl-layout">
-            <div className="pl-column">
-              <section className="program-card">
-                <div className="program-card-head">
-                  <div>
-                    <div className="program-card-title">Approval inbox</div>
-                    <div className="program-card-sub">All projects, oldest first</div>
-                  </div>
-                  <Link className="program-card-link" to="/program-approvals">View all</Link>
-                </div>
-
-                {approvals.length === 0 ? (
-                  <div className="program-empty">All caught up. No pending approvals.</div>
-                ) : (
-                  <div className="pl-approval-list">
-                    {approvals.map((approval) => {
-                      const isOwn = Number(approval.requested_by_id) === Number(user?.id);
-                      const busy = busyApprovalId === approval.id;
-                      return (
-                        <div className="pl-approval" key={approval.id}>
-                          <span className="pl-approval-icon" aria-hidden="true">
-                            {approvalGlyph(approval)}
-                          </span>
-                          <div className="pl-approval-main">
-                            <div className="pl-approval-title">
-                              <b>{approval.title}</b>
-                              <ProgramPill value={approval.type_label} />
-                            </div>
-                            <div className="pl-approval-meta">
-                              <span>{approval.project}</span>
-                              {approval.amount != null && <span className="amt">{peso(approval.amount)}</span>}
-                              <span>{approval.days_waiting ?? 0}d waiting</span>
-                              {approval.requested_by && (
-                                <span>{approval.requested_by_role ?? approval.requested_by}</span>
-                              )}
-                            </div>
-                            {isOwn && (
-                              <div className="program-warning">
-                                You cannot approve a request you created
-                              </div>
-                            )}
-                          </div>
-                          <div className="pl-approval-actions">
-                            <button
-                              type="button"
-                              className="program-btn sm primary"
-                              disabled={busy || isOwn}
-                              aria-disabled={busy || isOwn}
-                              onClick={() => handleApprove(approval)}
-                            >
-                              {busy ? '…' : 'Approve'}
-                            </button>
-                            <button
-                              type="button"
-                              className="program-btn sm"
-                              disabled={busy || isOwn}
-                              aria-disabled={busy || isOwn}
-                              onClick={() => {
-                                setRejectError('');
-                                setRejectTarget(approval);
-                              }}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-
-              <section className="program-card">
-                <div className="program-card-head">
-                  <div>
-                    <div className="program-card-title">Project health matrix</div>
-                    <div className="program-card-sub">Spending, tranche, receipts and overall health</div>
-                  </div>
-                </div>
-
-                <div className="program-scroll">
-                  <table className="program-table pl-table" style={{ minWidth: 860 }}>
-                    <thead>
-                      <tr>
-                        <th>Project</th>
-                        <th>Spent / time</th>
-                        <th>Tranche</th>
-                        <th>Receipts</th>
-                        <th>Health</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {projects.map((project) => (
-                        <tr key={project.id}>
-                          <td>
-                            <div className="project-name">{project.title}</div>
-                            <div className="project-code">{project.code} · {project.funder}</div>
-                          </td>
-                          <td>
-                            <div className="pl-mini-bars">
-                              <div className="pl-mini-line">
-                                <div className="pl-track">
-                                  <span style={{ width: `${clampPct(project.spent_pct)}%` }} />
-                                </div>
-                                <b>{formatPct(project.spent_pct)}</b>
-                              </div>
-                              <div className="pl-mini-line is-time">
-                                <div className="pl-track">
-                                  <span style={{ width: `${clampPct(project.time_pct)}%` }} />
-                                </div>
-                                <b>{formatPct(project.time_pct)}</b>
-                              </div>
-                            </div>
-                          </td>
-                          <td><ProgramPill value={project.tranche_status} /></td>
-                          <td className="num">
-                            {project.expenses_count > 0 && project.receipt_compliance_pct != null
-                              ? formatPct(project.receipt_compliance_pct)
-                              : '—'}
-                          </td>
-                          <td>
-                            <ProgramPill value={project.health} />
-                            <div className="pl-health-reason">{project.health_reason}</div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+          <section className="program-card">
+            <div className="program-card-head">
+              <div>
+                <div className="program-card-title">Approval inbox</div>
+                <div className="program-card-sub">All projects, oldest first</div>
+              </div>
+              <Link className="program-card-link" to="/program-approvals">View all</Link>
             </div>
 
-            <aside className="pl-rail">
-              <section className="program-card">
-                <div className="program-card-head">
-                  <div>
-                    <div className="program-card-title">Coming up</div>
-                    <div className="program-card-sub">Reports, liquidations and tranches</div>
-                  </div>
-                  <Link className="program-card-link" to="/program-audit">Calendar</Link>
-                </div>
-
-                {deadlines.length === 0 ? (
-                  <div className="program-empty">Nothing due in the near term.</div>
-                ) : (
-                  <div className="pl-deadline-list">
-                    {deadlines.slice(0, 6).map((item) => {
-                      const { month, day } = shortDate(item.date);
-                      return (
-                        <div className="pl-deadline" key={item.id}>
-                          <div className={`pl-date ${item.tone}`}>
-                            <span>{month}</span>
-                            <b>{day}</b>
-                          </div>
-                          <div className="pl-deadline-main">
-                            <b>{item.title}</b>
-                            <span>{item.project}</span>
-                          </div>
-                          <span className={`pl-deadline-status ${item.tone}`}>{item.status}</span>
+            {approvals.length === 0 ? (
+              <div className="program-empty">All caught up. No pending approvals.</div>
+            ) : (
+              <div className="pl-approval-list">
+                {approvals.map((approval) => {
+                  const isOwn = Number(approval.requested_by_id) === Number(user?.id);
+                  const busy = busyApprovalId === approval.id;
+                  return (
+                    <div className="pl-approval" key={approval.id}>
+                      <span className="pl-approval-icon" aria-hidden="true">
+                        {approvalGlyph(approval)}
+                      </span>
+                      <div className="pl-approval-main">
+                        <div className="pl-approval-title">
+                          <b>{approval.title}</b>
+                          <ProgramPill value={approval.type_label} />
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            </aside>
-          </div>
+                        <div className="pl-approval-meta">
+                          <span>{approval.project}</span>
+                          {approval.amount != null && <span className="amt">{peso(approval.amount)}</span>}
+                          <span>{approval.days_waiting ?? 0}d waiting</span>
+                          {approval.requested_by && (
+                            <span>{approval.requested_by_role ?? approval.requested_by}</span>
+                          )}
+                        </div>
+                        {isOwn && (
+                          <div className="program-warning">
+                            You cannot approve a request you created
+                          </div>
+                        )}
+                      </div>
+                      <div className="pl-approval-actions">
+                        <button
+                          type="button"
+                          className="program-btn sm primary"
+                          disabled={busy || isOwn}
+                          aria-disabled={busy || isOwn}
+                          onClick={() => handleApprove(approval)}
+                        >
+                          {busy ? '…' : 'Approve'}
+                        </button>
+                        <button
+                          type="button"
+                          className="program-btn sm"
+                          disabled={busy || isOwn}
+                          aria-disabled={busy || isOwn}
+                          onClick={() => {
+                            setRejectError('');
+                            setRejectTarget(approval);
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="program-card">
+            <div className="program-card-head">
+              <div>
+                <div className="program-card-title">Project health matrix</div>
+                <div className="program-card-sub">Spending, tranche, receipts and overall health</div>
+              </div>
+            </div>
+
+            <div className="program-scroll">
+              <table className="program-table pl-table" style={{ minWidth: 860 }}>
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Spent / time</th>
+                    <th>Tranche</th>
+                    <th>Receipts</th>
+                    <th>Health</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.map((project) => (
+                    <tr key={project.id}>
+                      <td>
+                        <div className="project-name">{project.title}</div>
+                        <div className="project-code">{project.code} · {project.funder}</div>
+                      </td>
+                      <td>
+                        <div className="pl-mini-bars">
+                          <div className="pl-mini-line">
+                            <div className="pl-track">
+                              <span style={{ width: `${clampPct(project.spent_pct)}%` }} />
+                            </div>
+                            <b>{formatPct(project.spent_pct)}</b>
+                          </div>
+                          <div className="pl-mini-line is-time">
+                            <div className="pl-track">
+                              <span style={{ width: `${clampPct(project.time_pct)}%` }} />
+                            </div>
+                            <b>{formatPct(project.time_pct)}</b>
+                          </div>
+                        </div>
+                      </td>
+                      <td><ProgramPill value={project.tranche_status} /></td>
+                      <td className="num">
+                        {project.expenses_count > 0 && project.receipt_compliance_pct != null
+                          ? formatPct(project.receipt_compliance_pct)
+                          : '—'}
+                      </td>
+                      <td>
+                        <ProgramPill value={project.health} />
+                        <div className="pl-health-reason">{project.health_reason}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
 
