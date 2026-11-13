@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { ENDPOINTS } from '../../api/endpoints';
 
@@ -14,6 +15,8 @@ export default function ProgramAudit() {
   const [to, setTo] = useState('');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [action, setAction] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const project = searchParams.get('project') ?? '';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -25,6 +28,7 @@ export default function ProgramAudit() {
           to: to || undefined,
           flagged: flaggedOnly ? 1 : undefined,
           action: action || undefined,
+          project_id: project || undefined,
         },
       });
       setRows(Array.isArray(response.data) ? response.data : []);
@@ -33,7 +37,7 @@ export default function ProgramAudit() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, flaggedOnly, action]);
+  }, [from, to, flaggedOnly, action, project]);
 
   useEffect(() => {
     load();
@@ -91,6 +95,23 @@ export default function ProgramAudit() {
         <span className="spacer" />
         <button type="button" className="program-btn" onClick={load}>Refresh</button>
       </div>
+
+      {project && (
+        <div className="program-banner" role="status">
+          Showing entries for one project{rows[0]?.project ? `: ${rows[0].project}` : ''}.{' '}
+          <button
+            type="button"
+            className="pp-clear"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('project');
+              setSearchParams(next, { replace: true });
+            }}
+          >
+            Show all projects
+          </button>
+        </div>
+      )}
 
       {error && <div className="program-banner error" role="alert">{error}</div>}
 

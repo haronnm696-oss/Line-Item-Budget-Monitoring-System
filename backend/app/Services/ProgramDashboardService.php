@@ -82,12 +82,21 @@ class ProgramDashboardService
      *
      * @return array<string, mixed>
      */
-    public function projectList(?string $funder = null): array
+    public function projectList(array $filters = []): array
     {
         $today = now()->startOfDay();
-        $rows = $this->projects($funder)
+        $funder = $filters['funder'] ?? null;
+        $all = $this->projects($funder)
             ->map(fn (Project $project) => $this->projectRow($project, $today))
             ->values();
+
+        // Every filter except "at risk", so the toggle can show its count.
+        $base = $all->filter(fn (array $row) => $this->matchesFilters($row, $filters))->values();
+        $atRiskCount = $base->where('health', 'At risk')->count();
+        $rows = ! empty($filters['risk'])
+            ? $base->where('health', 'At risk')->values()
+            : $base;
+        $rows = $this->sortRows($rows, $filters['sort'] ?? null, $filters['dir'] ?? 'asc');
 
         return [
             'meta' => [
@@ -99,9 +108,142 @@ class ProgramDashboardService
                 'budget' => round((float) $rows->sum('budget'), 2),
                 'spent' => round((float) $rows->sum('spent'), 2),
             ],
+            'summary' => $this->listSummary($rows, $funder),
+            'at_risk_count' => $atRiskCount,
             'projects' => $rows->all(),
             'funders' => $this->funderOptions(),
+            'leaders' => $this->leaderOptions(),
+            'years' => $this->yearOptions(),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $filters
+     */
+    protected function matchesFilters(array $row, array $filters): bool
+    {
+        $query = mb_strtolower(trim((string) ($filters['q'] ?? '')));
+        if ($query !== ''
+            && ! str_contains(mb_strtolower((string) $row['title']), $query)
+            && ! str_contains(mb_strtolower((string) $row['code']), $query)) {
+            return false;
+        }
+
+        if (! empty($filters['status']) && strcasecmp($row['status'], (string) $filters['status']) !== 0) {
+            return false;
+        }
+
+        if (! empty($filters['leader']) && (int) $row['leader_id'] !== (int) $filters['leader']) {
+            return false;
+        }
+
+        if (! empty($filters['year'])) {
+            // A project matches a year when its period includes any day of it.
+            $year = (int) $filters['year'];
+            $start = $row['start_date'];
+            $end = $row['end_date'];
+
+            if ($start && $start > sprintf('%04d-12-31', $year)) {
+                return false;
+            }
+            if ($end && $end < sprintf('%04d-01-01', $year)) {
+                return false;
+            }
+            if (! $start && ! $end) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected function sortRows(Collection $rows, ?string $sort, string $dir): Collection
+    {
+        $key = [
+            'title' => fn (array $row) => mb_strtolower((string) $row['title']),
+            'spent' => fn (array $row) => (float) $row['spent_pct'],
+            'period' => fn (array $row) => (string) ($row['start_date'] ?? ''),
+        ][$sort] ?? null;
+
+        if (! $key) {
+            return $rows->values();
+        }
+
+        return ($dir === 'desc' ? $rows->sortByDesc($key) : $rows->sortBy($key))->values();
+    }
+
+    /**
+     * Totals for exactly the rows on screen. Sums of projectRow() values, the
+     * same arithmetic the overview KPIs use.
+     *
+     * @return array<string, mixed>
+     */
+    protected function listSummary(Collection $rows, ?string $funder): array
+    {
+        $allocated = round((float) $rows->sum('budget'), 2);
+        $spent = round((float) $rows->sum('spent'), 2);
+        $remaining = round($allocated - $spent, 2);
+
+        $funderName = null;
+        if ($funder) {
+            $agency = ctype_digit((string) $funder)
+                ? FundingAgency::find((int) $funder)
+                : FundingAgency::where('acronym', $funder)->orWhere('name', $funder)->first();
+            $funderName = $agency?->name;
+        }
+
+        return [
+            'projects' => $rows->count(),
+            'ongoing' => $rows->where('status', 'Ongoing')->count(),
+            'completed' => $rows->where('status', 'Completed')->count(),
+            'allocated' => $allocated,
+            'spent' => $spent,
+            'remaining' => $remaining,
+            'spent_pct' => $this->pct($spent, $allocated),
+            'remaining_pct' => $this->pct($remaining, $allocated),
+            'funder_name' => $funderName,
+        ];
+    }
+
+    /**
+     * Users who lead at least one project.
+     *
+     * @return array<int, array{id: int, name: string}>
+     */
+    protected function leaderOptions(): array
+    {
+        return User::query()
+            ->whereHas('projectUsers', fn ($assignment) => $assignment
+                ->whereHas('role', fn ($role) => $role->where('slug', 'project-leader')))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Every year covered by at least one project period, newest first.
+     *
+     * @return array<int, int>
+     */
+    protected function yearOptions(): array
+    {
+        $years = collect();
+
+        Project::query()->get(['start_date', 'end_date'])->each(function (Project $project) use ($years) {
+            $start = $project->start_date?->year ?? $project->end_date?->year;
+            $end = $project->end_date?->year ?? $start;
+            if ($start === null) {
+                return;
+            }
+            foreach (range(min($start, $end), max($start, $end)) as $year) {
+                $years->push($year);
+            }
+        });
+
+        return $years->unique()->sortDesc()->values()->all();
     }
 
     /**
@@ -386,6 +528,9 @@ class ProgramDashboardService
             fn (ProjectReport $row) => $row->type === 'terminal' && $row->submitted_at !== null
         );
         [$health, $reason] = $this->health($tranche['overdue'], $spentPct, $gap, $receiptPct, $closed, $terminalFiled);
+        $buckets = $this->financials->bucketTotals($project);
+        $leader = $project->projectUsers
+            ->first(fn ($assignment) => $assignment->role?->slug === 'project-leader');
 
         return [
             'id' => $project->id,
@@ -412,12 +557,74 @@ class ProgramDashboardService
             'next_report' => $report['next'],
             'health' => $health,
             'health_reason' => $reason,
-            'project_leader' => $project->projectUsers
-                ->first(fn ($assignment) => $assignment->role?->slug === 'project-leader')
-                ?->user?->name,
+            'health_note' => $this->healthNote($health, $reason, $gap, $closed),
+            'project_leader' => $leader?->user?->name,
+            'leader_id' => $leader?->user_id,
             'start_date' => $project->start_date?->toDateString(),
             'end_date' => $project->end_date?->toDateString(),
+            'ps' => $buckets['PS'],
+            'mooe' => $buckets['MOOE'],
+            'last_entry_date' => $this->lastEntryDate($project, $today),
+            // projectQuery() eager-loads pending requests only.
+            'pending_approvals' => $project->approvalRequests->where('status', 'pending')->count(),
         ];
+    }
+
+    /**
+     * Projects-page wording for the health reason. The overview keeps
+     * health_reason as is; this only rephrases the schedule gap.
+     */
+    protected function healthNote(string $health, string $reason, float $gap, bool $closed): string
+    {
+        if ($closed) {
+            return 'Not tracked after completion';
+        }
+
+        $schedule = function () use ($gap) {
+            $points = rtrim(rtrim(number_format(abs($gap), 1, '.', ''), '0'), '.');
+
+            return $gap < 0
+                ? 'Spending ' . $points . ' pts behind schedule'
+                : 'Spending ' . $points . ' pts ahead of schedule';
+        };
+
+        if (str_starts_with($reason, 'Under-spending')) {
+            return $schedule();
+        }
+
+        if ($health === 'Healthy' && abs($gap) > 0) {
+            return $schedule();
+        }
+
+        return $reason;
+    }
+
+    /**
+     * Most recent recorded expense (any status) or payroll period. A payroll
+     * entry counts from the last day of its pay month, capped at today.
+     */
+    protected function lastEntryDate(Project $project, Carbon $today): ?string
+    {
+        $expense = $project->expenses()->max('expense_date');
+        $payroll = $project->payrolls()
+            ->orderByDesc('pay_year')
+            ->orderByDesc('pay_month')
+            ->first(['pay_year', 'pay_month']);
+
+        $dates = collect();
+
+        if ($expense) {
+            $dates->push(Carbon::parse($expense)->startOfDay());
+        }
+
+        if ($payroll) {
+            $end = Carbon::create((int) $payroll->pay_year, (int) $payroll->pay_month, 1)->endOfMonth()->startOfDay();
+            $dates->push($end->greaterThan($today) ? $today->copy() : $end);
+        }
+
+        $latest = $dates->sortByDesc(fn (Carbon $date) => $date->timestamp)->first();
+
+        return $latest?->toDateString();
     }
 
     /**

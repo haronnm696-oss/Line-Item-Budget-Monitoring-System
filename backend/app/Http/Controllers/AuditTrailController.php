@@ -29,6 +29,7 @@ class AuditTrailController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'flagged' => ['nullable', 'boolean'],
+            'project_id' => ['nullable', 'integer'],
         ]);
 
         $query = AuditTrail::with('user');
@@ -50,6 +51,18 @@ class AuditTrailController extends Controller
         }
         if ($validated['record_type'] ?? null) {
             $query->where('model_type', $validated['record_type']);
+        }
+        if ($validated['project_id'] ?? null) {
+            // The project record itself, plus any record whose logged values
+            // carry its project_id (same rule as the project detail activity).
+            $projectId = (int) $validated['project_id'];
+            $query->where(function ($query) use ($projectId) {
+                $query->where(function ($own) use ($projectId) {
+                    $own->where('model_type', 'Project')->where('model_id', $projectId);
+                })
+                    ->orWhere('new_values->project_id', $projectId)
+                    ->orWhere('old_values->project_id', $projectId);
+            });
         }
         if (! empty($validated['flagged'])) {
             $query->where(function ($query) {

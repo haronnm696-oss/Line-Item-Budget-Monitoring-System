@@ -68,6 +68,7 @@ export const ENDPOINTS = {
     `/api/dashboard/program-leader${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`,
   programOverview: '/api/program/overview',
   programProjects: '/api/program/projects',
+  programProjectsExport: '/api/program/projects/export',
   programProject: (id) => `/api/program/projects/${id}`,
   programApprovals: '/api/program/approvals',
   programDecision: (id) => `/api/program/approvals/${id}/decision`,

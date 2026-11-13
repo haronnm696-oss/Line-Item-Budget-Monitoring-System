@@ -64,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role.program-leader')->group(function () {
         Route::get('/program/overview', [ProgramDashboardController::class, 'overview']);
         Route::get('/program/projects', [ProgramProjectController::class, 'index']);
+        Route::get('/program/projects/export', [ProgramProjectController::class, 'export']);
         Route::get('/program/projects/{project}', [ProgramProjectController::class, 'show']);
         Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
         Route::post('/program/approvals/{approval}/decision', [ProgramDashboardController::class, 'decision']);

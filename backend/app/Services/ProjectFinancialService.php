@@ -98,6 +98,32 @@ class ProjectFinancialService
     }
 
     /**
+     * PS and MOOE totals built from categoryRows(), so the split always adds
+     * up to the line items shown on the project detail and Form B.
+     *
+     * @return array{PS: array{allocated: float, spent: float, utilization_pct: float|null}, MOOE: array{allocated: float, spent: float, utilization_pct: float|null}}
+     */
+    public function bucketTotals(Project $project): array
+    {
+        $rows = collect($this->categoryRows($project));
+
+        $bucket = function (string $type) use ($rows) {
+            $items = $rows->where('type', $type);
+            $allocated = round((float) $items->sum('allocated'), 2);
+            $spent = round((float) $items->sum('spent'), 2);
+
+            return [
+                'allocated' => $allocated,
+                'spent' => $spent,
+                // null (not 0) when there is no budget line, so the UI shows "—".
+                'utilization_pct' => $allocated > 0 ? $this->pct($spent, $allocated) : null,
+            ];
+        };
+
+        return ['PS' => $bucket('PS'), 'MOOE' => $bucket('MOOE')];
+    }
+
+    /**
      * Receipt/document compliance for one project. `compliance_pct` is null
      * when the project has no expense records, so the UI can render "—"
      * instead of a misleading 0%.

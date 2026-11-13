@@ -28,9 +28,11 @@ function messageFor(error, fallback) {
 export default function ProgramApprovals() {
   const { user } = useAuth();
   const { refreshPending } = useProgramRefresh();
-  const [status, setStatus] = useState('pending');
-  const [type, setType] = useState('all');
   const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState(() => (
+    ['pending', 'approved', 'rejected'].includes(searchParams.get('status')) ? searchParams.get('status') : 'pending'
+  ));
+  const [type, setType] = useState('all');
   const [project, setProject] = useState(() => searchParams.get('project') ?? '');
   const [funder, setFunder] = useState('');
   const [data, setData] = useState(null);
