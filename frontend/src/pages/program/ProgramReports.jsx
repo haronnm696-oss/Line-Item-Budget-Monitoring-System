@@ -50,7 +50,7 @@ export default function ProgramReports() {
 
   function printExecutiveSummary() {
     const lines = [
-      ['Portfolio budget', peso(kpis.portfolio_budget ?? 0)],
+      ['Total budget', peso(kpis.portfolio_budget ?? 0)],
       ['Total disbursed', peso(kpis.total_disbursed ?? 0)],
       ['Utilization', formatPct(kpis.utilization_pct ?? 0)],
       ['Average receipt compliance', kpis.avg_receipt_compliance != null ? formatPct(kpis.avg_receipt_compliance) : '—'],
@@ -73,11 +73,11 @@ export default function ProgramReports() {
       </tr>`)
       .join('');
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Executive summary — Program portfolio</title></head>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Executive summary — All projects</title></head>
       <body style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#1f1a17;padding:32px">
-        <h1 style="margin:0 0 4px;color:#6b1d2b">Executive summary — Program portfolio</h1>
+        <h1 style="margin:0 0 4px;color:#6b1d2b">Executive summary — All projects</h1>
         <p style="margin:0 0 20px;color:#6b625b;font-size:13px">Generated ${new Date().toLocaleString('en-PH')} · LIB Monitoring System, MSU–Main Campus</p>
-        <h2 style="font-size:16px;margin:0 0 8px">Portfolio totals</h2>
+        <h2 style="font-size:16px;margin:0 0 8px">Totals, all projects</h2>
         <table style="border-collapse:collapse;width:100%;font-size:13px">${summaryRows}</table>
         <h2 style="font-size:16px;margin:24px 0 8px">Project breakdown</h2>
         <table style="border-collapse:collapse;width:100%;font-size:12px">
@@ -129,7 +129,7 @@ export default function ProgramReports() {
         <div>
           <div className="program-eyebrow">Reports · Program Leader</div>
           <h1 className="program-h1">Reports</h1>
-          <p className="program-sub">Portfolio-level reporting for every funder and project.</p>
+          <p className="program-sub">Reporting across all projects, for every funder.</p>
         </div>
         <div className="program-head-actions">
           <button type="button" className="program-btn" onClick={printExecutiveSummary}>
@@ -155,14 +155,14 @@ export default function ProgramReports() {
 
         <div className="program-grid-2">
           <div className="program-kpi">
-            <div className="program-kpi-label">Portfolio budget</div>
+            <div className="program-kpi-label">Total budget</div>
             <div className="program-kpi-value">{peso(kpis.portfolio_budget ?? 0)}</div>
             <div className="program-kpi-sub">{kpis.pending_approvals_total ?? kpis.pending_approvals ?? 0} pending approvals · {kpis.oldest_waiting_days ?? 0} days oldest</div>
           </div>
           <div className="program-kpi">
             <div className="program-kpi-label">Total disbursed</div>
             <div className="program-kpi-value">{peso(kpis.total_disbursed ?? 0)}</div>
-            <div className="program-kpi-sub">{formatPct(kpis.utilization_pct ?? 0)} of portfolio budget</div>
+            <div className="program-kpi-sub">{formatPct(kpis.utilization_pct ?? 0)} of total budget</div>
           </div>
           <div className="program-kpi">
             <div className="program-kpi-label">Average receipt compliance</div>
@@ -187,7 +187,7 @@ export default function ProgramReports() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">All projects (consolidated)</div>
-            <div className="program-card-sub">Every project in the portfolio, sorted by approved budget.</div>
+            <div className="program-card-sub">Every project, sorted by approved budget.</div>
           </div>
         </div>
 

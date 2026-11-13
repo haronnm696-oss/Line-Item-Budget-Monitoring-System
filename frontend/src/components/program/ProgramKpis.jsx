@@ -6,7 +6,7 @@ export default function ProgramKpis({ kpis }) {
   return (
     <div className="pd-kpi-grid">
       <div className="panel pd-kpi brand">
-        <span className="pd-kpi-label">Portfolio budget</span>
+        <span className="pd-kpi-label">Total budget</span>
         <b className="pd-kpi-value">{peso(kpis?.portfolio_budget ?? 0)}</b>
         <span className="pd-kpi-sub">Across all projects and funding sources</span>
       </div>
@@ -14,7 +14,7 @@ export default function ProgramKpis({ kpis }) {
       <div className="panel pd-kpi">
         <span className="pd-kpi-label">Total disbursed</span>
         <b className="pd-kpi-value">{peso(kpis?.total_disbursed ?? 0)}</b>
-        <span className="pd-kpi-sub">{formatPct(kpis?.utilization_pct ?? 0)} of the portfolio used</span>
+        <span className="pd-kpi-sub">{formatPct(kpis?.utilization_pct ?? 0)} of the total budget used</span>
       </div>
 
       <div className={`panel pd-kpi ${health.at_risk ? 'over' : 'ok'}`}>
@@ -26,7 +26,7 @@ export default function ProgramKpis({ kpis }) {
       </div>
 
       <div className="panel pd-kpi">
-        <span className="pd-kpi-label">Portfolio receipt compliance</span>
+        <span className="pd-kpi-label">Receipt compliance, all projects</span>
         <b className="pd-kpi-value">
           {kpis?.avg_receipt_compliance == null ? '—' : formatPct(kpis.avg_receipt_compliance)}
         </b>

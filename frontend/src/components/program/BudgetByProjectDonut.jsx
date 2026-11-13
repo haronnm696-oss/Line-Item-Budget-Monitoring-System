@@ -63,7 +63,7 @@ export default function BudgetByProjectDonut({ projects = [] }) {
         <div>
           <div className="program-card-title">Budget by project</div>
           <div className="program-card-sub">
-            {total > 0 ? `Share of the ${compactPeso(total)} portfolio` : 'Share of the portfolio'}
+            {total > 0 ? `Share of the ${compactPeso(total)} total budget` : 'Share of the total budget'}
           </div>
         </div>
       </div>
