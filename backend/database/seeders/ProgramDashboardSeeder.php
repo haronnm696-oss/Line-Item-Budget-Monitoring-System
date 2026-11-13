@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\ProjectReport;
 use App\Models\ProjectTranche;
 use App\Models\User;
+use Database\Seeders\Concerns\AssignsDemoFunding;
 use Illuminate\Database\Seeder;
 
 /**
@@ -25,24 +26,13 @@ use Illuminate\Database\Seeder;
  */
 class ProgramDashboardSeeder extends Seeder
 {
+    use AssignsDemoFunding;
+
     public function run(): void
     {
-        $most = FundingAgency::updateOrCreate(
-            ['acronym' => 'MOST-BARMM'],
-            ['name' => 'MOST – BARMM']
-        );
-        $dost = FundingAgency::updateOrCreate(
-            ['acronym' => 'DOST'],
-            ['name' => 'Department of Science and Technology – PCAARRD']
-        );
-        $ched = FundingAgency::updateOrCreate(
-            ['acronym' => 'CHED'],
-            ['name' => 'Commission on Higher Education']
-        );
-        $pchrd = FundingAgency::updateOrCreate(
-            ['acronym' => 'DOST-PCHRD'],
-            ['name' => 'DOST – Philippine Council for Health Research and Development']
-        );
+        $most = $this->demoFunder('urban');
+        $pcaarrd = $this->demoFunder('goat');
+        $ched = $this->demoFunder('nutrition');
 
         $projects = [
             'MOST-RD-2026-001' => [
@@ -59,7 +49,7 @@ class ProgramDashboardSeeder extends Seeder
             'RP-2026-009' => [
                 'title' => 'Halal Goat Value Chain Development',
                 'description' => 'DOST-PCAARRD project on halal goat value chain development in Lanao del Sur.',
-                'funding_agency_id' => $dost->id,
+                'funding_agency_id' => $pcaarrd->id,
                 'total_approved_budget' => 1870000.00,
                 'implementing_agency_counterpart' => 0.00,
                 'funding_agency_amount' => 1870000.00,
@@ -69,8 +59,8 @@ class ProgramDashboardSeeder extends Seeder
             ],
             'RP-2026-021' => [
                 'title' => 'Community Nutrition Surveillance',
-                'description' => 'DOST-PCHRD surveillance project in Marawi resettlement sites.',
-                'funding_agency_id' => $pchrd->id,
+                'description' => 'CHED-funded surveillance project in Marawi resettlement sites.',
+                'funding_agency_id' => $ched->id,
                 'total_approved_budget' => 1210000.00,
                 'implementing_agency_counterpart' => 0.00,
                 'funding_agency_amount' => 1210000.00,
@@ -80,8 +70,8 @@ class ProgramDashboardSeeder extends Seeder
             ],
             'RP-2025-031' => [
                 'title' => 'Meranaw Weaving Heritage Archive',
-                'description' => 'CHED project digitizing Meranaw weaving heritage.',
-                'funding_agency_id' => $ched->id,
+                'description' => 'MOST-BARMM project digitizing Meranaw weaving heritage.',
+                'funding_agency_id' => $most->id,
                 'total_approved_budget' => 940000.00,
                 'implementing_agency_counterpart' => 0.00,
                 'funding_agency_amount' => 940000.00,
@@ -91,8 +81,15 @@ class ProgramDashboardSeeder extends Seeder
             ],
         ];
 
+        $keys = [
+            'MOST-RD-2026-001' => 'urban',
+            'RP-2026-009' => 'goat',
+            'RP-2026-021' => 'nutrition',
+            'RP-2025-031' => 'weaving',
+        ];
         foreach ($projects as $code => $data) {
-            Project::updateOrCreate(['code' => $code], $data);
+            $project = Project::updateOrCreate(['code' => $code], $data);
+            $this->assignDemoFunding($project, $keys[$code]);
         }
 
         $urban = Project::where('code', 'MOST-RD-2026-001')->first();
@@ -214,6 +211,7 @@ class ProgramDashboardSeeder extends Seeder
             'type' => 'liquidation',
             'amount' => 512300,
             'description' => 'Submitted liquidation covering tranche 2 field activities.',
+            'justification' => 'Tranche 2 receipts for goat dispersal and training are complete, so the release can be closed out.',
             'liquidation_id' => $liquidation->id,
         ], 3);
     }
@@ -314,6 +312,7 @@ class ProgramDashboardSeeder extends Seeder
             'type' => 'disbursement',
             'amount' => 363000,
             'description' => 'Request for the second milestone release.',
+            'justification' => 'Baseline nutrition surveys are done and enumerators for the second round must be contracted this month.',
             'project_tranche_id' => $project->tranches()->where('sequence', 2)->value('id'),
         ], 12);
     }
@@ -503,6 +502,7 @@ class ProgramDashboardSeeder extends Seeder
             [
                 'title' => "Release Tranche 3 {$dash} Field Validation",
                 'description' => 'Request for the third milestone release to fund field validation and data collection.',
+                'justification' => 'The midyear report was accepted and sensor field validation is scheduled to start next month.',
                 'amount' => 635675.20,
                 'payload' => ['milestone' => 'Field Validation'],
                 'requested_by' => $requester->id,
@@ -526,6 +526,7 @@ class ProgramDashboardSeeder extends Seeder
                     'project_tranche_id' => null,
                     'title' => "Realign {$peso}50,000 from Professional Services to Travel",
                     'description' => 'Move unused professional services allocation to cover additional field travel.',
+                    'justification' => 'Programming work finished under budget, and the added survey corridors need more field travel.',
                     'amount' => 50000.00,
                     'payload' => [
                         'from_lib_category_id' => $professional->id,
@@ -659,6 +660,7 @@ class ProgramDashboardSeeder extends Seeder
                     'lib_category_id' => $category->id,
                     'recorded_by' => $recorder->id,
                     'verified_by' => $status === 'verified' ? $verifier?->id : null,
+                    'payee' => $this->demoPayee($project, $category->line_item_name),
                     'description' => $expense['description'],
                     'amount' => $expense['amount'],
                     'expense_date' => $expense['date'],
