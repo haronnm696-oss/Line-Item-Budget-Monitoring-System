@@ -85,6 +85,16 @@ const ICONS = {
       <path d="M6 9l6 6 6-6" />
     </svg>
   ),
+  chevronLeft: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  ),
+  chevronRight: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  ),
 };
 
 const NAV_GROUPS = [
@@ -109,20 +119,24 @@ const NAV_GROUPS = [
   },
 ];
 
-const APP_VERSION = '1.0';
+const SIDEBAR_KEY = 'lib.sidebar.collapsed';
 
-/** Share of the current calendar year that has elapsed, from today's date. */
-function programPeriod(now = new Date()) {
-  const year = now.getFullYear();
-  const startOfYear = new Date(year, 0, 1);
-  const startOfToday = new Date(year, now.getMonth(), now.getDate());
-  const daysInYear = Math.round((new Date(year + 1, 0, 1) - startOfYear) / 86400000);
-  const dayOfYear = Math.round((startOfToday - startOfYear) / 86400000) + 1;
-  return {
-    year,
-    pct: Math.round((dayOfYear / daysInYear) * 1000) / 10,
-    daysLeft: daysInYear - dayOfYear,
-  };
+// Storage can be blocked (private mode, site settings); the toggle must
+// still work for the session, so failures fall back silently.
+function readCollapsed() {
+  try {
+    return window.localStorage.getItem(SIDEBAR_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(value) {
+  try {
+    window.localStorage.setItem(SIDEBAR_KEY, value ? '1' : '0');
+  } catch {
+    // Ignore: the in-memory state is enough.
+  }
 }
 
 function todayLabel() {
@@ -140,6 +154,7 @@ export default function ProgramLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   const profileRef = useRef(null);
 
   const refreshPending = useCallback(async () => {
@@ -178,12 +193,17 @@ export default function ProgramLayout() {
     };
   }, [profileOpen]);
 
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    writeCollapsed(next);
+  }
+
   async function handleSignOut() {
     await signOut();
     navigate('/login', { replace: true });
   }
 
-  const period = programPeriod();
   const initials = user?.avatar_initials ?? user?.name?.slice(0, 2)?.toUpperCase() ?? 'U';
 
   return (
@@ -197,7 +217,11 @@ export default function ProgramLayout() {
           />
         )}
 
-        <aside className={`program-sidebar${menuOpen ? ' open' : ''}`} aria-label="Program Leader navigation">
+        <aside
+          id="program-sidebar"
+          className={`program-sidebar${menuOpen ? ' open' : ''}${collapsed ? ' is-collapsed' : ''}`}
+          aria-label="Program Leader navigation"
+        >
           <button
             type="button"
             className="program-sidebar-close"
@@ -209,7 +233,7 @@ export default function ProgramLayout() {
 
           <div className="program-brand">
             <img className="program-brand-seal" src="/images/msu-seal-outline.png" alt="MSU seal" />
-            <div>
+            <div className="program-brand-text">
               <div className="program-brand-name">LIB Monitoring</div>
               <div className="program-brand-sub">MSU–Main Campus</div>
             </div>
@@ -218,15 +242,17 @@ export default function ProgramLayout() {
           <nav className="program-nav">
             {NAV_GROUPS.map((group) => (
               <div className="program-nav-group" key={group.label}>
-                <div className="program-nav-label">{group.label}</div>
+                <div className="program-nav-label"><span>{group.label}</span></div>
                 {group.items.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) => (isActive ? 'active' : '')}
+                    title={collapsed ? item.label : undefined}
+                    aria-label={collapsed ? item.label : undefined}
                   >
                     <span className="program-nav-ic">{ICONS[item.icon]}</span>
-                    <span>{item.label}</span>
+                    <span className="program-nav-text">{item.label}</span>
                     {item.badge && pendingCount > 0 && (
                       <span className="program-nav-badge" aria-label={`${pendingCount} pending approvals`}>
                         {pendingCount}
@@ -239,23 +265,27 @@ export default function ProgramLayout() {
           </nav>
 
           <div className="program-side-foot">
-            <div className="program-period">
-              <div className="program-period-label">Program period</div>
-              <div className="program-period-title">Calendar year {period.year}</div>
-              <div className="program-period-track" aria-hidden="true">
-                <span style={{ width: `${period.pct}%` }} />
-              </div>
-              <div className="program-period-meta">
-                {period.pct.toFixed(1)}% of the year elapsed · {period.daysLeft} day{period.daysLeft === 1 ? '' : 's'} left
-              </div>
-            </div>
-
-            <a className="program-help-link" href="#">
+            <a
+              className="program-help-link"
+              href="#"
+              title={collapsed ? 'Help & guide' : undefined}
+              aria-label={collapsed ? 'Help & guide' : undefined}
+            >
               {ICONS.help}
-              <span>Help &amp; guide</span>
+              <span className="program-help-text">Help &amp; guide</span>
             </a>
 
-            <div className="program-version">LIB Monitoring System v{APP_VERSION} · MSU–Main Campus</div>
+            <button
+              type="button"
+              className="program-collapse"
+              onClick={toggleCollapsed}
+              aria-expanded={!collapsed}
+              aria-controls="program-sidebar"
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? ICONS.chevronRight : ICONS.chevronLeft}
+              {!collapsed && <span className="program-collapse-text">Collapse</span>}
+            </button>
           </div>
         </aside>
 
