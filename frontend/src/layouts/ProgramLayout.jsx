@@ -139,6 +139,15 @@ function writeCollapsed(value) {
   }
 }
 
+/** First letter of the first and last word of a name, e.g. "Norjannah Haron" -> "NH". */
+function initialsFrom(name) {
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  const first = words[0].charAt(0);
+  const last = words.length > 1 ? words[words.length - 1].charAt(0) : '';
+  return (first + last).toUpperCase();
+}
+
 function todayLabel() {
   return new Date().toLocaleDateString('en-PH', {
     weekday: 'long',
@@ -204,7 +213,7 @@ export default function ProgramLayout() {
     navigate('/login', { replace: true });
   }
 
-  const initials = user?.avatar_initials ?? user?.name?.slice(0, 2)?.toUpperCase() ?? 'U';
+  const initials = initialsFrom(user?.name) || user?.avatar_initials || 'U';
 
   return (
     <ProgramRefreshContext.Provider value={{ pendingCount, refreshPending }}>
