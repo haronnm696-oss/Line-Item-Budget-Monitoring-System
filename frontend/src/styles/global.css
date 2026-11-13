@@ -2407,6 +2407,31 @@ select.signin-input:disabled{
 .program-shell .program-reject label{color:var(--pg2-ink)}
 .program-shell .program-modal-actions{border-color:var(--pg2-line)}
 
+/* Program Projects list */
+.program-shell .program-btn.pp-soon:disabled{
+  opacity:1;background:#ECE7DD;border-color:#ECE7DD;color:#6B5F5F;box-shadow:none;
+}
+.program-shell .program-btn.pp-toggle.is-active{
+  background:#FBE9E7;border-color:#8E1B1B;color:#8E1B1B;font-weight:700;
+  box-shadow:inset 0 0 0 1px #8E1B1B;
+}
+.pp-clear{
+  align-self:center;min-height:44px;padding:0 4px;border:0;background:none;cursor:pointer;
+  font:inherit;font-size:13px;font-weight:600;color:var(--pg2-brand);
+  text-decoration:underline;text-underline-offset:2px;
+}
+.pp-empty{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
+.pp-table{min-width:860px}
+.pp-row{cursor:pointer}
+.pp-link{color:inherit;text-decoration:none}
+.pp-link:hover,.pp-link:focus-visible{color:var(--pg2-brand);text-decoration:underline;text-underline-offset:2px}
+.pp-sort{
+  display:inline-flex;align-items:center;gap:6px;padding:0;border:0;background:none;
+  font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;
+}
+.pp-sort-icon{font-size:9px;opacity:.45}
+.pp-sort-icon.is-active{opacity:1;color:var(--pg2-brand)}
+
 /* Responsive */
 @media (max-width: 1200px){
   .pl-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
