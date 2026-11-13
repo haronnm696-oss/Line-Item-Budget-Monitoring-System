@@ -2160,6 +2160,57 @@ select.signin-input:disabled{
 .pl-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:16px;align-items:start}
 .pl-column,.pl-rail{display:flex;flex-direction:column;gap:16px;min-width:0}
 
+/* Overview rows: spending + funding, then the two charts */
+.pl-row{display:grid;gap:16px;align-items:stretch}
+.pl-row>*{min-width:0}
+.pl-row-main{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+.pl-row-charts{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.pl-row-stack{display:flex;flex-direction:column;min-width:0}
+.pl-stretch{flex:1}
+@media (max-width: 900px){
+  .pl-row-main,.pl-row-charts{grid-template-columns:1fr}
+}
+
+.program-shell .program-card.pl-chart-card{
+  display:flex;flex-direction:column;
+  background:#fff;border:1px solid #EDE4D6;border-radius:16px;padding:22px 24px;
+}
+.program-shell .pl-chart-card .program-card-title{font-size:20px;font-weight:800;color:#2B2023}
+.program-shell .pl-chart-card .program-card-sub{font-size:13px;color:#6B5F5F}
+.program-shell .pl-chart-card .pl-chart-empty{flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6B5F5F}
+
+/* Budget by project donut */
+.pl-donut{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:20px 28px}
+.pl-donut-figure{position:relative;width:150px;height:150px;flex:0 0 150px}
+.pl-donut-figure svg{display:block}
+.pl-donut-center{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  pointer-events:none;text-align:center;
+}
+.pl-donut-center b{font-size:18px;font-weight:800;color:#2B2023;line-height:1.1}
+.pl-donut-center span{font-size:11px;color:#6B5F5F;margin-top:2px}
+.pl-donut-legend{flex:1 1 200px;min-width:0;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.pl-donut-legend li{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px;color:#2B2023}
+.pl-donut-swatch{width:12px;height:12px;flex:0 0 12px;border-radius:3px}
+.pl-donut-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-donut-legend b{font-weight:800;font-variant-numeric:tabular-nums}
+
+/* Scheduled releases bars */
+.pl-release-chart{
+  flex:1;display:flex;justify-content:space-around;align-items:flex-end;gap:8px;
+  min-height:190px;padding-top:8px;
+}
+.pl-release-col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0}
+.pl-release-plot{
+  width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;
+  height:160px;border-bottom:1px solid #EDE4D6;
+}
+.pl-release-value{font-size:13px;font-weight:700;color:#2B2023;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pl-release-value.is-none{font-weight:600;color:#6B5F5F}
+.pl-release-bar{display:block;width:48px;max-width:100%;background:#6F1D2A;border-radius:6px 6px 0 0}
+.pl-release-bar.is-none{height:4px;background:#D6CBBB}
+.pl-release-month{margin-top:8px;font-size:13px;color:#6B5F5F}
+
 /* Spending vs time */
 .pl-spend-list{display:flex;flex-direction:column}
 .pl-spend-row{

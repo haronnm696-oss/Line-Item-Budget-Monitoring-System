@@ -167,6 +167,7 @@ class AuditTrailTest extends TestCase
             'project_id' => $project->id,
             'type' => 'budget_realignment',
             'title' => 'Realignment request',
+            'justification' => 'Field survey costs rose after the second site was added to the study area.',
             'amount' => 40000,
             'requested_by' => $this->userWithRole('project-leader')->id,
             'status' => 'pending',

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Validation\ValidationException;
 
 class ApprovalRequest extends Model
 {
@@ -16,8 +17,8 @@ class ApprovalRequest extends Model
 
     protected $fillable = [
         'project_id', 'project_tranche_id', 'liquidation_id', 'type', 'title', 'description',
-        'amount', 'payload', 'requested_by', 'reviewed_by', 'status',
-        'review_notes', 'reviewed_at',
+        'justification', 'amount', 'payload', 'requested_by', 'reviewed_by',
+        'reviewed_by_name', 'reviewed_by_role', 'status', 'review_notes', 'reviewed_at',
     ];
 
     protected $casts = [
@@ -25,6 +26,17 @@ class ApprovalRequest extends Model
         'payload' => 'array',
         'reviewed_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $approval) {
+            if (blank($approval->justification)) {
+                throw ValidationException::withMessages([
+                    'justification' => ['A justification is required for new approval requests.'],
+                ]);
+            }
+        });
+    }
 
     public function project(): BelongsTo
     {

@@ -31,6 +31,7 @@ class MakerCheckerTest extends TestCase
             'project_id' => $project->id,
             'type' => 'budget_realignment',
             'title' => 'Self-created realignment',
+            'justification' => 'Supplies savings are needed to cover additional travel for data collection.',
             'amount' => 10000,
             'requested_by' => $leader->id,
             'status' => 'pending',
