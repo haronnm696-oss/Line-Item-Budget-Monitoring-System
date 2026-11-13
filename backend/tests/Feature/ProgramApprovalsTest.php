@@ -12,6 +12,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ProgramApprovalsTest extends TestCase
@@ -111,6 +112,50 @@ class ProgramApprovalsTest extends TestCase
         $this->assertSame(0, $response->json('kpis.health.at_risk'));
     }
 
+    public function test_new_approval_requests_require_a_justification(): void
+    {
+        $project = $this->project();
+
+        try {
+            ApprovalRequest::create([
+                'project_id' => $project->id,
+                'type' => 'disbursement',
+                'title' => 'No justification',
+                'amount' => 10000,
+                'requested_by' => $this->userWithRole('project-leader')->id,
+                'status' => 'pending',
+            ]);
+            $this->fail('An approval request without a justification was saved.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(
+                ['A justification is required for new approval requests.'],
+                $exception->errors()['justification'] ?? null
+            );
+        }
+
+        $this->assertSame(0, ApprovalRequest::count());
+    }
+
+    public function test_new_approval_requests_with_a_justification_are_saved(): void
+    {
+        $project = $this->project();
+
+        $approval = ApprovalRequest::create([
+            'project_id' => $project->id,
+            'type' => 'disbursement',
+            'title' => 'Second tranche release',
+            'justification' => 'First tranche is fully liquidated and fieldwork for phase two starts next month.',
+            'amount' => 10000,
+            'requested_by' => $this->userWithRole('project-leader')->id,
+            'status' => 'pending',
+        ]);
+
+        $this->assertDatabaseHas('approval_requests', [
+            'id' => $approval->id,
+            'justification' => 'First tranche is fully liquidated and fieldwork for phase two starts next month.',
+        ]);
+    }
+
     private function project(array $overrides = []): Project
     {
         $funder = FundingAgency::firstOrCreate(
@@ -145,6 +190,7 @@ class ProgramApprovalsTest extends TestCase
             'project_id' => $project->id,
             'type' => $type,
             'title' => $type . ' request',
+            'justification' => 'Requested to keep project activities on schedule for this quarter.',
             'amount' => 10000,
             'requested_by' => $this->userWithRole('project-leader')->id,
             'status' => $status,

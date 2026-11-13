@@ -6,6 +6,8 @@ import { fetchProgramOverview, decideApproval } from '../../api/program';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import ProgramRejectModal from '../../components/program/ProgramRejectModal';
+import BudgetByProjectDonut from '../../components/program/BudgetByProjectDonut';
+import ScheduledReleasesBars from '../../components/program/ScheduledReleasesBars';
 import { compactPeso, formatPct, peso } from '../../components/money';
 
 function clampPct(value) {
@@ -199,7 +201,6 @@ export default function ProgramLeaderDashboard() {
   const projectRows = [...projects]
     .sort((a, b) => (Number(b.budget) || 0) - (Number(a.budget) || 0))
     .slice(0, 6);
-  const tallest = Math.max(...releases.map((month) => Number(month.amount) || 0), 1);
   const firstName = (user?.name ?? 'there').replace(/^Dr\.?\s+/i, '').split(' ')[0];
   const isEmpty = Boolean(data) && projects.length === 0;
 
@@ -356,52 +357,103 @@ export default function ProgramLeaderDashboard() {
             </section>
           </div>
 
-          <div className="pl-layout">
-            <div className="pl-column">
-              <section className="program-card">
+          <div className="pl-row pl-row-main">
+            <section className="program-card">
+              <div className="program-card-head">
+                <div>
+                  <div className="program-card-title">Spending against time</div>
+                  <div className="program-card-sub">Spent versus elapsed time, largest projects first</div>
+                </div>
+                <Link className="program-card-link" to="/program-projects">View projects</Link>
+              </div>
+
+              <div className="pl-spend-list">
+                {projectRows.map((project) => (
+                  <div className="pl-spend-row" key={project.id}>
+                    <div className="pl-spend-main">
+                      <div className="pl-spend-title">
+                        <b>{project.title}</b>
+                        <span>{project.code}</span>
+                      </div>
+                      <div className="pl-bar-line">
+                        <span className="pl-bar-label">Spent</span>
+                        <div className="pl-track">
+                          <span
+                            className={Number(project.spent_pct) > Number(project.time_pct) ? 'is-warn' : ''}
+                            style={{ width: `${clampPct(project.spent_pct)}%` }}
+                          />
+                        </div>
+                        <b>{formatPct(project.spent_pct)}</b>
+                      </div>
+                      <div className="pl-bar-line is-time">
+                        <span className="pl-bar-label">Time</span>
+                        <div className="pl-track">
+                          <span style={{ width: `${clampPct(project.time_pct)}%` }} />
+                        </div>
+                        <b>{formatPct(project.time_pct)}</b>
+                      </div>
+                    </div>
+                    <div className="pl-spend-side">
+                      <ProgramPill value={project.health} />
+                      <span>{compactPeso(project.budget)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <div className="pl-row-stack">
+              <section className="program-card pl-wallet pl-stretch">
                 <div className="program-card-head">
                   <div>
-                    <div className="program-card-title">Spending against time</div>
-                    <div className="program-card-sub">Spent versus elapsed time, largest projects first</div>
+                    <div className="program-card-title">Funding sources</div>
+                    <div className="program-card-sub">{fundingSources.length} active funder{fundingSources.length === 1 ? '' : 's'}</div>
                   </div>
-                  <Link className="program-card-link" to="/program-projects">View projects</Link>
                 </div>
 
-                <div className="pl-spend-list">
-                  {projectRows.map((project) => (
-                    <div className="pl-spend-row" key={project.id}>
-                      <div className="pl-spend-main">
-                        <div className="pl-spend-title">
-                          <b>{project.title}</b>
-                          <span>{project.code}</span>
-                        </div>
-                        <div className="pl-bar-line">
-                          <span className="pl-bar-label">Spent</span>
-                          <div className="pl-track">
-                            <span
-                              className={Number(project.spent_pct) > Number(project.time_pct) ? 'is-warn' : ''}
-                              style={{ width: `${clampPct(project.spent_pct)}%` }}
-                            />
-                          </div>
-                          <b>{formatPct(project.spent_pct)}</b>
-                        </div>
-                        <div className="pl-bar-line is-time">
-                          <span className="pl-bar-label">Time</span>
-                          <div className="pl-track">
-                            <span style={{ width: `${clampPct(project.time_pct)}%` }} />
-                          </div>
-                          <b>{formatPct(project.time_pct)}</b>
-                        </div>
+                <div className="pl-wallet-hero">
+                  <span>Ready to disburse</span>
+                  <b><AnimatedNumber value={Math.max(remaining, 0)} format={peso} /></b>
+                  <div className="pl-track pl-track-gold">
+                    <span style={{ width: `${clampPct(utilization)}%` }} />
+                  </div>
+                  <div className="pl-wallet-split">
+                    <div><span>Allocated</span><b><AnimatedNumber value={budget} format={peso} /></b></div>
+                    <div><span>Disbursed</span><b><AnimatedNumber value={disbursed} format={peso} /></b></div>
+                  </div>
+                </div>
+
+                <div className="pl-fund-list">
+                  {fundingSources.slice(0, 4).map((source) => (
+                    <div className="pl-fund-row" key={source.funder}>
+                      <div className="pl-fund-top">
+                        <b>{source.funder}</b>
+                        <span>{source.projects} project{source.projects === 1 ? '' : 's'}</span>
                       </div>
-                      <div className="pl-spend-side">
-                        <ProgramPill value={project.health} />
-                        <span>{compactPeso(project.budget)}</span>
+                      <div className="pl-track">
+                        <span style={{ width: `${clampPct(source.utilization_pct)}%` }} />
+                      </div>
+                      <div className="pl-fund-meta">
+                        <span>{formatPct(source.utilization_pct)} utilized</span>
+                        <b><AnimatedNumber value={source.allocated} format={compactPeso} /></b>
                       </div>
                     </div>
                   ))}
                 </div>
-              </section>
 
+                <Link className="program-btn primary pl-wallet-cta" to="/program-projects">
+                  Open portfolio
+                </Link>
+              </section>
+            </div>
+          </div>
+
+          <div className="pl-row pl-row-charts">
+            <BudgetByProjectDonut projects={projects} />
+            <ScheduledReleasesBars releases={releases} />
+          </div>
+
+          <div className="pl-layout">
+            <div className="pl-column">
               <section className="program-card">
                 <div className="program-card-head">
                   <div>
@@ -533,78 +585,6 @@ export default function ProgramLeaderDashboard() {
             </div>
 
             <aside className="pl-rail">
-              <section className="program-card pl-wallet">
-                <div className="program-card-head">
-                  <div>
-                    <div className="program-card-title">Funding sources</div>
-                    <div className="program-card-sub">{fundingSources.length} active funder{fundingSources.length === 1 ? '' : 's'}</div>
-                  </div>
-                </div>
-
-                <div className="pl-wallet-hero">
-                  <span>Ready to disburse</span>
-                  <b><AnimatedNumber value={Math.max(remaining, 0)} format={peso} /></b>
-                  <div className="pl-track pl-track-gold">
-                    <span style={{ width: `${clampPct(utilization)}%` }} />
-                  </div>
-                  <div className="pl-wallet-split">
-                    <div><span>Allocated</span><b><AnimatedNumber value={budget} format={peso} /></b></div>
-                    <div><span>Disbursed</span><b><AnimatedNumber value={disbursed} format={peso} /></b></div>
-                  </div>
-                </div>
-
-                <div className="pl-fund-list">
-                  {fundingSources.slice(0, 4).map((source) => (
-                    <div className="pl-fund-row" key={source.funder}>
-                      <div className="pl-fund-top">
-                        <b>{source.funder}</b>
-                        <span>{source.projects} project{source.projects === 1 ? '' : 's'}</span>
-                      </div>
-                      <div className="pl-track">
-                        <span style={{ width: `${clampPct(source.utilization_pct)}%` }} />
-                      </div>
-                      <div className="pl-fund-meta">
-                        <span>{formatPct(source.utilization_pct)} utilized</span>
-                        <b><AnimatedNumber value={source.allocated} format={compactPeso} /></b>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Link className="program-btn primary pl-wallet-cta" to="/program-projects">
-                  Open portfolio
-                </Link>
-              </section>
-
-              <section className="program-card">
-                <div className="program-card-head">
-                  <div>
-                    <div className="program-card-title">Scheduled releases</div>
-                    <div className="program-card-sub">Planned tranches, next four months</div>
-                  </div>
-                </div>
-
-                <div className="program-bars pl-bars">
-                  {releases.map((month, index) => {
-                    const amount = Number(month.amount) || 0;
-                    return (
-                      <div className="program-bar-col" key={month.month}>
-                        <span className="program-bar-amount">
-                          {amount > 0 ? compactPeso(amount) : '—'}
-                        </span>
-                        <div
-                          className={`program-bar${amount > 0 ? '' : ' none'}${index === 0 ? ' is-current' : ''}`}
-                          style={amount > 0 ? { height: `${Math.max(6, (amount / tallest) * 112)}px` } : undefined}
-                          aria-hidden="true"
-                        />
-                        <span className="program-bar-month">{month.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="program-footnote">Overdue tranches count in the current month.</p>
-              </section>
-
               <section className="program-card">
                 <div className="program-card-head">
                   <div>

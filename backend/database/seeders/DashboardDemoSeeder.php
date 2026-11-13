@@ -206,6 +206,7 @@ class DashboardDemoSeeder extends Seeder
                 'project_tranche_id' => $trancheThree?->id,
                 'type' => 'disbursement',
                 'description' => 'Request for the third milestone release to fund field validation and data collection.',
+                'justification' => 'The second milestone report was accepted and field validation cannot start until the third tranche is released.',
                 'amount' => 635675.20,
                 'payload' => ['milestone' => 'Field Validation'],
                 'requested_by' => $requester?->id,
@@ -227,6 +228,7 @@ class DashboardDemoSeeder extends Seeder
                     'title' => 'Realign ₱50,000 from Professional Services to Travel',
                     'type' => 'budget_realignment',
                     'description' => 'Move unused professional services allocation to cover additional field travel.',
+                    'justification' => 'One consultant contract was not renewed, and the savings are needed for extra trips to the added study sites.',
                     'amount' => 50000.00,
                     'payload' => [
                         'from_lib_category_id' => $professional->id,

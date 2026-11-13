@@ -350,6 +350,7 @@ class ProgramDashboardTest extends TestCase
             'project_id' => $project->id,
             'type' => $type,
             'title' => 'Test approval',
+            'justification' => 'The next project phase starts this month and needs the scheduled funds.',
             'amount' => 40000,
             'requested_by' => $this->userWithRole('project-leader')->id,
             'status' => 'pending',

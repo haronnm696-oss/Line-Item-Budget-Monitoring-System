@@ -503,6 +503,7 @@ class DemoDatasetSeeder extends Seeder
                     'project_tranche_id' => $tranche?->id,
                     'type' => 'disbursement',
                     'description' => 'Field validation is complete; request release of the third tranche.',
+                    'justification' => 'Validation visits in all partner barangays are done and enumerators must be paid before the analysis phase begins.',
                     'amount' => $tranche?->amount,
                     'requested_by' => $leader->id,
                     'status' => 'pending',
@@ -520,6 +521,7 @@ class DemoDatasetSeeder extends Seeder
                 [
                     'type' => 'budget_realignment',
                     'description' => 'Move unused communication allocation to field travel for the final survey round.',
+                    'justification' => 'Fuel and boat fares for the final survey round exceed the travel line, while the communication line still has unused funds.',
                     'amount' => 15000.00,
                     'payload' => [
                         'from_lib_category_id' => $from?->id,
@@ -545,6 +547,7 @@ class DemoDatasetSeeder extends Seeder
                     'liquidation_id' => $liquidation?->id,
                     'type' => 'liquidation',
                     'description' => 'Submit the first liquidation report for review.',
+                    'justification' => 'Receipts for the first tranche are complete and liquidating them is required before the next tranche can be requested.',
                     'amount' => $liquidation?->amount,
                     'requested_by' => $leader->id,
                     'status' => 'pending',
@@ -568,6 +571,7 @@ class DemoDatasetSeeder extends Seeder
                     'liquidation_id' => $liquidation->id,
                     'type' => 'liquidation',
                     'description' => 'Historical liquidation approval.',
+                    'justification' => 'Official receipts and the expense summary for this tranche were submitted to close out its disbursement.',
                     'amount' => $liquidation->amount,
                     'requested_by' => $leader->id,
                     'reviewed_by' => $programLeader->id,
