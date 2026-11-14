@@ -3361,3 +3361,98 @@ select.signin-input:disabled{
 @media (prefers-reduced-motion: reduce){.pa-skel{animation:none}}
 .pa-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .pa-skel-lines{display:flex;flex-direction:column;gap:7px}
+
+/* Program Reports: printable executive report (/program-reports/executive) */
+.er-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.er-toolbar .spacer{flex:1}
+.program-shell .program-card.er-doc{padding:28px 32px}
+.er-head{border-bottom:2px solid #6F1D2A;padding-bottom:14px;margin-bottom:20px}
+.er-org{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6B5F5F}
+.er-title{margin:4px 0 10px;font-size:26px;font-weight:700;color:#2B2023;letter-spacing:-.02em}
+.er-meta{display:flex;flex-wrap:wrap;gap:6px 28px;margin:0;font-size:13px;color:#4A4040}
+.er-meta div{display:flex;gap:6px}
+.er-meta dt{font-weight:700}
+.er-meta dd{margin:0}
+.er-section + .er-section{margin-top:24px}
+.er-h2{margin:0 0 8px;font-size:16px;font-weight:700;color:#2B2023}
+.er-scroll{overflow-x:auto}
+.er-table{width:100%;border-collapse:collapse;font-size:13px;color:#2B2023}
+.er-table th,.er-table td{padding:8px 10px;border-bottom:1px solid #E5DED3;text-align:left;vertical-align:top}
+.er-table thead th{font-size:12px;font-weight:700;color:#4A4040;border-bottom:2px solid #D6CBBB;white-space:nowrap}
+.er-table .r{text-align:right}
+.er-table .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.er-summary{max-width:620px}
+.er-summary th{font-size:13px;font-weight:600;color:#2B2023;white-space:normal}
+.er-table tr:last-child th,.er-table tr:last-child td{border-bottom:1px solid #E5DED3}
+.er-table .er-code{white-space:nowrap}
+.er-table:not(.er-summary) tbody td:first-child{min-width:190px}
+.er-empty{margin:0;font-size:14px;color:#4A4040}
+
+/* Only applies while the executive report is on screen. */
+@media print{
+  @page{margin:14mm}
+  body:has(.er-doc){background:#fff !important;color:#000}
+  .program-shell:has(.er-doc){display:block !important;background:#fff !important;min-height:0}
+  .program-shell:has(.er-doc) .program-sidebar,
+  .program-shell:has(.er-doc) .program-topbar,
+  .program-shell:has(.er-doc) .program-backdrop,
+  .program-shell:has(.er-doc) .no-print,
+  .program-shell:has(.er-doc) button{display:none !important}
+  .program-shell:has(.er-doc) .program-main{display:block;background:#fff !important}
+  .program-shell:has(.er-doc) .program-content{padding:0 !important;max-width:none;margin:0;display:block}
+  .program-shell .program-card.er-doc{border:0 !important;box-shadow:none !important;padding:0 !important;background:#fff !important}
+  .er-doc,.er-doc *{color:#000 !important}
+  .er-head{border-bottom-color:#000}
+  .er-scroll{overflow:visible}
+  .er-table{font-size:10.5pt}
+  .er-table th,.er-table td,.er-table tr:last-child th,.er-table tr:last-child td{border-bottom-color:#999}
+  .er-table thead th{border-bottom-color:#000}
+  .er-table thead{display:table-header-group}
+  .er-table tr{break-inside:avoid;page-break-inside:avoid}
+  .er-section h2{break-after:avoid;page-break-after:avoid}
+  .er-doc .program-pill{background:#fff !important;border:1px solid #000 !important}
+}
+
+/* Program Reports: "Per-project reports" section (Reports.jsx, programMode) */
+.prr{display:flex;flex-direction:column}
+.prr-params{
+  display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:14px;margin-top:14px;
+  background:#FAF7F2;border:1px solid #EDE4D6;border-radius:14px;padding:16px 18px;
+}
+.prr-params .program-field{min-width:0}
+.prr-params .program-select{width:100%;min-width:0}
+.prr-label{margin:22px 0 10px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#6B5F5F}
+.prr-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.prr-list{list-style:none;margin:0;padding:0}
+.prr-row{display:flex;align-items:center;gap:14px;padding:16px 0;border-top:1px solid #F1ECE4}
+.prr-row:first-child{border-top:none;padding-top:4px}
+.prr-ic{
+  width:36px;height:36px;flex:0 0 36px;border-radius:10px;background:#FBF3DF;color:#6F1D2A;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.prr-text{flex:1;min-width:0}
+.prr-text b{display:block;font-size:14px;color:#2B2023}
+.prr-text p{margin:2px 0 0;font-size:13px;color:#6B5F5F}
+.prr-actions{display:flex;gap:8px;flex:0 0 auto}
+.prr-actions .program-btn{min-width:132px;min-height:44px}
+@media (max-width: 900px){
+  .prr-params{grid-template-columns:1fr}
+  .prr-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 720px){
+  .prr-row{flex-wrap:wrap}
+  .prr-actions{width:100%;padding-left:50px}
+}
+@media (max-width: 520px){
+  .prr-stats{grid-template-columns:1fr}
+  .prr-actions{padding-left:0}
+  .prr-actions .program-btn{flex:1;min-width:0}
+}
+
+/* Reports.jsx: project select states and load errors */
+.rp-project{display:flex;gap:8px;align-items:center}
+.rp-project select{flex:1;min-width:0}
+.rp-project select:disabled{color:#6B5F5F}
+.rp-error{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;color:#8E1B1B;font-size:13px}
+.rp-error-block{display:flex;margin-top:12px;padding:10px 14px;border-radius:10px;background:#FDECEC;border:1px solid #F3C4C4}
+.rp-note{margin:4px 0 0;font-size:12.5px;color:#92400E}

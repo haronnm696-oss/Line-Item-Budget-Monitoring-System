@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react';
 import { peso } from '../components/money';
-import {
-  CURRENT_PROJECT,
-  projects as mockProjects,
-  libCategoriesPS,
-  libCategoriesMOOE,
-  expenses as mockExpenses,
-  payrollRun,
-} from '../data/mockData';
-import { getWithFallback } from '../api/http';
+import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import Chip, { statusTone } from '../components/Chip';
 import UtilBar from '../components/UtilBar';
@@ -66,6 +58,47 @@ function toCSV(rows, headers) {
   return [headerRow, ...dataRows].join('\n');
 }
 
+function messageFor(error, fallback) {
+  return error?.response?.data?.message || fallback;
+}
+
+// Every value interpolated into the print document goes through this, since
+// the document is rendered as a real page (titles, descriptions and names
+// come from user input).
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function money(value) {
+  return `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Opens the browser print dialog (where "Save as PDF" is available) for a
+// standalone HTML document, using a hidden iframe so no pop-up is needed.
+function printHtmlDocument(html) {
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.tabIndex = -1;
+  Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+  frame.onload = () => {
+    const view = frame.contentWindow;
+    if (!view) return;
+    const cleanup = () => window.setTimeout(() => frame.remove(), 0);
+    view.addEventListener('afterprint', cleanup, { once: true });
+    view.focus();
+    view.print();
+    // Fallback for browsers that do not fire afterprint.
+    window.setTimeout(() => { if (frame.isConnected) frame.remove(); }, 60000);
+  };
+  frame.srcdoc = html;
+  document.body.appendChild(frame);
+}
+
 function downloadCSV(content, filename) {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -80,63 +113,83 @@ function downloadCSV(content, filename) {
 }
 
 export default function Reports({ programMode = false, initialCode = '' }) {
-  const [selectedCode, setSelectedCode] = useState('');
-  const [projectList, setProjectList] = useState([]);
-  const [detail, setDetail] = useState(null);
+  const [chosenCode, setChosenCode] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState(PERIODS[0]);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
   const [toast, setToast] = useState(null); // { msg, type }
-  const [printOpen, setPrintOpen] = useState(false);
-  const [printReport, setPrintReport] = useState(null); // { key, title, html }
+  const [printReport, setPrintReport] = useState(null); // { key, title }
   const [csvReport, setCsvReport] = useState(null); // { key, title, content, filename }
 
-  // Load the project list once, then load the selected project's canonical
-  // financial detail (budget, spent, line items, expense rows) from the API.
+  // ---------- Project list (real data only, never sample projects) ----------
+  // Each result is tagged with the attempt it belongs to, so "loading" is
+  // simply "no result for the current attempt yet".
+  const [projectsAttempt, setProjectsAttempt] = useState(0);
+  const [projectsResult, setProjectsResult] = useState(null); // { attempt, list } | { attempt, error }
+
   useEffect(() => {
     let alive = true;
-    getWithFallback(ENDPOINTS.projects, mockProjects)
-      .then((list) => {
-        if (!alive) return;
-        const rows = Array.isArray(list) ? list : [];
-        setProjectList(rows);
-        const preselected = rows.find((row) => row.code === initialCode);
-        if (preselected || rows[0]) setSelectedCode((preselected ?? rows[0]).code);
+    client.get(ENDPOINTS.projects)
+      .then((response) => {
+        if (alive) setProjectsResult({ attempt: projectsAttempt, list: Array.isArray(response.data) ? response.data : [] });
       })
-      .catch(() => {
-        if (!alive) return;
-        setProjectList(mockProjects);
-        setSelectedCode(mockProjects[0].code);
+      .catch((error) => {
+        if (alive) setProjectsResult({ attempt: projectsAttempt, error: messageFor(error, 'Could not load projects') });
       });
     return () => { alive = false; };
-  }, []);
+  }, [projectsAttempt]);
+
+  const projectsStatus = projectsResult?.attempt !== projectsAttempt
+    ? 'loading'
+    : projectsResult.error ? 'error' : projectsResult.list.length ? 'ready' : 'empty';
+  const projectList = projectsStatus === 'ready' ? projectsResult.list : [];
+  const listRow = projectList.find((p) => p.code === chosenCode)
+    ?? projectList.find((p) => p.code === initialCode)
+    ?? projectList[0]
+    ?? null;
+  const selectedCode = listRow?.code ?? '';
+
+  // ---------- Selected project's financial detail ----------
+  const [detailAttempt, setDetailAttempt] = useState(0);
+  const [detailResult, setDetailResult] = useState(null); // { key, data } | { key, error }
+  const detailKey = listRow ? `${listRow.id}:${detailAttempt}` : '';
 
   useEffect(() => {
-    if (!selectedCode) return;
+    if (!detailKey) return undefined;
+    const projectId = detailKey.split(':')[0];
     let alive = true;
-    const source = projectList.length ? projectList : mockProjects;
-    const project = source.find((p) => p.code === selectedCode) || source[0];
-    if (!project) return;
-
-    const fallback = {
-      project: CURRENT_PROJECT,
-      categories: { ps: libCategoriesPS, mooe: libCategoriesMOOE },
-      expenses: mockExpenses,
-    };
-
-    setDetail(null);
-    getWithFallback(ENDPOINTS.project(project.id), fallback)
-      .then((data) => { if (alive) setDetail(data); })
-      .catch(() => { if (alive) setDetail(fallback); });
+    client.get(ENDPOINTS.project(projectId))
+      .then((response) => { if (alive) setDetailResult({ key: detailKey, data: response.data }); })
+      .catch(() => {
+        if (alive) setDetailResult({ key: detailKey, error: "Could not load this project's report data." });
+      });
     return () => { alive = false; };
-  }, [selectedCode, projectList]);
+  }, [detailKey]);
 
-  const filteredProjects = projectList.length ? projectList : mockProjects;
-  const selectedProject = detail?.project
-    || filteredProjects.find((p) => p.code === selectedCode)
-    || CURRENT_PROJECT;
-  const psCategories = detail?.categories?.ps || libCategoriesPS;
-  const mooeCategories = detail?.categories?.mooe || libCategoriesMOOE;
-  const expenseRows = detail?.expenses || mockExpenses;
+  const detailStatus = !detailKey
+    ? 'idle'
+    : detailResult?.key !== detailKey ? 'loading' : detailResult.error ? 'error' : 'ready';
+  const detail = detailStatus === 'ready' ? detailResult.data : null;
+  const project = detail?.project ?? null;
+  const reportsReady = detailStatus === 'ready' && project !== null;
+  const selectedProject = project ?? {};
+  const psCategories = Array.isArray(detail?.categories?.ps) ? detail.categories.ps : [];
+  const mooeCategories = Array.isArray(detail?.categories?.mooe) ? detail.categories.mooe : [];
+  const expenseRows = Array.isArray(detail?.expenses) ? detail.expenses : [];
+  // The API does not return payroll rows for reports yet, so the payroll
+  // register stays unavailable instead of showing sample data.
+  const payrollSource = Array.isArray(detail?.payroll) ? detail.payroll : null;
+
+  function retryProjects() {
+    setProjectsAttempt((value) => value + 1);
+  }
+
+  function retryDetail() {
+    setDetailAttempt((value) => value + 1);
+  }
+
+  function reportAvailable(key) {
+    return reportsReady && (key !== 'payroll-register' || payrollSource !== null);
+  }
 
   // ---------- Filtering ----------
   function filterExpenses() {
@@ -171,7 +224,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   }
 
   const expensesForPreview = filterExpenses();
-  const payrollForPreview = [...payrollRun.rows];
+  const payrollForPreview = payrollSource ?? [];
 
   // ---------- Report data builders ----------
   function buildUtilizationRows() {
@@ -278,6 +331,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   }
 
   function handleGenerate(type) {
+    if (!reportAvailable(type)) return;
     const projectName = selectedProject.title;
     showToast(`Generating report preview for ${projectName}…`, 'info');
 
@@ -305,7 +359,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       }));
     } else if (type === 'payroll-register') {
       previewRows = buildPayrollRows();
-      reportTitle = 'Payroll Register — ' + payrollRun.month;
+      reportTitle = 'Payroll Register';
       csvHeaders = ['Name', 'Position', 'Category', 'Basic', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'];
       csvRows = previewRows.map((r) => ({
         Name: r.name, Position: r.position, Category: r.category, Basic: r.basic,
@@ -321,7 +375,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       }));
     }
 
-    setPrintReport({ key: type, title: reportTitle, html: null });
+    setPrintReport({ key: type, title: reportTitle });
     setCsvReport({ key: type, title: reportTitle, content: toCSV(csvRows, csvHeaders), filename: `${type.toLowerCase().replace(/\s+/g, '-')}.csv` });
   }
 
@@ -344,12 +398,12 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <tbody>
             ${rows.map((r) => `
               <tr${r.bold ? ' style="font-weight:700;background:#F7F6F2"' : ''}>
-                <td>${r.group || ''}</td>
-                <td>${r.item}</td>
-                <td class="r">₱${r.allocated.toLocaleString()}</td>
-                <td class="r">₱${r.spent.toLocaleString()}</td>
-                <td class="r">₱${r.remaining.toLocaleString()}</td>
-                <td class="r">${r.util.toFixed(1)}%</td>
+                <td>${escapeHtml(r.group)}</td>
+                <td>${escapeHtml(r.item)}</td>
+                <td class="r">${money(r.allocated)}</td>
+                <td class="r">${money(r.spent)}</td>
+                <td class="r">${money(r.remaining)}</td>
+                <td class="r">${(Number(r.util) || 0).toFixed(1)}%</td>
               </tr>
             `).join('')}
           </tbody>
@@ -366,10 +420,10 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <tbody>
             ${rows.map((r) => `
               <tr>
-                <td>${r.date}</td><td>${r.ref}</td><td>${r.description}</td><td>${r.category}</td>
-                <td class="r">₱${r.amount.toLocaleString()}</td>
-                <td><span style="display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:#${statusTone(r.status)==='ok'?'E9F3EE':statusTone(r.status)==='warn'?'F8EFD8':'F8E7E4'};color:#${statusTone(r.status)==='ok'?'2F7D5B':statusTone(r.status)==='warn'?'9A6B10':'B3382C'}">${r.status}</span></td>
-                <td>${r.recordedBy}</td><td>${r.verifiedBy}</td>
+                <td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.ref)}</td><td>${escapeHtml(r.description)}</td><td>${escapeHtml(r.category)}</td>
+                <td class="r">${money(r.amount)}</td>
+                <td><span style="display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:#${statusTone(r.status)==='ok'?'E9F3EE':statusTone(r.status)==='warn'?'F8EFD8':'F8E7E4'};color:#${statusTone(r.status)==='ok'?'2F7D5B':statusTone(r.status)==='warn'?'9A6B10':'B3382C'}">${escapeHtml(r.status)}</span></td>
+                <td>${escapeHtml(r.recordedBy)}</td><td>${escapeHtml(r.verifiedBy)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -377,7 +431,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       `;
     } else if (key === 'payroll-register') {
       const rows = buildPayrollRows();
-      subtitle = `Monthly payroll per personnel — ${payrollRun.month}`;
+      subtitle = 'Monthly payroll per personnel';
       tableHtml = `
         <table>
           <thead>
@@ -386,10 +440,10 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <tbody>
             ${rows.map((r) => `
               <tr>
-                <td>${r.name}</td><td>${r.position}</td><td>${r.category}</td>
-                <td class="r">₱${r.basic.toLocaleString()}</td><td class="r">₱${r.gross.toLocaleString()}</td>
-                <td class="r">₱${r.deductions.toLocaleString()}</td><td class="r">₱${r.net.toLocaleString()}</td>
-                <td><span style="display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:#${statusTone(r.status)==='ok'?'E9F3EE':'F8EFD8'};color:#${statusTone(r.status)==='ok'?'2F7D5B':'9A6B10'}">${r.status}</span></td>
+                <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.position)}</td><td>${escapeHtml(r.category)}</td>
+                <td class="r">${money(r.basic)}</td><td class="r">${money(r.gross)}</td>
+                <td class="r">${money(r.deductions)}</td><td class="r">${money(r.net)}</td>
+                <td><span style="display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:#${statusTone(r.status)==='ok'?'E9F3EE':'F8EFD8'};color:#${statusTone(r.status)==='ok'?'2F7D5B':'9A6B10'}">${escapeHtml(r.status)}</span></td>
               </tr>
             `).join('')}
           </tbody>
@@ -406,8 +460,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <tbody>
             ${rows.map((r) => `
               <tr>
-                <td>${r.month}</td><td class="r">₱${r.ps.toLocaleString()}</td>
-                <td class="r">₱${r.mooe.toLocaleString()}</td><td class="r">₱${r.total.toLocaleString()}</td>
+                <td>${escapeHtml(r.month)}</td><td class="r">${money(r.ps)}</td>
+                <td class="r">${money(r.mooe)}</td><td class="r">${money(r.total)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -420,7 +474,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       <html>
       <head>
         <meta charset="utf-8" />
-        <title>${title}</title>
+        <title>${escapeHtml(title)}</title>
         <style>
           @page { size: A4; margin: 1.5cm; }
           body { font-family: 'Public Sans', system-ui, sans-serif; font-size: 11px; color: #221D1A; line-height: 1.4; }
@@ -447,18 +501,18 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <div class="org">
             <h1>Mindanao State University–Main Campus</h1>
             <p>Office of the Vice Chancellor for Research & Extension · LIB Monitoring System</p>
-            <p>Monitoring Agency: <b>${selectedProject.funding_agency || 'External funder'}</b> · Implementing Agency: <b>MSU-Marawi</b></p>
+            <p>Monitoring Agency: <b>${escapeHtml(selectedProject.funding_agency || 'External funder')}</b> · Implementing Agency: <b>MSU-Marawi</b></p>
           </div>
         </div>
 
-        <div class="report-title">${title}</div>
-        <div class="report-sub">${subtitle}</div>
+        <div class="report-title">${escapeHtml(title)}</div>
+        <div class="report-sub">${escapeHtml(subtitle)}</div>
 
         <div class="meta">
-          <span><b>Project:</b> ${selectedProject.title} (${selectedProject.code})</span>
-          <span><b>Project Leader:</b> ${selectedProject.project_leader}</span>
-          <span><b>Period:</b> ${selectedPeriod}</span>
-          <span><b>Category:</b> ${selectedCategory}</span>
+          <span><b>Project:</b> ${escapeHtml(selectedProject.title)} (${escapeHtml(selectedProject.code)})</span>
+          <span><b>Project Leader:</b> ${escapeHtml(selectedProject.project_leader)}</span>
+          <span><b>Period:</b> ${escapeHtml(selectedPeriod)}</span>
+          <span><b>Category:</b> ${escapeHtml(selectedCategory)}</span>
           <span><b>Generated:</b> ${new Date().toLocaleDateString('en-PH')}</span>
         </div>
 
@@ -468,21 +522,19 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           This report was generated from verified expense records only. <br />
           Mindanao State University–Main Campus · MOST R&D Form B · Line-Item Budget Monitoring System.
         </div>
-        <script>window.print();</script>
       </body>
       </html>
     `;
   }
 
+  // Opens the print dialog for the previewed report ("Save as PDF" there).
   function handlePrint() {
-    if (!printReport) return;
-    const html = buildPrintHTML();
-    setPrintReport((prev) => ({ ...prev, html }));
-    setPrintOpen(true);
+    if (!printReport || !reportAvailable(printReport.key)) return;
+    printHtmlDocument(buildPrintHTML());
   }
 
   function handleCSV() {
-    if (!csvReport) return;
+    if (!csvReport || !reportAvailable(csvReport.key)) return;
     showToast(`Exporting ${csvReport.title} to CSV…`, 'info');
     downloadCSV(csvReport.content, csvReport.filename);
   }
@@ -541,14 +593,29 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         <div className="panel-head">
           <h3>Live Report Preview</h3>
           <span className="hint">{printReport?.title} · {rows.length} row(s)</span>
-          <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn sm" onClick={handlePrint} disabled={!printReport?.html}>
-              <span className="spin" style={{ display: printReport?.html ? 'none' : 'inline-block' }} />
-              Generate PDF
-            </button>
-            <button className="btn sm" onClick={handleCSV}>
-              Export to Excel / CSV
-            </button>
+          <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {detailStatus === 'error' ? (
+              <span className="rp-error" role="alert">
+                Could not load report data.
+                <button type="button" className="btn sm" onClick={retryDetail}>Try again</button>
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={handlePrint}
+                  disabled={!reportAvailable(printReport?.key)}
+                  aria-busy={detailStatus === 'loading'}
+                >
+                  {detailStatus === 'loading' && <span className="spin" aria-hidden="true" />}
+                  {detailStatus === 'loading' ? 'Loading data…' : 'Generate PDF'}
+                </button>
+                <button type="button" className="btn sm" onClick={handleCSV} disabled={!reportAvailable(printReport?.key)}>
+                  Export to Excel / CSV
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="wide-scroll" style={{ padding: '0 20px 20px', overflowX: 'auto' }}>
@@ -592,6 +659,104 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const remaining = Number(selectedProject.remaining ?? (totalAlloc - totalSpent)) || 0;
   const utilization = Number(selectedProject.utilization_pct) || 0;
 
+  // Direct CSV export for one report type (same rows as the PDF preview).
+  function exportReportCsv(r) {
+    if (!reportAvailable(r.key)) return;
+    // Build CSV on the fly for direct export
+    let rows, headers, filename;
+    if (r.key === 'utilization') {
+      rows = buildUtilizationRows();
+      headers = ['Category Type', 'Line Item', 'Allocated', 'Spent', 'Remaining', 'Utilization %'];
+      filename = 'budget-utilization.csv';
+    } else if (r.key === 'ledger') {
+      rows = buildLedgerRows();
+      headers = ['Date', 'Reference', 'Description', 'Category', 'Amount', 'Status', 'Recorded By', 'Verified By'];
+      filename = 'expense-ledger.csv';
+    } else if (r.key === 'payroll-register') {
+      rows = buildPayrollRows();
+      headers = ['Name', 'Position', 'Category', 'Basic', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'];
+      filename = 'payroll-register.csv';
+    } else {
+      rows = buildMonthlySummaryRows();
+      headers = ['Month', 'Personnel Services (PS)', 'Maintenance & Other Operating Expenses (MOOE)', 'Total'];
+      filename = 'monthly-financial-summary.csv';
+    }
+    showToast(`Exporting ${r.title} to CSV…`, 'info');
+    downloadCSV(toCSV(rows, headers), filename);
+  }
+
+  // Project / Period / Category selects, shared by both layouts.
+  function renderParamFields(program) {
+    const fieldProps = program ? { className: 'program-field' } : { className: 'field', style: { margin: 0 } };
+    const selectClass = program ? 'program-select' : undefined;
+    const placeholder = {
+      loading: 'Loading projects…',
+      error: 'Could not load projects',
+      empty: 'No projects yet',
+    }[projectsStatus];
+    return (
+      <>
+        <div {...fieldProps}>
+          <label htmlFor="report-param-project">Project</label>
+          <div className="rp-project">
+            <select
+              id="report-param-project"
+              className={selectClass}
+              value={selectedCode}
+              onChange={(e) => setChosenCode(e.target.value)}
+              disabled={projectsStatus !== 'ready'}
+              aria-busy={projectsStatus === 'loading'}
+              aria-invalid={projectsStatus === 'error' || undefined}
+            >
+              {projectsStatus === 'ready'
+                ? projectList.map((p) => (
+                  <option key={p.id} value={p.code}>{p.title} ({p.code})</option>
+                ))
+                : <option value="">{placeholder}</option>}
+            </select>
+            {projectsStatus === 'error' && (
+              <button type="button" className={program ? 'program-btn' : 'btn'} onClick={retryProjects}>
+                Try again
+              </button>
+            )}
+          </div>
+        </div>
+        <div {...fieldProps}>
+          <label htmlFor="report-param-period">Period</label>
+          <select id="report-param-period" className={selectClass} value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)}>
+            {PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div {...fieldProps}>
+          <label htmlFor="report-param-category">Category</label>
+          <select id="report-param-category" className={selectClass} value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </>
+    );
+  }
+
+  // Values appear only once the selected project's real data has loaded.
+  const shown = (value) => (project ? value : '—');
+  const summaryCards = (
+    <>
+      <StatCard label={`Total ${project?.funding_agency || listRow?.agency || 'Funder'} funding`} value={shown(formatMoney(selectedProject.funding_budget || 0))} sub={`${project?.funding_agency || listRow?.agency || 'External funder'} grant`} />
+      <StatCard label="MSU–Main Campus counterpart" value={shown(formatMoney(selectedProject.counterpart_budget || 0))} sub="Implementing agency share" />
+      <StatCard label="Total spent" value={shown(formatMoney(totalSpent))} sub={project ? `${utilization.toFixed(1)}% of total budget` : 'Waiting for project data'} />
+      <StatCard label="Remaining Balance" value={shown(formatMoney(remaining))} sub={project ? `${(totalAlloc ? ((remaining / totalAlloc) * 100) : 0).toFixed(1)}% unspent` : 'Waiting for project data'} />
+    </>
+  );
+
+  // Shown under the parameters while the selected project's data failed.
+  const detailError = detailStatus === 'error' && (
+    <div className="rp-error rp-error-block" role="alert">
+      <span>{detailResult?.error || "Could not load this project's report data."}</span>
+      <button type="button" className={programMode ? 'program-btn' : 'btn sm'} onClick={retryDetail}>Try again</button>
+    </div>
+  );
+  const payrollNote = 'Not available yet: the server does not provide payroll records for reports.';
+
   return (
     <>
       {!programMode && (
@@ -603,17 +768,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         </div>
       )}
 
-      {programMode && (
-        <div className="program-card-head" style={{ marginTop: 8 }}>
-          <div>
-            <div className="program-card-title">Per-project reports</div>
-            <div className="program-card-sub">
-              Pick one project. PDF and CSV exports use the same verified financial detail as the dashboard.
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Toast */}
       {toast && (
         <div className="banner" style={{ position: 'fixed', top: 90, right: 24, zIndex: 60, minWidth: 260, boxShadow: '0 2px 8px rgba(0,0,0,.15)' }}>
@@ -621,105 +775,95 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         </div>
       )}
 
-      {/* Report cards */}
-      <div className="report-opts" style={{ marginBottom: 20 }}>
-        {REPORT_TYPES.map((r) => (
-          <div className="report-card" key={r.key}>
-            <div className="rc-ic">{r.icon}</div>
-            <div style={{ flex: 1 }}>
-              <b>{r.title}</b>
-              <p>{r.desc}</p>
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-              <button className="btn sm" onClick={() => handleGenerate(r.key)}>
-                Generate PDF
-              </button>
-              <button className="btn sm" onClick={() => {
-                // Build CSV on the fly for direct export
-                let rows, headers, filename;
-                if (r.key === 'utilization') {
-                  rows = buildUtilizationRows();
-                  headers = ['Category Type', 'Line Item', 'Allocated', 'Spent', 'Remaining', 'Utilization %'];
-                  filename = 'budget-utilization.csv';
-                } else if (r.key === 'ledger') {
-                  rows = buildLedgerRows();
-                  headers = ['Date', 'Reference', 'Description', 'Category', 'Amount', 'Status', 'Recorded By', 'Verified By'];
-                  filename = 'expense-ledger.csv';
-                } else if (r.key === 'payroll-register') {
-                  rows = buildPayrollRows();
-                  headers = ['Name', 'Position', 'Category', 'Basic', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'];
-                  filename = 'payroll-register.csv';
-                } else {
-                  rows = buildMonthlySummaryRows();
-                  headers = ['Month', 'Personnel Services (PS)', 'Maintenance & Other Operating Expenses (MOOE)', 'Total'];
-                  filename = 'monthly-financial-summary.csv';
-                }
-                showToast(`Exporting ${r.title} to CSV…`, 'info');
-                downloadCSV(toCSV(rows, headers), filename);
-              }}>
-                Export CSV
-              </button>
+      {programMode ? (
+        <div className="prr">
+          <div className="program-card-head">
+            <div>
+              <div className="program-card-title">Per-project reports</div>
+              <div className="program-card-sub">
+                Choose a project and period first. Every report below uses this selection and the same verified data as the dashboard.
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Report parameters */}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-head"><h3>Report parameters</h3></div>
-        <div style={{ padding: 16 }} className="grid c3">
-          <div className="field" style={{ margin: 0 }}>
-            <label>Project</label>
-            <select
-              value={selectedCode || selectedProject.code}
-              onChange={(e) => setSelectedCode(e.target.value)}
-            >
-              {filteredProjects.map((p) => (
-                <option key={p.id} value={p.code}>{p.title} ({p.code})</option>
-              ))}
-            </select>
+          <div className="prr-params" role="group" aria-label="Report parameters">
+            {renderParamFields(true)}
           </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>Period</label>
-            <select value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)}>
-              {PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+          {detailError}
+
+          <div className="prr-label" id="prr-glance">Selected project at a glance</div>
+          <div className="prr-stats" role="group" aria-labelledby="prr-glance">
+            {summaryCards}
           </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>Category</label>
-            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
+
+          <div className="prr-label" id="prr-reports">Reports for this project</div>
+          <ul className="prr-list" aria-labelledby="prr-reports">
+            {REPORT_TYPES.map((r) => (
+              <li className="prr-row" key={r.key}>
+                <span className="prr-ic" aria-hidden="true">{r.icon}</span>
+                <div className="prr-text">
+                  <b>{r.title}</b>
+                  <p>{r.desc}</p>
+                  {r.key === 'payroll-register' && reportsReady && payrollSource === null && (
+                    <p className="rp-note">{payrollNote}</p>
+                  )}
+                </div>
+                <div className="prr-actions">
+                  <button type="button" className="program-btn" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
+                    Generate PDF
+                  </button>
+                  <button type="button" className="program-btn" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)}>
+                    Export CSV
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Report cards */}
+          <div className="report-opts" style={{ marginBottom: 20 }}>
+            {REPORT_TYPES.map((r) => (
+              <div className="report-card" key={r.key}>
+                <div className="rc-ic">{r.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <b>{r.title}</b>
+                  <p>{r.desc}</p>
+                  {r.key === 'payroll-register' && reportsReady && payrollSource === null && (
+                    <p className="rp-note">{payrollNote}</p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  <button className="btn sm" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
+                    Generate PDF
+                  </button>
+                  <button className="btn sm" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)}>
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
 
-      {/* Summary widgets */}
-      <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
-        <StatCard label="Total MOST Funding" value={formatMoney(selectedProject.funding_budget || 0)} sub={`${selectedProject.funding_agency || 'External funder'} grant`} />
-        <StatCard label="MSU Counterpart Funding" value={formatMoney(selectedProject.counterpart_budget || 0)} sub="MSU-Marawi share" />
-        <StatCard label="Total Disbursed" value={formatMoney(totalSpent)} sub={`${utilization.toFixed(1)}% of total budget`} />
-        <StatCard label="Remaining Balance" value={formatMoney(remaining)} sub={`${(totalAlloc ? ((remaining / totalAlloc) * 100) : 0).toFixed(1)}% unspent`} />
-      </div>
+          {/* Report parameters */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-head"><h3>Report parameters</h3></div>
+            <div style={{ padding: 16 }} className="grid c3">
+              {renderParamFields(false)}
+            </div>
+          </div>
+          {detailError}
+
+          {/* Summary widgets */}
+          <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
+            {summaryCards}
+          </div>
+        </>
+      )}
 
       {/* Live preview */}
       {renderPreviewTable()}
-
-      {/* Print modal */}
-      {printOpen && printReport && (
-        <div className="modal-overlay" onClick={() => setPrintOpen(false)} role="dialog" aria-modal="true" aria-label="Print report">
-          <div className="modal-panel" style={{ maxWidth: '800px', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>Print Report — {printReport.title}</h3>
-              <button type="button" className="modal-close" onClick={() => setPrintOpen(false)} aria-label="Close">×</button>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px', fontSize: '12px', lineHeight: '1.5' }} dangerouslySetInnerHTML={{ __html: printReport.html || '' }} />
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" className="btn" onClick={() => setPrintOpen(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

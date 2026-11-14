@@ -25,6 +25,7 @@ import ProgramApprovals from './pages/program/ProgramApprovals';
 import ProgramProjects from './pages/program/ProgramProjects';
 import ProgramProjectDetail from './pages/program/ProgramProjectDetail';
 import ProgramReports from './pages/program/ProgramReports';
+import ProgramExecutiveReport from './pages/program/ProgramExecutiveReport';
 import ProgramAudit from './pages/program/ProgramAudit';
 import ProgramUsers from './pages/program/ProgramUsers';
 import HomeRoute from './routes/HomeRoute';
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="/program-projects" element={<ProgramProjects />} />
               <Route path="/program-projects/:id" element={<ProgramProjectDetail />} />
               <Route path="/program-reports" element={<ProgramReports />} />
+              <Route path="/program-reports/executive" element={<ProgramExecutiveReport />} />
               <Route path="/program-audit" element={<ProgramAudit />} />
               <Route path="/program-users" element={<ProgramUsers />} />
 
