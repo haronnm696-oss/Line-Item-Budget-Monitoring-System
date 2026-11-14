@@ -96,10 +96,22 @@ export async function decideRegistration(id, { decision, role = '', remarks = ''
   return response.data;
 }
 
-export async function fetchProgramUsers(projectId = '') {
+/**
+ * Users and roles: one row per person, 25 per page.
+ * Filters: q (name or employee ID), role, project, status (active by
+ * default, inactive, all), user (focus), page.
+ */
+export async function fetchProgramUsers(params = {}, { signal } = {}) {
   const response = await client.get(ENDPOINTS.programUsers, {
-    params: projectId ? { project_id: projectId } : undefined,
+    signal,
+    params: Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '' && value != null)),
   });
+  return response.data;
+}
+
+/** Edit name, position/office, email and employee ID. */
+export async function updateProgramUserDetails(id, payload) {
+  const response = await client.patch(ENDPOINTS.programUser(id), payload);
   return response.data;
 }
 

@@ -15,6 +15,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -166,22 +167,149 @@ class ProgramUserService
         return $user->fresh()->load('primaryRole');
     }
 
-    public function users(?int $projectId = null): Collection
+    public const PER_PAGE = 25;
+
+    /**
+     * One row per person (approved accounts only), filtered and paged on the
+     * server. Relations are eager-loaded, so a page costs a fixed number of
+     * queries. With ?user= on the first page, the page is extended until it
+     * contains that person so the list can scroll to them.
+     *
+     * @param array{q?: ?string, role?: ?string, project?: ?int, status?: ?string, user?: ?int, page?: ?int} $filters
+     */
+    public function directory(array $filters, User $actor): array
+    {
+        $status = $filters['status'] ?? (! empty($filters['user']) ? 'all' : 'active');
+        $term = trim((string) ($filters['q'] ?? ''));
+
+        $query = User::query()
+            ->whereNotNull('role_id')
+            ->when($term !== '', function ($query) use ($term) {
+                $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term) . '%';
+                $query->where(fn ($w) => $w->where('name', 'like', $like)->orWhere('employee_id', 'like', $like));
+            })
+            ->when($filters['role'] ?? null, fn ($query, $slug) => $query->whereHas('primaryRole', fn ($r) => $r->where('slug', $slug)))
+            // Program Leaders oversee every project, so they match any project.
+            ->when($filters['project'] ?? null, fn ($query, $projectId) => $query->where(fn ($w) => $w
+                ->whereHas('projectUsers', fn ($a) => $a->where('project_id', $projectId))
+                ->orWhereHas('primaryRole', fn ($r) => $r->where('slug', 'program-leader'))))
+            ->when($status === 'active', fn ($query) => $query->where('is_active', true))
+            ->when($status === 'inactive', fn ($query) => $query->where('is_active', false));
+
+        $total = (clone $query)->count();
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $offset = ($page - 1) * self::PER_PAGE;
+        $limit = self::PER_PAGE;
+        $focusFound = null;
+
+        if (! empty($filters['user'])) {
+            $ids = (clone $query)->orderBy('name')->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id);
+            $index = $ids->search((int) $filters['user'], true);
+            $focusFound = $index !== false;
+            if ($focusFound && $page === 1) {
+                $limit = (int) (ceil(($index + 1) / self::PER_PAGE) * self::PER_PAGE);
+            }
+        }
+
+        $users = $query
+            ->with(['primaryRole', 'projectUsers.project', 'projectUsers.role'])
+            ->orderBy('name')
+            ->orderBy('id')
+            ->skip($offset)
+            ->take($limit)
+            ->get();
+
+        return [
+            'users' => $users->map(fn (User $user) => $this->directoryRow($user, $actor))->values()->all(),
+            'meta' => [
+                'total' => $total,
+                'page' => (int) (($offset + $limit) / self::PER_PAGE),
+                'per_page' => self::PER_PAGE,
+                'has_more' => $offset + $users->count() < $total,
+                'status' => $status,
+                'focus_found' => $focusFound,
+            ],
+        ];
+    }
+
+    /** Active, non-Program-Leader accounts for the "Assign to project" dialog. */
+    public function assignableUsers(): array
     {
         return User::query()
             ->whereNotNull('role_id')
-            ->with([
-                'primaryRole',
-                'projectUsers.project',
-                'projectUsers.role',
-            ])
-            ->when($projectId, function ($query) use ($projectId) {
-                $query->whereHas('projectUsers', fn ($assignment) => $assignment->where('project_id', $projectId));
-            })
+            ->where('is_active', true)
+            ->whereDoesntHave('primaryRole', fn ($r) => $r->where('slug', 'program-leader'))
             ->orderBy('name')
-            ->get()
-            ->map(fn (User $user) => $this->userPayload($user))
-            ->values();
+            ->get(['id', 'name', 'email', 'is_active'])
+            ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'is_active' => true])
+            ->values()
+            ->all();
+    }
+
+    protected function directoryRow(User $user, User $actor): array
+    {
+        $slug = $user->primaryRole?->slug;
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'employee_id' => $user->employee_id,
+            'position' => $user->position,
+            'role' => $slug ? (AuthController::SLUG_TO_CODE[$slug] ?? null) : null,
+            'role_slug' => $slug,
+            'role_label' => self::ROLE_LABELS[$slug] ?? $user->primaryRole?->name,
+            'status' => $user->is_active ? 'Active' : 'Inactive',
+            'is_active' => (bool) $user->is_active,
+            'is_self' => (int) $user->id === (int) $actor->id,
+            'last_login_at' => $user->last_login_at?->toIso8601String(),
+            // Program Leaders oversee all projects; any assignment rows they
+            // still have are kept (and returned) but not shown as their scope.
+            'program_wide' => $slug === 'program-leader',
+            'assignments' => $user->projectUsers
+                ->filter(fn (ProjectUser $assignment) => $assignment->project !== null)
+                ->sortBy(fn (ProjectUser $assignment) => $assignment->project->title)
+                ->map(fn (ProjectUser $assignment) => [
+                    'project_id' => (int) $assignment->project_id,
+                    'project' => $assignment->project->title,
+                    'project_code' => $assignment->project->code,
+                    'role_slug' => $assignment->role?->slug,
+                    'role_label' => self::ROLE_LABELS[$assignment->role?->slug] ?? $assignment->role?->name,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * Edit name, position/office, email and employee ID. One audit entry with
+     * only the fields that changed.
+     */
+    public function updateDetails(User $user, array $data, User $actor): User
+    {
+        return AuditLogger::transaction(function () use ($user, $data, $actor) {
+            $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $fields = ['name', 'position', 'email', 'employee_id'];
+            $old = $locked->only($fields);
+
+            $locked->update(array_intersect_key($data, array_flip($fields)));
+
+            AuditLogger::write('updated', $locked, $old, $locked->fresh()->only($fields), $actor);
+
+            return $locked->fresh()->load('primaryRole');
+        });
+    }
+
+    /** Sign the person out everywhere (database sessions and API tokens). */
+    protected function revokeSessions(User $user): void
+    {
+        if (Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        if (Schema::hasTable('personal_access_tokens')) {
+            $user->tokens()->delete();
+        }
     }
 
     public function assign(User $user, Project $project, string $roleSlug, User $actor): ProjectUser
@@ -236,6 +364,15 @@ class ProgramUserService
 
             $oldRole = Role::find($assignment->role_id);
 
+            // Same role: nothing changes and nothing is logged.
+            if ((int) $assignment->role_id === (int) $role->id) {
+                return $assignment;
+            }
+
+            if ($oldRole?->slug === 'project-leader') {
+                $this->ensureNotOnlyProjectLeader($project, $assignment);
+            }
+
             $assignment->update(['role_id' => $role->id]);
 
             AuditTrail::record($actor, 'assignment_updated', $user, [
@@ -263,6 +400,12 @@ class ProgramUserService
 
             $role = Role::find($assignment->role_id);
 
+            if ($role?->slug === 'project-leader') {
+                $this->ensureNotOnlyProjectLeader($project, $assignment);
+            }
+
+            // Only the assignment row goes. Expenses, approvals and audit
+            // entries keep pointing at the person.
             $assignment->delete();
 
             AuditTrail::record($actor, 'assignment_removed', $user, [
@@ -284,11 +427,20 @@ class ProgramUserService
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $oldValues = $locked->only(['is_active']);
 
+            // Already in the requested state: nothing changes, nothing is logged.
+            if ((bool) $locked->is_active === $isActive) {
+                return $locked->load('primaryRole');
+            }
+
             if (! $isActive) {
                 $this->ensureNotLastProgramLeader($locked);
             }
 
             $locked->update(['is_active' => $isActive]);
+
+            if (! $isActive) {
+                $this->revokeSessions($locked);
+            }
 
             AuditTrail::record(
                 $actor,
@@ -353,6 +505,27 @@ class ProgramUserService
         $base = rtrim(config('app.frontend_url') ?: config('app.url', ''), '/');
 
         return $base . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
+    }
+
+    /**
+     * An ongoing project must keep at least one Project Leader.
+     */
+    protected function ensureNotOnlyProjectLeader(Project $project, ProjectUser $assignment): void
+    {
+        if (app(ProjectFinancialService::class)->derivedStatus($project) !== 'ongoing') {
+            return;
+        }
+
+        $otherLeaders = ProjectUser::query()
+            ->where('project_id', $project->id)
+            ->whereKeyNot($assignment->getKey())
+            ->whereHas('role', fn ($query) => $query->where('slug', 'project-leader'))
+            ->whereHas('user', fn ($query) => $query->where('is_active', true))
+            ->count();
+
+        if ($otherLeaders === 0) {
+            abort(422, 'Assign another Project Leader to this project first.');
+        }
     }
 
     protected function ensureNotLastProgramLeader(User $user): void

@@ -76,6 +76,7 @@ export const ENDPOINTS = {
   programRegistrations: '/api/program/registrations',
   programRegistrationDecision: (id) => `/api/program/registrations/${id}/decision`,
   programUsers: '/api/program/users',
+  programUser: (id) => `/api/program/users/${id}`,
   programUserStatus: (id) => `/api/program/users/${id}/status`,
   programUserRole: (id) => `/api/program/users/${id}/role`,
   programAssignments: '/api/program/assignments',
