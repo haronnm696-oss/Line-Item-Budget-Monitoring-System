@@ -25,7 +25,8 @@ function roundedShares(values, total) {
 }
 
 /**
- * Share of the portfolio budget per project, drawn as an SVG donut.
+ * Share of the total budget per project, drawn as an SVG donut. Full-width
+ * card: donut on the left, legend on the right (below it under 900px).
  * `projects` is the Overview payload's project list (already funder-filtered).
  */
 export default function BudgetByProjectDonut({ projects = [] }) {
@@ -45,6 +46,7 @@ export default function BudgetByProjectDonut({ projects = [] }) {
       const segment = {
         id: project.id,
         name: project.title,
+        budget: project.budget,
         pct: shares[index],
         color: COLORS[index % COLORS.length],
         length,
@@ -58,7 +60,7 @@ export default function BudgetByProjectDonut({ projects = [] }) {
   const label = segments.map((segment) => `${segment.name} ${formatPct(segment.pct)}`).join(', ');
 
   return (
-    <section className="program-card pl-chart-card">
+    <section className="program-card pl-chart-card pl-donut-card">
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Budget by project</div>
@@ -107,6 +109,7 @@ export default function BudgetByProjectDonut({ projects = [] }) {
               <li key={segment.id}>
                 <span className="pl-donut-swatch" style={{ background: segment.color }} aria-hidden="true" />
                 <span className="pl-donut-name" title={segment.name}>{segment.name}</span>
+                <span className="pl-donut-budget">{compactPeso(segment.budget)}</span>
                 <b>{formatPct(segment.pct)}</b>
               </li>
             ))}
