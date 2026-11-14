@@ -71,6 +71,7 @@ export const ENDPOINTS = {
   programProjectsExport: '/api/program/projects/export',
   programProject: (id) => `/api/program/projects/${id}`,
   programApprovals: '/api/program/approvals',
+  programAudit: '/api/program/audit',
   programDecision: (id) => `/api/program/approvals/${id}/decision`,
   programRegistrations: '/api/program/registrations',
   programRegistrationDecision: (id) => `/api/program/registrations/${id}/decision`,

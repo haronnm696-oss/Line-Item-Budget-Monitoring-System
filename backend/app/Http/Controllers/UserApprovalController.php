@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AuditLogger;
 use App\Models\AuditTrail;
 use App\Models\Role;
 use App\Models\User;
@@ -55,7 +56,7 @@ class UserApprovalController extends Controller
 
         $role = Role::where('slug', $data['role'])->firstOrFail();
 
-        DB::transaction(function () use ($request, $user, $role) {
+        AuditLogger::transaction(function () use ($request, $user, $role) {
             $oldValues = $user->only(['role_id', 'is_active', 'position']);
 
             $user->update([

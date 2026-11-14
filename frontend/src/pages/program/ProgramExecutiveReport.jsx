@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { fetchProgramOverview } from '../../api/program';
 import { formatPct, peso } from '../../components/money';
+import { formatInManila } from '../../lib/datetime';
 import ProgramPill from '../../components/program/ProgramPill';
 
 function messageFor(error, fallback) {
@@ -10,7 +11,7 @@ function messageFor(error, fallback) {
 }
 
 function formatGenerated(date) {
-  return date.toLocaleString('en-PH', {
+  return formatInManila(date, {
     month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   });
 }

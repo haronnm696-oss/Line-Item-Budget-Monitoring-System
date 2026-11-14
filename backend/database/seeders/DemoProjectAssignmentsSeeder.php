@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\AuditLogger;
 use App\Models\AuditTrail;
 use App\Models\FundingAgency;
 use App\Models\Project;
@@ -56,7 +57,16 @@ class DemoProjectAssignmentsSeeder extends Seeder
 
     private bool $dryRun = false;
 
+    /**
+     * Seeded rows are not logged by the audit observers; seeders write
+     * their own audit history where it matters.
+     */
     public function run(): void
+    {
+        AuditLogger::muted(fn () => $this->seed());
+    }
+
+    private function seed(): void
     {
         $flag = getenv('DEMO_ASSIGN_DRY_RUN');
         $this->dryRun = filter_var($flag !== false ? $flag : env('DEMO_ASSIGN_DRY_RUN', false), FILTER_VALIDATE_BOOLEAN);
@@ -84,7 +94,79 @@ class DemoProjectAssignmentsSeeder extends Seeder
                 : DB::transaction(fn () => $this->assign($project, $key, $role));
         }
 
+        $changes += $this->dryRun
+            ? $this->repairBrokenDemoText()
+            : DB::transaction(fn () => $this->repairBrokenDemoText());
+
         $this->say('info', ($this->dryRun ? 'Would change ' : 'Changed ') . $changes . ' value(s).');
+    }
+
+    /**
+     * Demo titles whose dash was stored as "???" when the data was loaded
+     * into production through a non-UTF-8 path. The original text cannot be
+     * recovered automatically, so only these exact known values are repaired
+     * ("???" -> "—"). Anything else, including user-entered text, is left
+     * alone. Idempotent: once repaired, the broken values no longer match.
+     *
+     * @return array<string, array{0: string, 1: string, 2: array<int, string>}>
+     */
+    public static function brokenDemoText(): array
+    {
+        $liquidations = array_map(fn (int $n) => "Liquidation Report ??? Tranche {$n}", [1, 2, 3, 4]);
+
+        return [
+            'project_tranches' => ['ProjectTranche', 'name', [
+                'Tranche 1 ??? Project Mobilization',
+                'Tranche 2 ??? Mid-year Milestone',
+                'Tranche 3 ??? Field Validation',
+                'Tranche 4 ??? Final Report & Closeout',
+                'Tranche 1 ??? Mobilization',
+                'Tranche 2 ??? Midyear Review',
+                'Tranche 4 ??? Closeout',
+            ]],
+            'approval_requests' => ['ApprovalRequest', 'title', array_merge(
+                ['Release Tranche 3 ??? Field Validation'],
+                $liquidations
+            )],
+            'liquidations' => ['Liquidation', 'title', $liquidations],
+        ];
+    }
+
+    private function repairBrokenDemoText(): int
+    {
+        $changes = 0;
+
+        foreach (self::brokenDemoText() as $table => [$modelType, $column, $values]) {
+            $rows = DB::table($table)->whereIn($column, $values)->orderBy('id')->get(['id', 'project_id', $column]);
+
+            foreach ($rows as $row) {
+                $broken = $row->{$column};
+                $fixed = str_replace('???', '—', $broken);
+                $this->say('line', "{$table} #{$row->id}: \"{$broken}\" -> \"{$fixed}\"");
+                $changes++;
+
+                if ($this->dryRun) {
+                    continue;
+                }
+
+                DB::table($table)->where('id', $row->id)->update([$column => $fixed]);
+
+                AuditTrail::create([
+                    'user_id' => null,
+                    'action' => 'updated',
+                    'model_type' => $modelType,
+                    'model_id' => $row->id,
+                    'project_id' => $row->project_id,
+                    'old_values' => [$column => $broken],
+                    'new_values' => [$column => $fixed],
+                    'reason' => 'DemoProjectAssignmentsSeeder: repaired a dash stored as "???"',
+                    'ip_address' => null,
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
+        return $changes;
     }
 
     /**

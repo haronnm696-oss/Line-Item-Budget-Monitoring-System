@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { fetchProgramOverview, decideApproval } from '../../api/program';
+import { formatInManila } from '../../lib/datetime';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import ProgramRejectModal from '../../components/program/ProgramRejectModal';
@@ -20,7 +21,7 @@ function messageFor(error, fallback) {
 }
 
 function greeting() {
-  const hour = new Date().getHours();
+  const hour = Number(formatInManila(new Date(), { hour: 'numeric', hourCycle: 'h23' }, '12'));
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';

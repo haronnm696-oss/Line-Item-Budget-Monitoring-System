@@ -46,6 +46,18 @@ export async function fetchProgramProject(id) {
 }
 
 /**
+ * Audit trail page (read-only): readable entries, 50 per page, newest first.
+ * Filters: action, project, user, from, to (Philippine dates), page.
+ */
+export async function fetchProgramAudit(params = {}, { signal } = {}) {
+  const response = await client.get(ENDPOINTS.programAudit, {
+    signal,
+    params: Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '' && value != null)),
+  });
+  return response.data;
+}
+
+/**
  * Approval workspace, filtered by tab, type, project and funder.
  */
 export async function fetchProgramApprovals(params = {}, { signal } = {}) {

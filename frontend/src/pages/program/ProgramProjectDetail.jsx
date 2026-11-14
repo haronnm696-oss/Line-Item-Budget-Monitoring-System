@@ -3,20 +3,8 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { fetchProgramProject } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
 import { formatPct, peso } from '../../components/money';
+import { formatDate, formatDateTime } from '../../lib/datetime';
 
-function formatDate(value) {
-  if (!value) return '—';
-  const date = new Date(value.length <= 10 ? `${value}T00:00:00` : value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function formatDateTime(value) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
 
 function actionLabel(action) {
   const text = String(action ?? '').replace(/_/g, ' ');
@@ -297,7 +285,7 @@ export default function ProgramProjectDetail() {
               <div className="program-card-title">Recent activity</div>
               <div className="program-card-sub">Latest 10 audit-trail entries</div>
             </div>
-            <Link className="program-card-link" to="/program-audit">Audit trail</Link>
+            <Link className="program-card-link" to={`/program-audit?project=${project.id}`}>Audit trail</Link>
           </div>
           {activity.length === 0 ? (
             <p className="pl-inbox-empty">No recorded activity yet.</p>

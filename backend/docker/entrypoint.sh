@@ -81,4 +81,12 @@ done
 
 php artisan storage:link || true
 
+# Opt-in: set RUN_DEMO_ASSIGN=1 on Render to run the idempotent demo backfill
+# (funders, leaders, and the repair of demo titles stored as "???") once on
+# boot. A failure is reported but never stops the app from starting.
+if [ "${RUN_DEMO_ASSIGN:-0}" = "1" ]; then
+    php artisan db:seed --class=DemoProjectAssignmentsSeeder --force \
+        || echo "WARNING: DemoProjectAssignmentsSeeder failed; the app is starting anyway."
+fi
+
 exec apache2-foreground

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\AuditLogger;
 use App\Models\Project;
 use Database\Seeders\Concerns\AssignsDemoFunding;
 use Illuminate\Database\Seeder;
@@ -10,7 +11,16 @@ class ProjectsSeeder extends Seeder
 {
     use AssignsDemoFunding;
 
+    /**
+     * Seeded rows are not logged by the audit observers; seeders write
+     * their own audit history where it matters.
+     */
     public function run(): void
+    {
+        AuditLogger::muted(fn () => $this->seed());
+    }
+
+    private function seed(): void
     {
         $projects = [
             [

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AuditLogger;
 use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
 use App\Models\LibCategory;
@@ -68,7 +69,7 @@ class ApprovalController extends Controller
             ], 409);
         }
 
-        DB::transaction(function () use ($request, $approval, $status) {
+        AuditLogger::transaction(function () use ($request, $approval, $status) {
             $oldValues = $approval->only(['status', 'reviewed_by', 'reviewed_at', 'review_notes']);
 
             $approval->update([

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AuditLogger;
 use App\Models\AuditTrail;
 use App\Models\Expense;
 use Illuminate\Http\Request;
@@ -46,7 +47,7 @@ class ExpenseController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($request, $expense, $status, $data) {
+        AuditLogger::transaction(function () use ($request, $expense, $status, $data) {
             $oldValues = $expense->only(['status', 'verified_by', 'verified_at', 'remarks']);
 
             $expense->update([

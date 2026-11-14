@@ -534,7 +534,7 @@ class ProgramDashboardService
             abort(409, 'This approval request has already been reviewed.');
         }
 
-        DB::transaction(function () use ($approval, $decision, $remarks, $actor) {
+        AuditLogger::transaction(function () use ($approval, $decision, $remarks, $actor) {
             $locked = ApprovalRequest::query()
                 ->with(['liquidation'])
                 ->lockForUpdate()
@@ -559,7 +559,8 @@ class ProgramDashboardService
 
             $this->applyDecision($locked, $decision, $remarks, $actor);
 
-            if (($locked->type ?? '') === 'budget_realignment') {
+            // Only an approved realignment moves money between line items.
+            if (($locked->type ?? '') === 'budget_realignment' && $decision === 'approved') {
                 AuditTrail::create([
                     'user_id' => $actor->id,
                     'action' => 'budget_changed',

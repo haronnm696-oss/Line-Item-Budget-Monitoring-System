@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchProgramApprovals } from '../api/program';
+import { formatInManila } from '../lib/datetime';
 import PageErrorBoundary from '../components/program/PageErrorBoundary';
 
 const ProgramRefreshContext = createContext({
@@ -149,11 +150,7 @@ function initialsFrom(name) {
 }
 
 function todayLabel() {
-  return new Date().toLocaleDateString('en-PH', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  return formatInManila(new Date(), { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export default function ProgramLayout() {
