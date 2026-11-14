@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchProgramOverview } from '../../api/program';
 import { formatPct, peso } from '../../components/money';
@@ -27,6 +27,8 @@ export default function ProgramReports() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const executiveRef = useRef(null);
+  const wantsExecutive = searchParams.get('report') === 'executive';
 
   useEffect(() => {
     let alive = true;
@@ -44,6 +46,14 @@ export default function ProgramReports() {
     return () => { alive = false; };
   }, []);
 
+  // ?report=executive (from the Overview's "Executive report" button) opens
+  // the page on the Executive summary.
+  useEffect(() => {
+    if (!wantsExecutive || loading || !executiveRef.current) return;
+    executiveRef.current.scrollIntoView({ block: 'start' });
+    executiveRef.current.focus({ preventScroll: true });
+  }, [wantsExecutive, loading]);
+
   const projects = useMemo(() => (Array.isArray(data?.projects) ? data.projects : []), [data]);
   const kpis = data?.kpis ?? {};
   const consolidatedRows = [...projects].sort((a, b) => (b.budget || 0) - (a.budget || 0));
@@ -51,7 +61,7 @@ export default function ProgramReports() {
   function printExecutiveSummary() {
     const lines = [
       ['Total budget', peso(kpis.portfolio_budget ?? 0)],
-      ['Total disbursed', peso(kpis.total_disbursed ?? 0)],
+      ['Total spent', peso(kpis.total_disbursed ?? 0)],
       ['Utilization', formatPct(kpis.utilization_pct ?? 0)],
       ['Average receipt compliance', kpis.avg_receipt_compliance != null ? formatPct(kpis.avg_receipt_compliance) : '—'],
       ['Open approvals', String(kpis.pending_approvals_total ?? kpis.pending_approvals ?? 0)],
@@ -143,7 +153,13 @@ export default function ProgramReports() {
 
       {error && <div className="program-banner error" role="alert">{error}</div>}
 
-      <section className="program-card">
+      <section
+        className={`program-card${wantsExecutive ? ' is-selected' : ''}`}
+        id="executive-summary"
+        ref={executiveRef}
+        tabIndex={-1}
+        aria-label="Executive summary"
+      >
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Executive summary</div>
@@ -160,7 +176,7 @@ export default function ProgramReports() {
             <div className="program-kpi-sub">{kpis.pending_approvals_total ?? kpis.pending_approvals ?? 0} pending approvals · {kpis.oldest_waiting_days ?? 0} days oldest</div>
           </div>
           <div className="program-kpi">
-            <div className="program-kpi-label">Total disbursed</div>
+            <div className="program-kpi-label">Total spent</div>
             <div className="program-kpi-value">{peso(kpis.total_disbursed ?? 0)}</div>
             <div className="program-kpi-sub">{formatPct(kpis.utilization_pct ?? 0)} of total budget</div>
           </div>

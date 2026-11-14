@@ -8,6 +8,8 @@ import ProgramPill from '../../components/program/ProgramPill';
 import ProgramRejectModal from '../../components/program/ProgramRejectModal';
 import BudgetByProjectDonut from '../../components/program/BudgetByProjectDonut';
 import ScheduledReleasesBars from '../../components/program/ScheduledReleasesBars';
+import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
+import PsMooeCard from '../../components/program/PsMooeCard';
 import { compactPeso, formatPct, peso } from '../../components/money';
 
 function clampPct(value) {
@@ -48,15 +50,16 @@ const KPI_ICONS = {
       <path d="M6.5 12h.01M17.5 12h.01" />
     </svg>
   ),
-  disbursed: (
+  spent: (
     <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true">
       <circle cx="12" cy="12" r="8.5" />
       <path d="M9 15l6-6M10 9h5v5" />
     </svg>
   ),
-  health: (
+  remaining: (
     <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true">
-      <path d="M3 12h4l2.5-6 4 12 2.5-6H21" />
+      <path d="M4 7.5h13.5a2.5 2.5 0 0 1 2.5 2.5v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17V7.5Z" />
+      <path d="M4 7.5 15 4.5v3M16 13.5h.01" />
     </svg>
   ),
   approvals: (
@@ -171,21 +174,26 @@ export default function ProgramLeaderDashboard() {
       : [];
   const fundingSources = Array.isArray(data?.funding_sources) ? data.funding_sources : [];
 
-  const health = kpis.health ?? {};
-  const healthyCount = Number(health.healthy) || 0;
-  const watchCount = Number(health.watch) || 0;
-  const riskCount = Number(health.at_risk) || 0;
-  const healthTotal = healthyCount + watchCount + riskCount;
-  const healthPct = (value) => (healthTotal ? (value / healthTotal) * 100 : 0);
+  // Spent = verified expenses (same rule as the Projects page).
+  // Released = released tranches. Remaining = budget - spent.
   const budget = Number(kpis.portfolio_budget) || 0;
-  const disbursed = Number(kpis.total_disbursed) || 0;
+  const spent = Number(kpis.total_spent ?? kpis.total_disbursed) || 0;
   const utilization = Number(kpis.utilization_pct) || 0;
-  const remaining = budget - disbursed;
-  const pending = kpis.pending_approvals_total ?? kpis.pending_approvals ?? 0;
-  const compliance = kpis.avg_receipt_compliance;
+  const remaining = kpis.remaining != null ? Number(kpis.remaining) : budget - spent;
+  const remainingPct = kpis.remaining_pct != null
+    ? Number(kpis.remaining_pct)
+    : budget > 0 ? (remaining / budget) * 100 : 0;
+  const released = Number(kpis.total_released) || 0;
+  const notYetReleased = kpis.not_yet_released != null
+    ? Number(kpis.not_yet_released)
+    : Math.max(budget - released, 0);
+  const releasedPct = kpis.released_pct != null
+    ? Number(kpis.released_pct)
+    : budget > 0 ? (released / budget) * 100 : 0;
+  const pending = Number(kpis.pending_approvals_total ?? kpis.pending_approvals ?? 0) || 0;
+  const oldestDays = Number(kpis.oldest_waiting_days) || 0;
+  const monthlyExpenses = Array.isArray(data?.monthly_expenses) ? data.monthly_expenses : [];
 
-  const expenseCount = projects.reduce((sum, project) => sum + (Number(project.expenses_count) || 0), 0);
-  const receiptCount = projects.reduce((sum, project) => sum + (Number(project.receipts_count) || 0), 0);
   const projectCount = data?.meta?.project_count ?? projects.length;
 
   const projectRows = [...projects]
@@ -201,7 +209,7 @@ export default function ProgramLeaderDashboard() {
           <div className="pl-greeting">{greeting()}, {firstName}</div>
           <h1 className="program-h1">Externally funded research</h1>
           <p className="program-sub">
-            {projectCount} project{projectCount === 1 ? '' : 's'} · {peso(disbursed)} disbursed of{' '}
+            {projectCount} project{projectCount === 1 ? '' : 's'} · {peso(spent)} spent of{' '}
             {peso(budget)} · {pending} waiting for your approval
           </p>
         </div>
@@ -231,8 +239,11 @@ export default function ProgramLeaderDashboard() {
             Review approvals
             {pending > 0 && <span className="pl-count">{pending}</span>}
           </Link>
+          <Link className="program-btn" to="/program-reports?report=executive">
+            Executive report
+          </Link>
           <span className="pl-updated" aria-live="polite">
-            {refreshing ? 'Updating…' : 'Live data'}
+            {refreshing ? 'Updating…' : ''}
           </span>
         </div>
       </div>
@@ -283,17 +294,17 @@ export default function ProgramLeaderDashboard() {
                 <span style={{ width: `${clampPct(utilization)}%` }} />
               </div>
               <div className="pl-kpi-foot">
-                <AnimatedNumber value={utilization} format={formatPct} /> utilized
+                <AnimatedNumber value={utilization} format={formatPct} /> spent
               </div>
             </section>
 
             <section className="program-card pl-kpi">
               <div className="pl-kpi-head">
-                <span className="pl-kpi-ic">{KPI_ICONS.disbursed}</span>
-                <span className="pl-kpi-label">Total disbursed</span>
+                <span className="pl-kpi-ic">{KPI_ICONS.spent}</span>
+                <span className="pl-kpi-label">Total spent</span>
               </div>
               <div className="pl-kpi-value">
-                <AnimatedNumber value={disbursed} format={peso} />
+                <AnimatedNumber value={spent} format={peso} />
               </div>
               <div className="pl-kpi-sub">
                 <AnimatedNumber value={utilization} format={formatPct} /> of the total budget
@@ -301,32 +312,20 @@ export default function ProgramLeaderDashboard() {
               <div className="pl-track">
                 <span style={{ width: `${clampPct(utilization)}%` }} />
               </div>
-              <div className="pl-kpi-foot">
-                Remaining <AnimatedNumber value={Math.max(remaining, 0)} format={peso} />
-              </div>
             </section>
 
-            <Link className="program-card pl-kpi pl-kpi-link" to="/program-projects?risk=1" aria-label={`Project health: ${riskCount} at risk. View at-risk projects`}>
+            <section className="program-card pl-kpi">
               <div className="pl-kpi-head">
-                <span className="pl-kpi-ic">{KPI_ICONS.health}</span>
-                <span className="pl-kpi-label">Project health</span>
+                <span className="pl-kpi-ic">{KPI_ICONS.remaining}</span>
+                <span className="pl-kpi-label">Remaining balance</span>
               </div>
               <div className="pl-kpi-value">
-                {riskCount}
-                <span className="pl-kpi-unit">at risk</span>
+                <AnimatedNumber value={remaining} format={peso} />
               </div>
               <div className="pl-kpi-sub">
-                <AnimatedNumber value={healthyCount} /> healthy · <AnimatedNumber value={watchCount} /> on watch
+                <AnimatedNumber value={remainingPct} format={formatPct} /> still available
               </div>
-              <div className="pl-health-bar" aria-hidden="true">
-                <span className="is-healthy" style={{ width: `${healthPct(healthyCount)}%` }} />
-                <span className="is-watch" style={{ width: `${healthPct(watchCount)}%` }} />
-                <span className="is-risk" style={{ width: `${healthPct(riskCount)}%` }} />
-              </div>
-              <div className="pl-kpi-foot">
-                {health.closed ?? 0} closed · {projects.length} tracked
-              </div>
-            </Link>
+            </section>
 
             <section className="program-card pl-kpi">
               <div className="pl-kpi-head">
@@ -337,12 +336,7 @@ export default function ProgramLeaderDashboard() {
                 <AnimatedNumber value={pending} />
               </div>
               <div className="pl-kpi-sub">
-                Oldest waiting {kpis.oldest_waiting_days ?? 0} day{Number(kpis.oldest_waiting_days) === 1 ? '' : 's'}
-              </div>
-              <div className="pl-kpi-foot">
-                {compliance != null
-                  ? `Receipts ${formatPct(compliance)} · ${receiptCount}/${expenseCount} expenses`
-                  : `${approvals.length} in the dashboard queue`}
+                Oldest waiting {oldestDays} day{oldestDays === 1 ? '' : 's'}
               </div>
             </section>
           </div>
@@ -401,14 +395,21 @@ export default function ProgramLeaderDashboard() {
                 </div>
 
                 <div className="pl-wallet-hero">
-                  <span>Ready to disburse</span>
-                  <b><AnimatedNumber value={Math.max(remaining, 0)} format={peso} /></b>
-                  <div className="pl-track pl-track-gold">
-                    <span style={{ width: `${clampPct(utilization)}%` }} />
+                  <span>Not yet released</span>
+                  <b><AnimatedNumber value={notYetReleased} format={peso} /></b>
+                  <div
+                    className="pl-track pl-track-gold"
+                    role="progressbar"
+                    aria-label="Released of allocated"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(clampPct(releasedPct))}
+                  >
+                    <span style={{ width: `${clampPct(releasedPct)}%` }} />
                   </div>
                   <div className="pl-wallet-split">
                     <div><span>Allocated</span><b><AnimatedNumber value={budget} format={peso} /></b></div>
-                    <div><span>Disbursed</span><b><AnimatedNumber value={disbursed} format={peso} /></b></div>
+                    <div><span>Released</span><b><AnimatedNumber value={released} format={peso} /></b></div>
                   </div>
                 </div>
 
@@ -420,10 +421,10 @@ export default function ProgramLeaderDashboard() {
                         <span>{source.projects} project{source.projects === 1 ? '' : 's'}</span>
                       </div>
                       <div className="pl-track">
-                        <span style={{ width: `${clampPct(source.utilization_pct)}%` }} />
+                        <span style={{ width: `${clampPct(source.released_pct)}%` }} />
                       </div>
                       <div className="pl-fund-meta">
-                        <span>{formatPct(source.utilization_pct)} utilized</span>
+                        <span>{formatPct(source.released_pct)} released</span>
                         <b><AnimatedNumber value={source.allocated} format={compactPeso} /></b>
                       </div>
                     </div>
@@ -437,11 +438,17 @@ export default function ProgramLeaderDashboard() {
             </div>
           </div>
 
+          <div className="pl-row pl-row-trend">
+            <MonthlyExpenseTrend months={monthlyExpenses} />
+            <PsMooeCard summary={data.category_summary} />
+          </div>
+
           <div className="pl-row pl-row-charts">
             <BudgetByProjectDonut projects={projects} />
             <ScheduledReleasesBars releases={releases} />
           </div>
 
+          {pending > 0 && (
           <section className="program-card">
             <div className="program-card-head">
               <div>
@@ -511,6 +518,7 @@ export default function ProgramLeaderDashboard() {
               </div>
             )}
           </section>
+          )}
 
           <section className="program-card">
             <div className="program-card-head">
