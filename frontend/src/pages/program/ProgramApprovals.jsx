@@ -86,20 +86,24 @@ function DecidedRow({ approval }) {
   );
 }
 
+// The parent renders this with a key built from the tab and filters, so a
+// change remounts it and visibleCount starts again at PAGE_SIZE.
 function DecidedList({ approvals }) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
   return (
     <section className="program-card">
       <ul className="pa-decided-list">
-        {approvals.slice(0, visible).map((approval) => (
+        {approvals.slice(0, visibleCount).map((approval) => (
           <DecidedRow key={approval.id} approval={approval} />
         ))}
       </ul>
-      {approvals.length > visible && (
+      {approvals.length > visibleCount && (
         <div className="pa-more">
           <button
             type="button"
             className="program-btn"
-            onClick={() => setVisible((value) => value + PAGE_SIZE)}
+            onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
           >
             Load more
           </button>

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchProgramApprovals } from '../api/program';
+import PageErrorBoundary from '../components/program/PageErrorBoundary';
 
 const ProgramRefreshContext = createContext({
   pendingCount: 0,
@@ -371,7 +372,9 @@ export default function ProgramLayout() {
           </header>
 
           <main className="program-content">
-            <Outlet />
+            <PageErrorBoundary key={location.pathname}>
+              <Outlet />
+            </PageErrorBoundary>
           </main>
         </div>
       </div>
