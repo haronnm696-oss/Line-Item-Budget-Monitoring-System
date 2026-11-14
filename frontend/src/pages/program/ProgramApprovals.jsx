@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
@@ -88,6 +88,56 @@ function DecidedRow({ approval }) {
 
 // The parent renders this with a key built from the tab and filters, so a
 // change remounts it and visibleCount starts again at PAGE_SIZE.
+// Placeholder rows built from the real row classes so they take the same
+// height as the rows they stand in for.
+function ListSkeleton({ status }) {
+  const decided = status !== 'pending';
+  return (
+    <section className="program-card" aria-busy="true" aria-label="Loading approval requests">
+      {decided ? (
+        <ul className="pa-decided-list" aria-hidden="true">
+          {[0, 1, 2].map((index) => (
+            <li className="pa-decided-row" key={index}>
+              <div className="pa-decided-main">
+                <div className="pa-decided-title">
+                  <span className="pa-skel" style={{ width: 84, height: 23 }} />
+                  <span className="pa-skel" style={{ width: '38%', height: 20 }} />
+                </div>
+                <div className="pa-meta"><span className="pa-skel" style={{ width: '62%', height: 16 }} /></div>
+                <div className="pa-meta"><span className="pa-skel" style={{ width: '34%', height: 16 }} /></div>
+                <span className="pa-skel pa-skel-box" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div aria-hidden="true">
+          {/* Same wrapper, title, two-line subtitle and justification box as a real pending row. */}
+          {[0, 1, 2].map((index) => (
+            <div key={index}>
+              <div className="program-row">
+                <div className="program-row-main">
+                  <div className="program-row-title"><span className="pa-skel" style={{ width: '40%', height: 25 }} /></div>
+                  <div className="program-row-sub pa-skel-lines">
+                    <span className="pa-skel" style={{ width: '70%', height: 16 }} />
+                    <span className="pa-skel" style={{ width: '45%', height: 16 }} />
+                  </div>
+                  <span className="pa-skel pa-skel-box" style={{ height: 62 }} />
+                </div>
+                <div className="program-row-actions">
+                  <span className="pa-skel" style={{ width: 92, height: 40 }} />
+                  <span className="pa-skel" style={{ width: 78, height: 40 }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <span className="pa-sr-only">Loading approval requests…</span>
+    </section>
+  );
+}
+
 function DecidedList({ approvals }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -127,9 +177,12 @@ export default function ProgramApprovals() {
   const funder = searchParams.get('funder') ?? '';
   const hasFilters = type !== 'all' || project !== '' || funder !== '';
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Each response is stored with the tab + filter combination it was
+  // requested for, so rows from another tab can never render here.
+  const requestKey = `${status}|${type}|${project}|${funder}`;
+  const [result, setResult] = useState(null); // { key, payload }
+  const [failure, setFailure] = useState(null); // { key, message }
+  const controllerRef = useRef(null);
   const [feedback, setFeedback] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [rejectId, setRejectId] = useState(null);
@@ -152,21 +205,34 @@ export default function ProgramApprovals() {
   }
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+    // Cancel the previous request; only the latest one may update state.
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
     try {
-      const payload = await fetchProgramApprovals({ status, type, project, funder });
-      setData(payload);
+      const payload = await fetchProgramApprovals(
+        { status, type, project, funder },
+        { signal: controller.signal }
+      );
+      if (controllerRef.current !== controller) return;
+      setResult({ key: requestKey, payload });
+      setFailure(null);
     } catch (requestError) {
-      setError(messageFor(requestError, 'Unable to load approval requests right now.'));
-    } finally {
-      setLoading(false);
+      if (controller.signal.aborted || controllerRef.current !== controller) return;
+      setFailure({ key: requestKey, message: messageFor(requestError, 'Unable to load approval requests right now.') });
     }
-  }, [status, type, project, funder]);
+  }, [status, type, project, funder, requestKey]);
 
   useEffect(() => {
     load();
+    return () => controllerRef.current?.abort();
   }, [load]);
+
+  function retry() {
+    setFailure(null);
+    load();
+  }
 
   async function refreshAll() {
     await load();
@@ -217,10 +283,19 @@ export default function ProgramApprovals() {
     }
   }
 
-  const counts = data?.counts ?? {};
-  const approvals = Array.isArray(data?.approvals) ? data.approvals : [];
-  const projects = Array.isArray(data?.projects) ? data.projects : [];
-  const funders = Array.isArray(data?.funders) ? data.funders : [];
+  const payload = result?.payload;
+  const isCurrent = result?.key === requestKey;
+  const error = failure?.key === requestKey ? failure.message : '';
+  const loading = !isCurrent && !error;
+  // Counts and filter options keep their last known values while a new
+  // request is in flight, so they never flicker to 0.
+  const counts = payload?.counts ?? null;
+  const projects = Array.isArray(payload?.projects) ? payload.projects : [];
+  const funders = Array.isArray(payload?.funders) ? payload.funders : [];
+  // Safety net: only rows of the selected tab's status are ever rendered.
+  const approvals = isCurrent && Array.isArray(payload?.approvals)
+    ? payload.approvals.filter((approval) => approval.status === status)
+    : [];
 
   const emptyState = (
     <section className="program-card pa-empty">
@@ -260,7 +335,7 @@ export default function ProgramApprovals() {
               className={`program-tab${status === value ? ' active' : ''}`}
               onClick={() => updateQuery({ tab: value })}
             >
-              {label} {counts[value] ?? 0}
+              {label}{counts ? ` ${counts[value] ?? 0}` : ''}
             </button>
           ))}
         </div>
@@ -315,7 +390,7 @@ export default function ProgramApprovals() {
       {error && (
         <div className="program-banner error" role="alert">
           {error}{' '}
-          <button type="button" className="program-btn sm" onClick={load}>Retry</button>
+          <button type="button" className="program-btn sm" onClick={retry}>Retry</button>
         </div>
       )}
 
@@ -325,9 +400,9 @@ export default function ProgramApprovals() {
         </div>
       )}
 
-      {loading && !data ? (
-        <section className="program-card pa-empty">Loading approval requests…</section>
-      ) : approvals.length === 0 ? (
+      {loading ? (
+        <ListSkeleton status={status} />
+      ) : error ? null : approvals.length === 0 ? (
         emptyState
       ) : status === 'pending' ? (
         <section className="program-card">

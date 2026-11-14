@@ -3353,3 +3353,11 @@ select.signin-input:disabled{
 @media (max-width: 720px){
   .pa-decided-row{flex-direction:column;gap:6px}
 }
+
+/* Program Approvals: loading skeleton */
+.pa-skel{display:inline-block;max-width:100%;vertical-align:middle;background:#F3ECE1;border-radius:6px;animation:paSkelPulse 1.2s ease-in-out infinite}
+.pa-skel-box{display:block;width:100%;height:41px;margin-top:10px;border-radius:10px}
+@keyframes paSkelPulse{0%,100%{opacity:1}50%{opacity:.55}}
+@media (prefers-reduced-motion: reduce){.pa-skel{animation:none}}
+.pa-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.pa-skel-lines{display:flex;flex-direction:column;gap:7px}
