@@ -2,7 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import RoleRoute from './routes/RoleRoute';
-import AppLayout from './layouts/AppLayout';
+import RoleLayout from './layouts/RoleLayout';
+import ComingSoon from './pages/ComingSoon';
+import { COMING_SOON_PATHS } from './layouts/roleNav';
 import ProgramLayout from './layouts/ProgramLayout';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
@@ -44,7 +46,9 @@ export default function App() {
           <Route path="/privacy" element={<Policy type="privacy" />} />
 
           <Route element={<ProtectedRoute />}>
-            <Route element={<AppLayout />}>
+            {/* Shared role shell for the Project Leader, Research Assistant,
+                Finance/Admin and Researcher (same shell as the Program Leader). */}
+            <Route element={<RoleLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route
                 path="/program-leader-dashboard"
@@ -70,6 +74,10 @@ export default function App() {
               <Route path="/payroll" element={<Payroll />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/audit" element={<AuditTrail />} />
+              {/* Menu items whose page is not built yet. */}
+              {COMING_SOON_PATHS.map((path) => (
+                <Route key={path} path={path} element={<ComingSoon />} />
+              ))}
             </Route>
 
             {/* Program Leader-only shell. Other roles are redirected by RoleRoute. */}
