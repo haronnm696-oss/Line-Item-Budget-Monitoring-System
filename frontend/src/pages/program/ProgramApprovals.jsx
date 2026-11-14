@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { decideApproval, fetchProgramApprovals } from '../../api/program';
@@ -14,6 +14,27 @@ const TYPES = [
   ['budget-change', 'Budget change'],
 ];
 
+const TABS = [
+  ['pending', 'Pending'],
+  ['approved', 'Approved'],
+  ['rejected', 'Rejected'],
+];
+
+const EMPTY = {
+  pending: 'All caught up. No pending approvals.',
+  approved: 'No approved requests yet.',
+  rejected: 'No rejected requests.',
+};
+
+const PAGE_SIZE = 20;
+
+const TYPE_PILL = {
+  disbursement: 'Fund release',
+  payroll: 'Fund release',
+  budget_realignment: 'Realignment',
+  liquidation: 'Liquidation',
+};
+
 function formatDate(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -25,16 +46,83 @@ function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
 }
 
+function RemarkBox({ text }) {
+  const value = typeof text === 'string' ? text.trim() : '';
+  return value
+    ? <p className="pa-remark">“{value}”</p>
+    : <p className="pa-remark is-empty">No remark</p>;
+}
+
+function DecidedRow({ approval }) {
+  const approved = approval.status === 'approved';
+  return (
+    <li className="pa-decided-row">
+      <div className="pa-decided-main">
+        <div className="pa-decided-title">
+          <span className={`pa-status ${approved ? 'is-approved' : 'is-rejected'}`}>
+            <span aria-hidden="true">{approved ? '✓' : '✕'}</span>
+            {approved ? 'Approved' : 'Rejected'}
+          </span>
+          <b>{approval.title}</b>
+          <span className="pa-type">{TYPE_PILL[approval.type] ?? approval.type_label}</span>
+        </div>
+        <div className="pa-meta">
+          {approval.project ?? 'Unknown project'}
+          {approval.amount != null && <> · <b>{peso(approval.amount)}</b></>}
+          {' · requested by '}{approval.requested_by ?? 'Unknown user'}
+          {' on '}{formatDate(approval.created_at)}
+        </div>
+        <div className="pa-meta">
+          Decided by {approval.reviewed_by ?? 'Unknown user'} on {formatDate(approval.reviewed_at)}
+        </div>
+        <RemarkBox text={approval.review_notes} />
+      </div>
+      {approval.project_id != null && (
+        <Link className="pa-audit-link" to={`/program-audit?project=${approval.project_id}`}>
+          View in audit trail
+        </Link>
+      )}
+    </li>
+  );
+}
+
+function DecidedList({ approvals }) {
+  return (
+    <section className="program-card">
+      <ul className="pa-decided-list">
+        {approvals.slice(0, visible).map((approval) => (
+          <DecidedRow key={approval.id} approval={approval} />
+        ))}
+      </ul>
+      {approvals.length > visible && (
+        <div className="pa-more">
+          <button
+            type="button"
+            className="program-btn"
+            onClick={() => setVisible((value) => value + PAGE_SIZE)}
+          >
+            Load more
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ProgramApprovals() {
   const { user } = useAuth();
   const { refreshPending } = useProgramRefresh();
-  const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState(() => (
-    ['pending', 'approved', 'rejected'].includes(searchParams.get('status')) ? searchParams.get('status') : 'pending'
-  ));
-  const [type, setType] = useState('all');
-  const [project, setProject] = useState(() => searchParams.get('project') ?? '');
-  const [funder, setFunder] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Older links use ?status=; ?tab= is the current name.
+  const rawTab = searchParams.get('tab') ?? searchParams.get('status');
+  const status = TABS.some(([value]) => value === rawTab) ? rawTab : 'pending';
+  const rawType = searchParams.get('type');
+  const type = TYPES.some(([value]) => value === rawType) ? rawType : 'all';
+  const project = searchParams.get('project') ?? '';
+  const funder = searchParams.get('funder') ?? '';
+  const hasFilters = type !== 'all' || project !== '' || funder !== '';
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,6 +132,20 @@ export default function ProgramApprovals() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState('');
   const [rejectBusy, setRejectBusy] = useState(false);
+
+  function updateQuery(changes) {
+    const next = new URLSearchParams(searchParams);
+    next.delete('status');
+    if (!next.has('tab') && status !== 'pending') next.set('tab', status);
+    Object.entries(changes).forEach(([key, value]) => {
+      const isDefault = value === '' || value == null
+        || (key === 'type' && value === 'all')
+        || (key === 'tab' && value === 'pending');
+      if (isDefault) next.delete(key);
+      else next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,9 +215,23 @@ export default function ProgramApprovals() {
 
   const counts = data?.counts ?? {};
   const approvals = Array.isArray(data?.approvals) ? data.approvals : [];
-  const recent = Array.isArray(data?.recent) ? data.recent : [];
   const projects = Array.isArray(data?.projects) ? data.projects : [];
   const funders = Array.isArray(data?.funders) ? data.funders : [];
+
+  const emptyState = (
+    <section className="program-card pa-empty">
+      <span>{EMPTY[status]}</span>
+      {hasFilters && (
+        <button
+          type="button"
+          className="pp-clear"
+          onClick={() => updateQuery({ type: '', project: '', funder: '' })}
+        >
+          Clear filters
+        </button>
+      )}
+    </section>
+  );
 
   return (
     <>
@@ -129,22 +245,18 @@ export default function ProgramApprovals() {
         </div>
       </div>
 
-      <div className="program-filter-row">
-        <div className="program-tabs" role="tablist" aria-label="Approval status">
-          {[
-            ['pending', 'Pending', counts.pending ?? 0],
-            ['approved', 'Approved', counts.approved ?? 0],
-            ['rejected', 'Rejected', counts.rejected ?? 0],
-          ].map(([value, label, count]) => (
+      <div className="program-filter-row pa-controls">
+        <div className="program-tabs pa-tabs" role="tablist" aria-label="Approval status">
+          {TABS.map(([value, label]) => (
             <button
               key={value}
               type="button"
               role="tab"
               aria-selected={status === value}
               className={`program-tab${status === value ? ' active' : ''}`}
-              onClick={() => setStatus(value)}
+              onClick={() => updateQuery({ tab: value })}
             >
-              {label} {count}
+              {label} {counts[value] ?? 0}
             </button>
           ))}
         </div>
@@ -157,7 +269,7 @@ export default function ProgramApprovals() {
             id="approval-type"
             className="program-select"
             value={type}
-            onChange={(event) => setType(event.target.value)}
+            onChange={(event) => updateQuery({ type: event.target.value })}
           >
             {TYPES.map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -171,7 +283,7 @@ export default function ProgramApprovals() {
             id="approval-project"
             className="program-select"
             value={project}
-            onChange={(event) => setProject(event.target.value)}
+            onChange={(event) => updateQuery({ project: event.target.value })}
           >
             <option value="">All projects</option>
             {projects.map((item) => (
@@ -186,7 +298,7 @@ export default function ProgramApprovals() {
             id="approval-funder"
             className="program-select"
             value={funder}
-            onChange={(event) => setFunder(event.target.value)}
+            onChange={(event) => updateQuery({ funder: event.target.value })}
           >
             <option value="">All funders</option>
             {funders.map((agency) => (
@@ -209,17 +321,13 @@ export default function ProgramApprovals() {
         </div>
       )}
 
-      <section className="program-card">
-        {loading && !data ? (
-          <div className="program-empty">Loading approval requests…</div>
-        ) : approvals.length === 0 ? (
-          <div className="program-empty">
-            {status === 'pending'
-              ? 'All caught up. No pending approvals.'
-              : `No ${status} requests match these filters.`}
-          </div>
-        ) : (
-          approvals.map((approval) => {
+      {loading && !data ? (
+        <section className="program-card pa-empty">Loading approval requests…</section>
+      ) : approvals.length === 0 ? (
+        emptyState
+      ) : status === 'pending' ? (
+        <section className="program-card">
+          {approvals.map((approval) => {
             const isOwn = Number(approval.requested_by_id) === Number(user?.id);
             const busy = busyId === approval.id;
             const rejecting = rejectId === approval.id;
@@ -239,6 +347,9 @@ export default function ProgramApprovals() {
                       {approval.requested_by ? ` · requested by ${approval.requested_by_role ?? 'user'}` : ''}
                       {approval.requested_by ? ` (${approval.requested_by})` : ''}
                     </div>
+                    {approval.justification?.trim() && (
+                      <p className="pa-remark">“{approval.justification.trim()}”</p>
+                    )}
                     {isOwn && (
                       <div className="program-warning" style={{ marginTop: 6 }}>
                         ⚠ You cannot approve a request you created
@@ -246,28 +357,26 @@ export default function ProgramApprovals() {
                     )}
                   </div>
 
-                  {status === 'pending' && (
-                    <div className="program-row-actions">
-                      <button
-                        type="button"
-                        className="program-btn primary"
-                        disabled={busy || isOwn}
-                        aria-disabled={busy || isOwn}
-                        onClick={() => handleApprove(approval)}
-                      >
-                        {busy ? '…' : 'Approve'}
-                      </button>
-                      <button
-                        type="button"
-                        className="program-btn"
-                        disabled={busy || isOwn}
-                        aria-disabled={busy || isOwn}
-                        onClick={() => openReject(approval)}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
+                  <div className="program-row-actions">
+                    <button
+                      type="button"
+                      className="program-btn primary"
+                      disabled={busy || isOwn}
+                      aria-disabled={busy || isOwn}
+                      onClick={() => handleApprove(approval)}
+                    >
+                      {busy ? '…' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      className="program-btn"
+                      disabled={busy || isOwn}
+                      aria-disabled={busy || isOwn}
+                      onClick={() => openReject(approval)}
+                    >
+                      Reject
+                    </button>
+                  </div>
                 </div>
 
                 {rejecting && (
@@ -307,38 +416,12 @@ export default function ProgramApprovals() {
                 )}
               </div>
             );
-          })
-        )}
-      </section>
-
-      <section className="program-card">
-        <div className="program-card-head">
-          <div>
-            <div className="program-card-title">Recently decided</div>
-            <div className="program-card-sub">Who decided, when, and why</div>
-          </div>
-        </div>
-
-        {recent.length === 0 ? (
-          <div className="program-empty">No decisions have been recorded yet.</div>
-        ) : (
-          recent.map((approval) => (
-            <div className="program-row" key={`recent-${approval.id}`}>
-              <div className="program-row-main">
-                <div className="program-row-title">
-                  <ProgramPill value={approval.status === 'approved' ? 'Approved' : 'Rejected'} />
-                  <span>{approval.title}</span>
-                </div>
-                <div className="program-row-sub">
-                  {approval.project} · {formatDate(approval.reviewed_at)}
-                  {approval.reviewed_by ? ` · decided by ${approval.reviewed_by}` : ''}
-                  {approval.review_notes ? ` · “${approval.review_notes}”` : ''}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </section>
+          })}
+        </section>
+      ) : (
+        // Keyed so "Load more" resets to 20 rows when the tab or filters change.
+        <DecidedList key={`${status}|${type}|${project}|${funder}`} approvals={approvals} />
+      )}
     </>
   );
 }

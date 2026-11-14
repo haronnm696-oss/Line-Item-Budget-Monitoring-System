@@ -407,6 +407,9 @@ class ProgramDashboardService
 
         $query = ApprovalRequest::query()
             ->with(['project.fundingAgency', 'requestedBy.primaryRole', 'reviewedBy', 'tranche', 'liquidation'])
+            // Same project scope as the Overview (soft-deleted projects are
+            // excluded there), so the Pending count matches its KPI.
+            ->whereHas('project')
             ->when($filters['type'] ?? null, function ($query, $type) {
                 if ($type === 'fund-release') {
                     $query->whereIn('type', ['disbursement', 'payroll']);
@@ -436,21 +439,20 @@ class ProgramDashboardService
         ];
 
         $status = $filters['status'] ?? 'pending';
-        $rows = $all->where('status', $status)
-            ->sortBy(fn (ApprovalRequest $approval) => $approval->created_at?->timestamp ?? 0)
-            ->map(fn (ApprovalRequest $approval) => $this->approvalListRow($approval, $today))
-            ->values();
+        $rows = $all->where('status', $status);
 
-        $recent = $all->whereIn('status', ['approved', 'rejected'])
-            ->sortByDesc(fn (ApprovalRequest $approval) => $approval->reviewed_at?->timestamp ?? 0)
-            ->take(10)
+        // Pending: oldest request first. Decided: newest decision first.
+        $rows = $status === 'pending'
+            ? $rows->sortBy(fn (ApprovalRequest $approval) => [$approval->created_at?->timestamp ?? 0, $approval->id])
+            : $rows->sortByDesc(fn (ApprovalRequest $approval) => [$approval->reviewed_at?->timestamp ?? 0, $approval->id]);
+
+        $rows = $rows
             ->map(fn (ApprovalRequest $approval) => $this->approvalListRow($approval, $today))
             ->values();
 
         return [
             'counts' => $counts,
             'approvals' => $rows->all(),
-            'recent' => $recent->all(),
             'projects' => Project::query()
                 ->orderBy('title')
                 ->get(['id', 'code', 'title'])
@@ -505,9 +507,13 @@ class ProgramDashboardService
             'days_waiting' => max(0, (int) $created->diffInDays($today)),
             'status' => $approval->status,
             'review_notes' => $approval->review_notes,
+            // Legacy rows may have no justification; the UI then shows none.
+            'justification' => $approval->justification,
             'created_at' => $approval->created_at?->toIso8601String(),
             'reviewed_at' => $approval->reviewed_at?->toIso8601String(),
-            'reviewed_by' => $approval->reviewedBy?->name,
+            // Fall back to the stored reviewer-name snapshot when the user
+            // record is gone.
+            'reviewed_by' => $approval->reviewedBy?->name ?? $approval->reviewed_by_name,
         ];
     }
 

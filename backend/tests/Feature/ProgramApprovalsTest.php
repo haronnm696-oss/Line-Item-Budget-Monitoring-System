@@ -40,7 +40,7 @@ class ProgramApprovalsTest extends TestCase
         $this->approval($project, 'budget_realignment', 'approved');
         $this->approval($project, 'liquidation', 'rejected');
 
-        $response = $this->actingAs($leader)
+        $this->actingAs($leader)
             ->getJson('/api/program/approvals?status=pending')
             ->assertOk()
             ->assertJsonPath('counts.pending', 1)
@@ -49,14 +49,88 @@ class ProgramApprovalsTest extends TestCase
             ->assertJsonCount(1, 'approvals')
             ->assertJsonPath('approvals.0.id', $pending->id);
 
-        $this->assertCount(2, $response->json('recent'));
-
         $realignment = $this->actingAs($leader)
             ->getJson('/api/program/approvals?status=approved&type=realignment')
             ->assertOk()
             ->assertJsonCount(1, 'approvals');
 
         $this->assertSame('budget_realignment', $realignment->json('approvals.0.type'));
+    }
+
+    public function test_pending_count_matches_the_overview_kpi_for_the_same_funder(): void
+    {
+        $leader = $this->userWithRole('program-leader');
+        $other = FundingAgency::create(['acronym' => 'DOST', 'name' => 'DOST']);
+
+        $most = $this->project();
+        $dost = $this->project(['funding_agency_id' => $other->id]);
+        $deleted = $this->project();
+
+        $this->approval($most, 'disbursement', 'pending');
+        $this->approval($most, 'liquidation', 'pending');
+        $this->approval($most, 'budget_realignment', 'approved');
+        $this->approval($dost, 'disbursement', 'pending');
+        $this->approval($deleted, 'disbursement', 'pending');
+        $deleted->delete();
+
+        foreach (['', $most->funding_agency_id, $other->id, 'MOST-BARMM'] as $funder) {
+            $query = $funder === '' ? '' : '?funder=' . $funder;
+
+            $kpi = $this->actingAs($leader)
+                ->getJson('/api/program/overview' . $query)
+                ->assertOk()
+                ->json('kpis.pending_approvals');
+
+            $separator = $query === '' ? '?' : '&';
+            $count = $this->actingAs($leader)
+                ->getJson('/api/program/approvals' . $query . $separator . 'status=pending')
+                ->assertOk()
+                ->json('counts.pending');
+
+            $this->assertSame($kpi, $count, 'Pending count differs for funder [' . $funder . ']');
+        }
+
+        $this->assertSame(3, $this->actingAs($leader)->getJson('/api/program/approvals')->json('counts.pending'));
+    }
+
+    public function test_decided_requests_are_newest_decision_first_with_their_remark(): void
+    {
+        $leader = $this->userWithRole('program-leader');
+        $project = $this->project();
+
+        $older = $this->approval($project, 'disbursement', 'approved');
+        $older->forceFill([
+            'reviewed_at' => now()->subDays(5),
+            'reviewed_by' => $leader->id,
+            'review_notes' => 'Receipts for tranche one are complete.',
+        ])->save();
+
+        $newer = $this->approval($project, 'liquidation', 'approved');
+        $newer->forceFill([
+            'created_at' => now()->subDays(10),
+            'reviewed_at' => now()->subDay(),
+            'reviewed_by' => $leader->id,
+            'review_notes' => null,
+        ])->save();
+
+        $response = $this->actingAs($leader)
+            ->getJson('/api/program/approvals?status=approved')
+            ->assertOk()
+            ->assertJsonCount(2, 'approvals')
+            ->assertJsonPath('approvals.0.id', $newer->id)
+            ->assertJsonPath('approvals.0.review_notes', null)
+            ->assertJsonPath('approvals.0.reviewed_by', $leader->name)
+            ->assertJsonPath('approvals.1.id', $older->id)
+            ->assertJsonPath('approvals.1.review_notes', 'Receipts for tranche one are complete.');
+
+        $first = $response->json('approvals.0');
+        foreach (['requested_by', 'created_at', 'reviewed_by', 'reviewed_at', 'review_notes', 'justification'] as $key) {
+            $this->assertArrayHasKey($key, $first);
+        }
+        $this->assertSame(
+            'Requested to keep project activities on schedule for this quarter.',
+            $first['justification']
+        );
     }
 
     public function test_overview_limits_the_inbox_to_three_and_reports_the_oldest_wait(): void
