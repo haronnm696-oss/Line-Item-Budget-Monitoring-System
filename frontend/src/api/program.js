@@ -48,8 +48,9 @@ export async function fetchProgramProject(id) {
 /**
  * Approval workspace, filtered by tab, type, project and funder.
  */
-export async function fetchProgramApprovals(params = {}) {
+export async function fetchProgramApprovals(params = {}, { signal } = {}) {
   const response = await client.get(ENDPOINTS.programApprovals, {
+    signal,
     params: Object.fromEntries(
       Object.entries(params).filter(([, value]) => value !== '' && value != null && value !== 'all')
     ),
