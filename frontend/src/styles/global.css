@@ -3361,3 +3361,54 @@ select.signin-input:disabled{
 @media (prefers-reduced-motion: reduce){.pa-skel{animation:none}}
 .pa-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .pa-skel-lines{display:flex;flex-direction:column;gap:7px}
+
+/* Program Reports: printable executive report (/program-reports/executive) */
+.er-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.er-toolbar .spacer{flex:1}
+.program-shell .program-card.er-doc{padding:28px 32px}
+.er-head{border-bottom:2px solid #6F1D2A;padding-bottom:14px;margin-bottom:20px}
+.er-org{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6B5F5F}
+.er-title{margin:4px 0 10px;font-size:26px;font-weight:700;color:#2B2023;letter-spacing:-.02em}
+.er-meta{display:flex;flex-wrap:wrap;gap:6px 28px;margin:0;font-size:13px;color:#4A4040}
+.er-meta div{display:flex;gap:6px}
+.er-meta dt{font-weight:700}
+.er-meta dd{margin:0}
+.er-section + .er-section{margin-top:24px}
+.er-h2{margin:0 0 8px;font-size:16px;font-weight:700;color:#2B2023}
+.er-scroll{overflow-x:auto}
+.er-table{width:100%;border-collapse:collapse;font-size:13px;color:#2B2023}
+.er-table th,.er-table td{padding:8px 10px;border-bottom:1px solid #E5DED3;text-align:left;vertical-align:top}
+.er-table thead th{font-size:12px;font-weight:700;color:#4A4040;border-bottom:2px solid #D6CBBB;white-space:nowrap}
+.er-table .r{text-align:right}
+.er-table .num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.er-summary{max-width:620px}
+.er-summary th{font-size:13px;font-weight:600;color:#2B2023;white-space:normal}
+.er-table tr:last-child th,.er-table tr:last-child td{border-bottom:1px solid #E5DED3}
+.er-table .er-code{white-space:nowrap}
+.er-table:not(.er-summary) tbody td:first-child{min-width:190px}
+.er-empty{margin:0;font-size:14px;color:#4A4040}
+
+/* Only applies while the executive report is on screen. */
+@media print{
+  @page{margin:14mm}
+  body:has(.er-doc){background:#fff !important;color:#000}
+  .program-shell:has(.er-doc){display:block !important;background:#fff !important;min-height:0}
+  .program-shell:has(.er-doc) .program-sidebar,
+  .program-shell:has(.er-doc) .program-topbar,
+  .program-shell:has(.er-doc) .program-backdrop,
+  .program-shell:has(.er-doc) .no-print,
+  .program-shell:has(.er-doc) button{display:none !important}
+  .program-shell:has(.er-doc) .program-main{display:block;background:#fff !important}
+  .program-shell:has(.er-doc) .program-content{padding:0 !important;max-width:none;margin:0;display:block}
+  .program-shell .program-card.er-doc{border:0 !important;box-shadow:none !important;padding:0 !important;background:#fff !important}
+  .er-doc,.er-doc *{color:#000 !important}
+  .er-head{border-bottom-color:#000}
+  .er-scroll{overflow:visible}
+  .er-table{font-size:10.5pt}
+  .er-table th,.er-table td,.er-table tr:last-child th,.er-table tr:last-child td{border-bottom-color:#999}
+  .er-table thead th{border-bottom-color:#000}
+  .er-table thead{display:table-header-group}
+  .er-table tr{break-inside:avoid;page-break-inside:avoid}
+  .er-section h2{break-after:avoid;page-break-after:avoid}
+  .er-doc .program-pill{background:#fff !important;border:1px solid #000 !important}
+}

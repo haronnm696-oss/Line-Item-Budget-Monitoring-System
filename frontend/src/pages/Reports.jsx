@@ -696,9 +696,9 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
       {/* Summary widgets */}
       <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
-        <StatCard label="Total MOST Funding" value={formatMoney(selectedProject.funding_budget || 0)} sub={`${selectedProject.funding_agency || 'External funder'} grant`} />
-        <StatCard label="MSU Counterpart Funding" value={formatMoney(selectedProject.counterpart_budget || 0)} sub="MSU-Marawi share" />
-        <StatCard label="Total Disbursed" value={formatMoney(totalSpent)} sub={`${utilization.toFixed(1)}% of total budget`} />
+        <StatCard label={`Total ${selectedProject.funding_agency || selectedProject.agency || 'Funder'} funding`} value={formatMoney(selectedProject.funding_budget || 0)} sub={`${selectedProject.funding_agency || 'External funder'} grant`} />
+        <StatCard label="MSU–Main Campus counterpart" value={formatMoney(selectedProject.counterpart_budget || 0)} sub="Implementing agency share" />
+        <StatCard label="Total spent" value={formatMoney(totalSpent)} sub={`${utilization.toFixed(1)}% of total budget`} />
         <StatCard label="Remaining Balance" value={formatMoney(remaining)} sub={`${(totalAlloc ? ((remaining / totalAlloc) * 100) : 0).toFixed(1)}% unspent`} />
       </div>
 
