@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { peso } from '../components/money';
+import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import Chip, { statusTone } from '../components/Chip';
@@ -513,7 +514,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <span><b>Project Leader:</b> ${escapeHtml(selectedProject.project_leader)}</span>
           <span><b>Period:</b> ${escapeHtml(selectedPeriod)}</span>
           <span><b>Category:</b> ${escapeHtml(selectedCategory)}</span>
-          <span><b>Generated:</b> ${new Date().toLocaleDateString('en-PH')}</span>
+          <span><b>Generated:</b> ${escapeHtml(formatDate(new Date()))}</span>
         </div>
 
         ${tableHtml}

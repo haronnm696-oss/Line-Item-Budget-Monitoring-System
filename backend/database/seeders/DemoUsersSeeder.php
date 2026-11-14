@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\AuditLogger;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -15,7 +16,16 @@ class DemoUsersSeeder extends Seeder
      * Demo password for every account is `password123` so each role can be
      * signed into with email + password.
      */
+    /**
+     * Seeded rows are not logged by the audit observers; seeders write
+     * their own audit history where it matters.
+     */
     public function run(): void
+    {
+        AuditLogger::muted(fn () => $this->seed());
+    }
+
+    private function seed(): void
     {
         $accounts = [
             [

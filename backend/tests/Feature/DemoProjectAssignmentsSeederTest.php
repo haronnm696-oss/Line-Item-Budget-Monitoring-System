@@ -134,6 +134,39 @@ class DemoProjectAssignmentsSeederTest extends TestCase
     /**
      * Put the demo projects into a "production-like" state that needs fixing.
      */
+    public function test_demo_titles_stored_as_question_marks_are_repaired_once_and_logged(): void
+    {
+        // Reproduce the production damage on the seeded demo rows.
+        $tranche = DB::table('project_tranches')->where('name', 'like', 'Tranche 3 %Field Validation')->orderBy('id')->first();
+        $approval = DB::table('approval_requests')->where('title', 'Release Tranche 3 — Field Validation')->orderBy('id')->first();
+        $liquidation = DB::table('liquidations')->where('title', 'Liquidation Report — Tranche 1')->orderBy('id')->first();
+        $this->assertNotNull($tranche);
+        $this->assertNotNull($approval);
+        $this->assertNotNull($liquidation);
+
+        DB::table('project_tranches')->where('id', $tranche->id)->update(['name' => 'Tranche 3 ??? Field Validation']);
+        DB::table('approval_requests')->where('id', $approval->id)->update(['title' => 'Release Tranche 3 ??? Field Validation']);
+        DB::table('liquidations')->where('id', $liquidation->id)->update(['title' => 'Liquidation Report ??? Tranche 1']);
+        // User-entered text that merely contains "???" must not be touched.
+        DB::table('approval_requests')->where('id', '!=', $approval->id)->limit(1)->update(['title' => 'Is this allowed???']);
+
+        $this->seed(DemoProjectAssignmentsSeeder::class);
+
+        $this->assertSame('Tranche 3 — Field Validation', DB::table('project_tranches')->where('id', $tranche->id)->value('name'));
+        $this->assertSame('Release Tranche 3 — Field Validation', DB::table('approval_requests')->where('id', $approval->id)->value('title'));
+        $this->assertSame('Liquidation Report — Tranche 1', DB::table('liquidations')->where('id', $liquidation->id)->value('title'));
+        $this->assertSame(1, DB::table('approval_requests')->where('title', 'Is this allowed???')->count());
+
+        foreach ([['ProjectTranche', $tranche->id], ['ApprovalRequest', $approval->id], ['Liquidation', $liquidation->id]] as [$type, $id]) {
+            $this->assertSame(1, AuditTrail::where('model_type', $type)->where('model_id', $id)
+                ->where('reason', 'like', 'DemoProjectAssignmentsSeeder: repaired%')->count(), "{$type} repair logged once");
+        }
+
+        $entries = AuditTrail::count();
+        $this->seed(DemoProjectAssignmentsSeeder::class);
+        $this->assertSame($entries, AuditTrail::count(), 'a second run changes nothing');
+    }
+
     private function scramble(): void
     {
         $leaderRole = Role::where('slug', 'project-leader')->value('id');

@@ -75,7 +75,7 @@ class ProgramUserService
             ? Role::where('slug', $roleSlug)->firstOrFail()
             : null;
 
-        DB::transaction(function () use ($user, $decision, $role, $remarks, $actor) {
+        AuditLogger::transaction(function () use ($user, $decision, $role, $remarks, $actor) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
             if (! $locked->isPendingRegistration()) {
@@ -129,7 +129,7 @@ class ProgramUserService
         $email = strtolower(trim($data['email']));
         $employeeId = strtoupper(trim($data['employee_id']));
 
-        $user = DB::transaction(function () use ($data, $role, $email, $employeeId, $actor) {
+        $user = AuditLogger::transaction(function () use ($data, $role, $email, $employeeId, $actor) {
             $user = User::create([
                 'name' => trim($data['first_name'] . ' ' . $data['last_name']),
                 'first_name' => $data['first_name'],
@@ -188,7 +188,7 @@ class ProgramUserService
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
-        return DB::transaction(function () use ($user, $project, $role, $actor) {
+        return AuditLogger::transaction(function () use ($user, $project, $role, $actor) {
             $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
             if (! $lockedUser->is_active) {
@@ -227,7 +227,7 @@ class ProgramUserService
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
-        return DB::transaction(function () use ($user, $project, $role, $actor, $reason) {
+        return AuditLogger::transaction(function () use ($user, $project, $role, $actor, $reason) {
             $assignment = ProjectUser::query()
                 ->where('user_id', $user->id)
                 ->where('project_id', $project->id)
@@ -254,7 +254,7 @@ class ProgramUserService
 
     public function removeAssignment(User $user, Project $project, User $actor, ?string $reason = null): void
     {
-        DB::transaction(function () use ($user, $project, $actor, $reason) {
+        AuditLogger::transaction(function () use ($user, $project, $actor, $reason) {
             $assignment = ProjectUser::query()
                 ->where('user_id', $user->id)
                 ->where('project_id', $project->id)
@@ -280,7 +280,7 @@ class ProgramUserService
             abort(422, 'You cannot deactivate your own account.');
         }
 
-        return DB::transaction(function () use ($user, $isActive, $reason, $actor) {
+        return AuditLogger::transaction(function () use ($user, $isActive, $reason, $actor) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $oldValues = $locked->only(['is_active']);
 
@@ -307,7 +307,7 @@ class ProgramUserService
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
-        return DB::transaction(function () use ($user, $role, $reason, $actor) {
+        return AuditLogger::transaction(function () use ($user, $role, $reason, $actor) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $oldRole = Role::find($locked->role_id);
 

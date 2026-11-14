@@ -3,30 +3,29 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { downloadProgramProjectsExcel, fetchProgramProjects } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
 import { compactPeso, formatPct, peso } from '../../components/money';
+import { formatDateTime, formatInManila, todayInManila } from '../../lib/datetime';
 
 const FILTER_KEYS = ['q', 'status', 'funder', 'leader', 'year', 'risk'];
 const DASH = '—';
 
 function projectPeriod(start, end) {
   if (!start || !end) return DASH;
-  const from = new Date(start);
-  const to = new Date(end);
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return DASH;
-  const sameYear = from.getFullYear() === to.getFullYear();
-  const fromLabel = from.toLocaleDateString('en-PH', sameYear
-    ? { month: 'short' }
-    : { month: 'short', year: 'numeric' });
-  const toLabel = to.toLocaleDateString('en-PH', { month: 'short', year: 'numeric' });
+  const startDay = String(start).slice(0, 10);
+  const endDay = String(end).slice(0, 10);
+  const sameYear = startDay.slice(0, 4) === endDay.slice(0, 4);
+  const fromLabel = formatInManila(startDay, sameYear ? { month: 'short' } : { month: 'short', year: 'numeric' }, null);
+  const toLabel = formatInManila(endDay, { month: 'short', year: 'numeric' }, null);
+  if (!fromLabel || !toLabel) return DASH;
   return `${fromLabel} – ${toLabel}`;
 }
 
 /** "today", "3 days ago", "2 months ago" for a YYYY-MM-DD date. */
 function relativeDate(value) {
   if (!value) return null;
-  const date = new Date(`${value}T00:00:00`);
+  // Both sides are calendar days; "today" is today in the Philippines.
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date(`${todayInManila()}T00:00:00Z`);
   const days = Math.round((today - date) / 86_400_000);
   const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
   if (Math.abs(days) < 30) return rtf.format(-days, 'day');
@@ -339,7 +338,7 @@ export default function ProgramProjects() {
       <style>@page{size:A4 landscape;margin:12mm}</style></head>
       <body style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#1f1a17;padding:24px;font-size:11px">
         <h1 style="margin:0 0 4px;color:#6F1D2A;font-size:20px">Program projects</h1>
-        <p style="margin:0 0 16px;color:#6b625b">${escapeHtml(filterLabel)} · Generated ${escapeHtml(new Date().toLocaleString('en-PH'))} · LIB Monitoring System, MSU–Main Campus</p>
+        <p style="margin:0 0 16px;color:#6b625b">${escapeHtml(filterLabel)} · Generated ${escapeHtml(formatDateTime(new Date()))} (Philippine time) · LIB Monitoring System, MSU–Main Campus</p>
         <table style="border-collapse:collapse;width:100%;max-width:520px;margin-bottom:18px">${totals}</table>
         <table style="border-collapse:collapse;width:100%">
           <thead><tr>

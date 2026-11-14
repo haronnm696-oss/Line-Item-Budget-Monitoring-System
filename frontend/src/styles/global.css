@@ -3456,3 +3456,34 @@ select.signin-input:disabled{
 .rp-error{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;color:#8E1B1B;font-size:13px}
 .rp-error-block{display:flex;margin-top:12px;padding:10px 14px;border-radius:10px;background:#FDECEC;border:1px solid #F3C4C4}
 .rp-note{margin:4px 0 0;font-size:12.5px;color:#92400E}
+
+/* Program Audit trail (/program-audit) */
+.au-filters .program-field{min-width:170px}
+.au-filters .au-date{min-width:150px}
+.au-table{min-width:1040px}
+.au-table td{vertical-align:top}
+.au-time{white-space:nowrap;font-variant-numeric:tabular-nums;color:#2B2023}
+.au-link{color:#6F1D2A;font-weight:650;text-decoration:none}
+.au-link:hover{text-decoration:underline;text-underline-offset:2px}
+.au-link:focus-visible{outline:3px solid rgba(111,29,42,.4);outline-offset:2px;border-radius:3px}
+.au-strong{font-weight:650;color:#2B2023}
+.au-sub{margin-top:2px;font-size:12px;color:#6B5F5F}
+.au-muted{color:#6B5F5F}
+.au-pill{
+  display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;
+  font-size:12px;font-weight:650;line-height:1.5;white-space:nowrap;
+}
+.au-pill.success{background:#DDF0E4;color:#1E5A37}
+.au-pill.danger{background:#FDECEC;color:#8E1B1B}
+.au-pill.neutral{background:#ECE7DD;color:#4A4040}
+.au-changes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:13px;color:#2B2023;min-width:240px}
+.au-field{color:#6B5F5F}
+.au-old{color:#8E1B1B;text-decoration:line-through}
+.au-new{color:#1E5A37;font-weight:700}
+.au-arrow{color:#6B5F5F}
+.au-reason{margin-top:2px}
+.au-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:14px;border-top:1px solid #F1ECE4;margin-top:6px}
+.au-count{font-size:13px;color:#4A4040}
+.au-tz{margin:12px 0 0;font-size:12px;color:#6B5F5F}
+.program-shell .program-table tr.pu-highlight td{background:#FBF3DF}
+.program-shell .program-table tr.pu-highlight td:first-child{box-shadow:inset 3px 0 0 #6F1D2A}

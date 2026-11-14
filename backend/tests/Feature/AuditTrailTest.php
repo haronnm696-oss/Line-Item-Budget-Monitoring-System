@@ -9,6 +9,7 @@ use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -55,13 +56,14 @@ class AuditTrailTest extends TestCase
 
     public function test_audit_feed_filters_by_date_range_and_flagged_entries(): void
     {
-        $leader = $this->userWithRole('program-leader');
-        $project = $this->project();
+        [$leader, $project] = AuditLogger::muted(fn () => [$this->userWithRole('program-leader'), $this->project()]);
 
-        $old = AuditTrail::record($leader, 'created', $project, [], ['title' => $project->title]);
-        $old->forceFill(['created_at' => '2026-09-01 09:00:00'])->save();
+        // Entries are read-only, so each one is written at the wanted time.
+        Carbon::setTestNow('2026-09-01 09:00:00');
+        AuditTrail::record($leader, 'created', $project, [], ['title' => $project->title]);
 
-        $rejected = AuditTrail::record(
+        Carbon::setTestNow('2026-11-07 10:00:00');
+        AuditTrail::record(
             $leader,
             'rejected',
             $project,
@@ -69,10 +71,10 @@ class AuditTrailTest extends TestCase
             ['status' => 'rejected'],
             'Missing official receipts.'
         );
-        $rejected->forceFill(['created_at' => '2026-11-07 10:00:00'])->save();
 
-        $roleChange = AuditTrail::record($leader, 'role_changed', $leader, ['role' => 'researcher'], ['role' => 'finance-admin'], 'Reassignment');
-        $roleChange->forceFill(['created_at' => '2026-10-15 10:00:00'])->save();
+        Carbon::setTestNow('2026-10-15 10:00:00');
+        AuditTrail::record($leader, 'role_changed', $leader, ['role' => 'researcher'], ['role' => 'finance-admin'], 'Reassignment');
+        Carbon::setTestNow('2026-11-08 12:00:00');
 
         $range = $this->actingAs($leader)
             ->getJson('/api/audit?from=2026-11-01&to=2026-11-08')
@@ -145,22 +147,19 @@ class AuditTrailTest extends TestCase
 
     public function test_audit_feed_filters_by_project(): void
     {
-        $leader = $this->userWithRole('program-leader');
-        $mine = $this->project();
-        $other = $this->project();
+        // Fixtures are built without automatic entries; this test is about the feed filter.
+        [$leader, $mine, $other, $mineCategory, $otherCategory] = AuditLogger::muted(function () {
+            $mine = $this->project();
+            $other = $this->project();
 
-        $mineCategory = LibCategory::create([
-            'project_id' => $mine->id,
-            'category_type' => 'MOOE',
-            'line_item_name' => 'Supplies',
-            'allocated_amount' => 1000,
-        ]);
-        $otherCategory = LibCategory::create([
-            'project_id' => $other->id,
-            'category_type' => 'MOOE',
-            'line_item_name' => 'Supplies',
-            'allocated_amount' => 1000,
-        ]);
+            return [
+                $this->userWithRole('program-leader'),
+                $mine,
+                $other,
+                LibCategory::create(['project_id' => $mine->id, 'category_type' => 'MOOE', 'line_item_name' => 'Supplies', 'allocated_amount' => 1000]),
+                LibCategory::create(['project_id' => $other->id, 'category_type' => 'MOOE', 'line_item_name' => 'Supplies', 'allocated_amount' => 1000]),
+            ];
+        });
 
         AuditTrail::record($leader, 'created', $mineCategory, [], ['project_id' => $mine->id, 'line_item_name' => 'Supplies']);
         AuditTrail::record($leader, 'created', $otherCategory, [], ['project_id' => $other->id, 'line_item_name' => 'Supplies']);

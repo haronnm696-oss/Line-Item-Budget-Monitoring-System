@@ -8,6 +8,7 @@ use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ProgramApprovalController;
+use App\Http\Controllers\ProgramAuditController;
 use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ProgramProjectController;
 use App\Http\Controllers\ProgramUserController;
@@ -67,6 +68,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/program/projects/export', [ProgramProjectController::class, 'export']);
         Route::get('/program/projects/{project}', [ProgramProjectController::class, 'show']);
         Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
+        // Read-only: entries are never edited or deleted through the API.
+        Route::get('/program/audit', [ProgramAuditController::class, 'index']);
         Route::post('/program/approvals/{approval}/decision', [ProgramDashboardController::class, 'decision']);
 
         // Account review and per-project role management.

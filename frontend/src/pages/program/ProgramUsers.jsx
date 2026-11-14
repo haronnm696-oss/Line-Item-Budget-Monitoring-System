@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   assignToProject,
   createProgramUser,
@@ -15,13 +16,7 @@ import ProgramAddUserModal from '../../components/program/ProgramAddUserModal';
 import ProgramAssignUserModal from '../../components/program/ProgramAssignUserModal';
 import ProgramManageUserModal from '../../components/program/ProgramManageUserModal';
 import ProgramPill from '../../components/program/ProgramPill';
-
-function formatDate(value) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+import { formatDate } from '../../lib/datetime';
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
@@ -36,6 +31,7 @@ const ACCOUNT_ROLES = [
 ];
 
 export default function ProgramUsers() {
+  const [searchParams] = useSearchParams();
   const [pending, setPending] = useState([]);
   const [pendingRoleOptions, setPendingRoleOptions] = useState([]);
   const [pendingRoles, setPendingRoles] = useState({});
@@ -265,6 +261,8 @@ export default function ProgramUsers() {
 
   const assignableProjects = projects.filter((project) => project.status === 'Ongoing' || project.status === 'Planning');
 
+  // ?user= (from the Audit trail) highlights that person's rows.
+  const highlightUserId = searchParams.get('user') ?? '';
   const teamRows = [];
   users.forEach((user) => {
     if (!teamProjectId) {
@@ -280,6 +278,16 @@ export default function ProgramUsers() {
       if (assignment) teamRows.push({ user, assignment });
     }
   });
+
+  const highlightMissing = highlightUserId !== '' && !usersLoading
+    && !users.some((user) => String(user.id) === highlightUserId);
+
+  // Bring the highlighted person into view once the team list has loaded.
+  useEffect(() => {
+    if (!highlightUserId || usersLoading) return;
+    document.querySelector(`tr[data-user-id="${CSS.escape(highlightUserId)}"]`)
+      ?.scrollIntoView({ block: 'center' });
+  }, [highlightUserId, usersLoading, teamProjectId]);
 
   return (
     <>
@@ -422,6 +430,11 @@ export default function ProgramUsers() {
           </div>
         </div>
 
+        {highlightMissing && (
+          <div className="program-banner info" role="status">
+            The person you opened is not in the team list (for example, a rejected registration or a deleted account).
+          </div>
+        )}
         {usersLoading ? (
           <div className="program-empty">Loading team…</div>
         ) : (
@@ -440,7 +453,12 @@ export default function ProgramUsers() {
               </thead>
               <tbody>
                 {teamRows.map(({ user, assignment }) => (
-                  <tr key={`${user.id}-${assignment?.project_id ?? 'unassigned'}`}>
+                  <tr
+                    key={`${user.id}-${assignment?.project_id ?? 'unassigned'}`}
+                    className={String(user.id) === highlightUserId ? 'pu-highlight' : undefined}
+                    data-user-id={user.id}
+                    aria-current={String(user.id) === highlightUserId ? 'true' : undefined}
+                  >
                     <td>
                       <div className="project-name">{user.name}</div>
                       <div className="project-code">{user.position || '—'}</div>

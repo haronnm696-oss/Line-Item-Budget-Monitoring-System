@@ -5,6 +5,7 @@ import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { decideApproval, fetchProgramApprovals } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
 import { peso } from '../../components/money';
+import { formatDate } from '../../lib/datetime';
 
 const TYPES = [
   ['all', 'All types'],
@@ -34,13 +35,6 @@ const TYPE_PILL = {
   budget_realignment: 'Realignment',
   liquidation: 'Liquidation',
 };
-
-function formatDate(value) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;

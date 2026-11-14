@@ -2,13 +2,23 @@
 
 namespace Database\Seeders;
 
+use App\Services\AuditLogger;
 use App\Models\LibCategory;
 use App\Models\Project;
 use Illuminate\Database\Seeder;
 
 class LibCategoriesSeeder extends Seeder
 {
+    /**
+     * Seeded rows are not logged by the audit observers; seeders write
+     * their own audit history where it matters.
+     */
     public function run(): void
+    {
+        AuditLogger::muted(fn () => $this->seed());
+    }
+
+    private function seed(): void
     {
         $project = Project::where('code', 'MOST-RD-2026-001')->first();
         if (! $project) {
