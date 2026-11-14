@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
+use App\Models\Expense;
 use App\Models\FundingAgency;
 use App\Models\LibCategory;
 use App\Models\Project;
@@ -39,6 +40,9 @@ class ProgramDashboardService
         $receiptCount = (int) $rows->sum('receipts_count');
         $oldestWaiting = (int) ($approvals->max('days_waiting') ?? 0);
         $forecast = $this->forecast($projects, $today);
+        $budget = round((float) $rows->sum('budget'), 2);
+        $spent = round((float) $rows->sum('spent'), 2);
+        $released = round((float) $rows->sum('released'), 2);
 
         return [
             'meta' => [
@@ -62,6 +66,15 @@ class ProgramDashboardService
                 'pending_approvals' => $approvals->count(),
                 'pending_approvals_total' => $approvals->count(),
                 'oldest_waiting_days' => $oldestWaiting,
+                // Same value as total_disbursed (verified expenses); the
+                // clearer name is what the Overview now reads.
+                'total_spent' => $spent,
+                'remaining' => round($budget - $spent, 2),
+                'remaining_pct' => $this->pct($budget - $spent, $budget),
+                // Funds the funder has actually released (released tranches).
+                'total_released' => $released,
+                'not_yet_released' => round(max($budget - $released, 0), 2),
+                'released_pct' => $this->pct($released, $budget),
             ],
             'projects' => $rows->all(),
             // The dashboard inbox is intentionally short; the Approvals page
@@ -73,6 +86,107 @@ class ProgramDashboardService
             'funding_sources' => $this->fundingSources($rows),
             'deadlines' => $this->deadlines($projects, $today),
             'exceptions' => $this->exceptions($projects, $rows),
+            'monthly_expenses' => $this->monthlyExpenses($projects, $today),
+            'category_summary' => $this->categorySummary($projects, $budget),
+        ];
+    }
+
+    /**
+     * Verified expenses per calendar month of the current year, by
+     * expense_date. Months after the current month are future slots with no
+     * amount: the Overview is descriptive only and never projects ahead.
+     *
+     * @return array<int, array{month: string, label: string, amount: float|null, is_future: bool}>
+     */
+    protected function monthlyExpenses(Collection $projects, Carbon $today): array
+    {
+        $year = (int) $today->year;
+        $totals = array_fill(1, 12, 0.0);
+
+        if ($projects->isNotEmpty()) {
+            Expense::query()
+                ->whereIn('project_id', $projects->pluck('id'))
+                ->where('status', 'verified')
+                ->whereBetween('expense_date', [
+                    Carbon::create($year, 1, 1)->toDateString(),
+                    Carbon::create($year, 12, 31)->toDateString(),
+                ])
+                ->get(['amount', 'expense_date'])
+                ->each(function ($expense) use (&$totals) {
+                    $totals[(int) $expense->expense_date->month] += (float) $expense->amount;
+                });
+        }
+
+        return collect(range(1, 12))->map(function (int $month) use ($year, $today, $totals) {
+            $date = Carbon::create($year, $month, 1);
+            $future = $month > (int) $today->month;
+
+            return [
+                'month' => $date->format('Y-m'),
+                'label' => $date->format('M'),
+                'amount' => $future ? null : round($totals[$month], 2),
+                'is_future' => $future,
+            ];
+        })->all();
+    }
+
+    /**
+     * PS vs MOOE: allocated from line items, spent from verified expenses
+     * through their line item. Verified expenses whose line item is missing
+     * or not PS/MOOE are reported as uncategorized so the parts always add
+     * up to total spent.
+     *
+     * @return array<string, mixed>
+     */
+    protected function categorySummary(Collection $projects, float $approvedBudget): array
+    {
+        $allocated = ['PS' => 0.0, 'MOOE' => 0.0];
+        foreach ($projects as $project) {
+            foreach ($project->libCategories as $category) {
+                if (array_key_exists($category->category_type, $allocated)) {
+                    $allocated[$category->category_type] += (float) $category->allocated_amount;
+                }
+            }
+        }
+
+        $spent = ['PS' => 0.0, 'MOOE' => 0.0];
+        $uncategorized = 0.0;
+        $uncategorizedCount = 0;
+        if ($projects->isNotEmpty()) {
+            Expense::query()
+                ->whereIn('project_id', $projects->pluck('id'))
+                ->where('status', 'verified')
+                ->with('libCategory:id,category_type')
+                ->get(['id', 'lib_category_id', 'amount'])
+                ->each(function ($expense) use (&$spent, &$uncategorized, &$uncategorizedCount) {
+                    $type = $expense->libCategory?->category_type;
+                    if (array_key_exists((string) $type, $spent)) {
+                        $spent[$type] += (float) $expense->amount;
+                    } else {
+                        $uncategorized += (float) $expense->amount;
+                        $uncategorizedCount++;
+                    }
+                });
+        }
+
+        $bucket = fn (string $type) => [
+            'allocated' => round($allocated[$type], 2),
+            'spent' => round($spent[$type], 2),
+            'remaining' => round($allocated[$type] - $spent[$type], 2),
+            'utilization_pct' => $this->pct($spent[$type], $allocated[$type]),
+        ];
+        $lineItemsTotal = round($allocated['PS'] + $allocated['MOOE'], 2);
+
+        return [
+            'ps' => $bucket('PS'),
+            'mooe' => $bucket('MOOE'),
+            'uncategorized' => [
+                'spent' => round($uncategorized, 2),
+                'count' => $uncategorizedCount,
+            ],
+            'line_items_total' => $lineItemsTotal,
+            'approved_budget' => round($approvedBudget, 2),
+            'matches_budget' => abs($lineItemsTotal - $approvedBudget) < 0.005,
         ];
     }
 
@@ -544,6 +658,9 @@ class ProgramDashboardService
             'spent' => round($spent, 2),
             'remaining' => round($budget - $spent, 2),
             'spent_pct' => $spentPct,
+            'released' => round((float) $project->tranches
+                ->where('status', 'released')
+                ->sum('amount'), 2),
             'time_pct' => $time['time_pct'],
             'gap' => $gap,
             'elapsed_days' => $time['elapsed_days'],
@@ -887,9 +1004,12 @@ class ProgramDashboardService
             ->map(function (Collection $group, string $label) {
                 $allocated = (float) $group->sum('budget');
                 $spent = (float) $group->sum('spent');
+                $released = (float) $group->sum('released');
 
                 return [
                     'funder' => $label,
+                    'released' => round($released, 2),
+                    'released_pct' => $this->pct($released, $allocated),
                     'funder_id' => $group->first()['funder_id'] ?? null,
                     'projects' => $group->count(),
                     'allocated' => round($allocated, 2),
