@@ -3412,3 +3412,47 @@ select.signin-input:disabled{
   .er-section h2{break-after:avoid;page-break-after:avoid}
   .er-doc .program-pill{background:#fff !important;border:1px solid #000 !important}
 }
+
+/* Program Reports: "Per-project reports" section (Reports.jsx, programMode) */
+.prr{display:flex;flex-direction:column}
+.prr-params{
+  display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:14px;margin-top:14px;
+  background:#FAF7F2;border:1px solid #EDE4D6;border-radius:14px;padding:16px 18px;
+}
+.prr-params .program-field{min-width:0}
+.prr-params .program-select{width:100%;min-width:0}
+.prr-label{margin:22px 0 10px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#6B5F5F}
+.prr-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.prr-list{list-style:none;margin:0;padding:0}
+.prr-row{display:flex;align-items:center;gap:14px;padding:16px 0;border-top:1px solid #F1ECE4}
+.prr-row:first-child{border-top:none;padding-top:4px}
+.prr-ic{
+  width:36px;height:36px;flex:0 0 36px;border-radius:10px;background:#FBF3DF;color:#6F1D2A;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.prr-text{flex:1;min-width:0}
+.prr-text b{display:block;font-size:14px;color:#2B2023}
+.prr-text p{margin:2px 0 0;font-size:13px;color:#6B5F5F}
+.prr-actions{display:flex;gap:8px;flex:0 0 auto}
+.prr-actions .program-btn{min-width:132px;min-height:44px}
+@media (max-width: 900px){
+  .prr-params{grid-template-columns:1fr}
+  .prr-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 720px){
+  .prr-row{flex-wrap:wrap}
+  .prr-actions{width:100%;padding-left:50px}
+}
+@media (max-width: 520px){
+  .prr-stats{grid-template-columns:1fr}
+  .prr-actions{padding-left:0}
+  .prr-actions .program-btn{flex:1;min-width:0}
+}
+
+/* Reports.jsx: project select states and load errors */
+.rp-project{display:flex;gap:8px;align-items:center}
+.rp-project select{flex:1;min-width:0}
+.rp-project select:disabled{color:#6B5F5F}
+.rp-error{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;color:#8E1B1B;font-size:13px}
+.rp-error-block{display:flex;margin-top:12px;padding:10px 14px;border-radius:10px;background:#FDECEC;border:1px solid #F3C4C4}
+.rp-note{margin:4px 0 0;font-size:12.5px;color:#92400E}
