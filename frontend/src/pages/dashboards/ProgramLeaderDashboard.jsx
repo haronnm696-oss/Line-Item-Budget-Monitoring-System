@@ -7,7 +7,6 @@ import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import ProgramRejectModal from '../../components/program/ProgramRejectModal';
 import BudgetByProjectDonut from '../../components/program/BudgetByProjectDonut';
-import ScheduledReleasesBars from '../../components/program/ScheduledReleasesBars';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
 import { compactPeso, formatPct, peso } from '../../components/money';
@@ -167,11 +166,6 @@ export default function ProgramLeaderDashboard() {
   const kpis = data?.kpis ?? {};
   const projects = Array.isArray(data?.projects) ? data.projects : [];
   const approvals = Array.isArray(data?.approvals) ? data.approvals : [];
-  const releases = Array.isArray(data?.scheduled_releases)
-    ? data.scheduled_releases
-    : Array.isArray(data?.forecast)
-      ? data.forecast
-      : [];
   const fundingSources = Array.isArray(data?.funding_sources) ? data.funding_sources : [];
 
   // Spent = verified expenses (same rule as the Projects page).
@@ -443,10 +437,7 @@ export default function ProgramLeaderDashboard() {
             <PsMooeCard summary={data.category_summary} />
           </div>
 
-          <div className="pl-row pl-row-charts">
-            <BudgetByProjectDonut projects={projects} />
-            <ScheduledReleasesBars releases={releases} />
-          </div>
+          <BudgetByProjectDonut projects={projects} />
 
           {pending > 0 && (
           <section className="program-card">

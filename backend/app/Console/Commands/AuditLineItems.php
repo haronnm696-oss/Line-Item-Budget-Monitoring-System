@@ -22,6 +22,20 @@ class AuditLineItems extends Command
         $mismatches = self::budgetMismatches();
         $uncategorized = self::uncategorizedExpenses();
 
+        $this->info('All projects:');
+        $this->table(['Code', 'Title', 'Approved budget', 'Line items', 'Count'], Project::query()
+            ->with('libCategories')
+            ->orderBy('code')
+            ->get()
+            ->map(fn (Project $project) => [
+                $project->code,
+                $project->title,
+                number_format((float) $project->total_approved_budget, 2),
+                number_format((float) $project->libCategories->sum('allocated_amount'), 2),
+                $project->libCategories->count(),
+            ])
+            ->all());
+
         $this->info('Projects whose line-item sum differs from total_approved_budget: ' . count($mismatches));
         if ($mismatches) {
             $this->table(['Code', 'Approved budget', 'Line items', 'Difference'], array_map(fn ($row) => [

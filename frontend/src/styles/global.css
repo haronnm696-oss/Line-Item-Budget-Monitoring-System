@@ -2285,20 +2285,17 @@ select.signin-input:disabled{
 .pl-donut-legend li{display:flex;align-items:center;gap:10px;min-width:0;font-size:13px;color:#2B2023}
 .pl-donut-swatch{width:12px;height:12px;flex:0 0 12px;border-radius:3px}
 .pl-donut-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pl-donut-legend b{font-weight:800;font-variant-numeric:tabular-nums}
-
-/* Scheduled releases bars */
-.pl-release-chart{display:flex;justify-content:space-around;align-items:stretch;gap:8px}
-.pl-release-col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0}
-.pl-release-plot{
-  flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;
-  border-bottom:1px solid #EDE4D6;
+.pl-donut-legend b{font-weight:800;font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+.pl-donut-budget{flex:0 0 auto;color:#6B5F5F;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Full-width card: donut left, legend fills the rest of the row. */
+.pl-donut-card .pl-chart-body.pl-donut{height:auto;min-height:150px;flex-wrap:nowrap;align-items:center;gap:20px 36px}
+.pl-donut-card .pl-donut-legend{flex:1 1 auto}
+.pl-donut-card .pl-donut-legend li{padding:6px 0;border-top:1px solid #F3EDE3}
+.pl-donut-card .pl-donut-legend li:first-child{border-top:none}
+@media (max-width: 900px){
+  .pl-donut-card .pl-chart-body.pl-donut{flex-direction:column;align-items:stretch}
+  .pl-donut-card .pl-donut-figure{align-self:center}
 }
-.pl-release-value{font-size:13px;font-weight:700;color:#2B2023;font-variant-numeric:tabular-nums;white-space:nowrap}
-.pl-release-value.is-none{font-weight:600;color:#6B5F5F}
-.pl-release-bar{display:block;width:48px;max-width:100%;background:#6F1D2A;border-radius:6px 6px 0 0}
-.pl-release-bar.is-none{height:4px;background:#D6CBBB}
-.pl-release-month{margin-top:8px;font-size:13px;color:#6B5F5F}
 
 /* Spending vs time */
 .pl-spend-list{display:flex;flex-direction:column}
