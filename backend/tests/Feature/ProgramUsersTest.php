@@ -56,7 +56,7 @@ class ProgramUsersTest extends TestCase
             ->assertForbidden();
 
         $this->actingAs($projectLeader)
-            ->patchJson("/api/program/users/{$pending->id}/status", ['is_active' => false])
+            ->patchJson("/api/program/users/{$pending->id}/status", ['is_active' => false, 'reason' => 'Left the program'])
             ->assertForbidden();
 
         $this->actingAs($projectLeader)
@@ -191,7 +191,7 @@ class ProgramUsersTest extends TestCase
         $this->assertSame('research-assistant', $user->fresh()->roleOn($project));
 
         $this->actingAs($leader)
-            ->deleteJson("/api/program/assignments/{$user->id}/{$project->id}")
+            ->deleteJson("/api/program/assignments/{$user->id}/{$project->id}", ['reason' => 'Moved to another project'])
             ->assertOk();
 
         $this->assertDatabaseMissing('project_user', [
@@ -208,12 +208,12 @@ class ProgramUsersTest extends TestCase
         $project = $this->project();
 
         $this->actingAs($leader)
-            ->patchJson("/api/program/users/{$leader->id}/status", ['is_active' => false])
+            ->patchJson("/api/program/users/{$leader->id}/status", ['is_active' => false, 'reason' => 'Left the program'])
             ->assertStatus(422)
             ->assertJsonPath('message', 'You cannot deactivate your own account.');
 
         $this->actingAs($leader)
-            ->patchJson("/api/program/users/{$otherLeader->id}/status", ['is_active' => false])
+            ->patchJson("/api/program/users/{$otherLeader->id}/status", ['is_active' => false, 'reason' => 'Left the program'])
             ->assertOk();
 
         $this->assertFalse($otherLeader->fresh()->is_active);
@@ -242,11 +242,11 @@ class ProgramUsersTest extends TestCase
         $second = $this->userWithRole('program-leader');
 
         $this->actingAs($leader)
-            ->patchJson("/api/program/users/{$second->id}/status", ['is_active' => false])
+            ->patchJson("/api/program/users/{$second->id}/status", ['is_active' => false, 'reason' => 'Left the program'])
             ->assertOk();
 
         $this->actingAs($leader)
-            ->patchJson("/api/program/users/{$leader->id}/status", ['is_active' => false])
+            ->patchJson("/api/program/users/{$leader->id}/status", ['is_active' => false, 'reason' => 'Left the program'])
             ->assertStatus(422);
 
         $this->actingAs($leader)

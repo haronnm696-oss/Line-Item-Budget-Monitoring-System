@@ -35,10 +35,11 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('web',
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('web', 'throttle:5,1');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('web');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('web');
-Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
+Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum', 'active.account');
 
 // Dashboard analytics & quick actions.
-Route::middleware('auth:sanctum')->group(function () {
+// active.account: a deactivated user loses access on the next request.
+Route::middleware(['auth:sanctum', 'active.account'])->group(function () {
     Route::get('/dashboard/program-leader', [DashboardController::class, 'programLeader']);
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::get('/projects/{project}', [ProjectController::class, 'show']);
@@ -77,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/program/registrations/{user}/decision', [ProgramUserController::class, 'decideRegistration']);
         Route::get('/program/users', [ProgramUserController::class, 'index']);
         Route::post('/program/users', [ProgramUserController::class, 'store']);
+        Route::patch('/program/users/{user}', [ProgramUserController::class, 'updateDetails']);
         Route::patch('/program/users/{user}/status', [ProgramUserController::class, 'updateStatus']);
         Route::patch('/program/users/{user}/role', [ProgramUserController::class, 'updateRole']);
         Route::post('/program/assignments', [ProgramUserController::class, 'assign']);
@@ -85,6 +87,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+Route::middleware(['auth:sanctum', 'active.account'])->get('/user', function (Request $request) {
     return $request->user();
 });

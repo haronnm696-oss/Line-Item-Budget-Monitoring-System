@@ -3487,3 +3487,46 @@ select.signin-input:disabled{
 .au-tz{margin:12px 0 0;font-size:12px;color:#6B5F5F}
 .program-shell .program-table tr.pu-highlight td{background:#FBF3DF}
 .program-shell .program-table tr.pu-highlight td:first-child{box-shadow:inset 3px 0 0 #6F1D2A}
+
+/* Program Users and roles (/program-users) */
+.pu-pending-empty{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px}
+.program-shell .program-card.pu-pending-empty .program-card-title{margin:0}
+.pu-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;padding:1px 8px;border-radius:999px;background:#ECE7DD;color:#4A4040;font-size:12px;font-weight:700}
+.pu-filters .program-field{min-width:170px}
+.pu-filters .pu-search{min-width:220px;flex:1 1 220px;max-width:340px}
+.pu-table{min-width:1040px}
+.pu-table td{vertical-align:top}
+.pu-name{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pu-you{display:inline-flex;padding:1px 8px;border-radius:999px;background:#ECE7DD;color:#4A4040;font-size:11px;font-weight:700}
+/* Role labels: different lightness per role, always with text. */
+.pu-role{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;border:1px solid transparent}
+.pu-role.program-leader{background:#6F1D2A;color:#fff}
+.pu-role.project-leader{background:#D9A3AE;color:#3D0F18}
+.pu-role.finance-admin{background:#EED79A;color:#4A3505}
+.pu-role.research-assistant{background:#E9F1F8;color:#1F4E79;border-color:#C9DBEC}
+.pu-role.researcher{background:#fff;color:#4A4040;border-color:#D6CBBB}
+.pu-role.none{background:#ECE7DD;color:#4A4040}
+.pu-assign-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;min-width:220px}
+.pu-menu-wrap{position:relative;display:inline-block;text-align:left}
+.pu-menu{
+  position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:220px;padding:6px;
+  background:#fff;border:1px solid #E1D9CD;border-radius:12px;box-shadow:0 16px 40px -18px rgba(34,29,26,.45);
+}
+.pu-menu-item{
+  display:flex;align-items:center;width:100%;min-height:44px;padding:0 12px;border:0;border-radius:8px;
+  background:none;font:inherit;font-size:14px;color:#2B2023;text-align:left;text-decoration:none;cursor:pointer;
+}
+.pu-menu-item:hover,.pu-menu-item:focus-visible{background:#FAF7F2}
+.pu-menu-item:focus-visible{outline:3px solid rgba(111,29,42,.4);outline-offset:-1px}
+.pu-menu-item[aria-disabled="true"]{color:#9A8F8F;cursor:not-allowed}
+.pu-menu-item.danger{color:#8E1B1B;font-weight:600}
+.pu-menu-sep{height:1px;background:#F1ECE4;margin:6px 4px}
+.pu-form{display:flex;flex-direction:column;gap:14px}
+.pu-hint{margin:4px 0 0;font-size:12px;color:#6B5F5F}
+.pu-confirm{margin:0;font-size:14px;color:#2B2023}
+.pu-asg-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pu-asg-row{display:flex;flex-direction:column;gap:10px;padding:14px 0;border-top:1px solid #F1ECE4}
+.pu-asg-row:first-child{border-top:none;padding-top:0}
+.pu-asg-controls{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.pu-asg-controls .program-field{flex:1 1 200px}
+.pu-remove{align-self:flex-start;color:#8E1B1B}

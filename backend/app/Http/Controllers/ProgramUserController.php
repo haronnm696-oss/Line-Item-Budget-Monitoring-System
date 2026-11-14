@@ -46,16 +46,81 @@ class ProgramUserController extends Controller
         ]);
     }
 
+    /**
+     * One row per person. Filters: q (name or employee ID), role, project,
+     * status (active by default, inactive, all), user (focus), page.
+     */
     public function index(Request $request)
     {
         $data = $request->validate([
-            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'q' => ['nullable', 'string', 'max:100'],
+            'role' => ['nullable', 'string', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
+            'project' => ['nullable', 'integer'],
+            'status' => ['nullable', Rule::in(['active', 'inactive', 'all'])],
+            'user' => ['nullable', 'integer'],
+            'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        return response()->json([
-            'users' => $this->users->users($data['project_id'] ?? null),
+        $directory = $this->users->directory($data, $request->user());
+
+        return response()->json($directory + [
             'roles' => $this->roleOptions(ProgramUserService::ACCOUNT_ROLES),
             'project_roles' => $this->roleOptions(ProgramUserService::PROJECT_ROLES),
+            'projects' => Project::query()
+                ->orderBy('title')
+                ->get(['id', 'title', 'code', 'status'])
+                ->map(fn (Project $project) => [
+                    'id' => $project->id,
+                    'title' => $project->title,
+                    'code' => $project->code,
+                    'status' => ucfirst((string) $project->status),
+                ])
+                ->values()
+                ->all(),
+            'assignable_users' => $this->users->assignableUsers(),
+        ]);
+    }
+
+    public function updateDetails(Request $request, User $user)
+    {
+        $request->merge([
+            'email' => strtolower(trim((string) $request->input('email'))),
+            'employee_id' => strtoupper(trim((string) $request->input('employee_id'))) ?: null,
+            'name' => trim((string) $request->input('name')),
+            'position' => trim((string) $request->input('position')) ?: null,
+        ]);
+
+        abort_if($user->role_id === null, 422, 'Pending registrations are reviewed above, not edited here.');
+
+        // Legacy values (e.g. a gmail.com address or "MSU-DEMO01") are kept as
+        // they are; the format rules apply only to a value that is changed.
+        $emailChanged = $request->input('email') !== strtolower(trim((string) $user->email));
+        $idChanged = $request->input('employee_id') !== (strtoupper(trim((string) $user->employee_id)) ?: null);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'position' => ['nullable', 'string', 'max:255'],
+            'email' => array_merge(
+                ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+                $emailChanged ? ['regex:/^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i'] : []
+            ),
+            'employee_id' => array_merge(
+                [$idChanged ? 'required' : 'nullable', 'string', 'max:50', Rule::unique('users', 'employee_id')->ignore($user->id)],
+                $idChanged ? ['regex:/^MSU-\d{5}$/'] : []
+            ),
+        ], [
+            'email.unique' => 'Another account already uses this email.',
+            'email.regex' => 'A new email must end with @msumain.edu.ph.',
+            'employee_id.unique' => 'Another account already uses this employee ID.',
+            'employee_id.required' => 'A new employee ID must use the format MSU-00000.',
+            'employee_id.regex' => 'A new employee ID must use the format MSU-00000.',
+        ]);
+
+        $user = $this->users->updateDetails($user, $data, $request->user());
+
+        return response()->json([
+            'message' => 'Account details updated.',
+            'user' => $this->userPayload($user),
         ]);
     }
 
@@ -94,7 +159,10 @@ class ProgramUserController extends Controller
     {
         $data = $request->validate([
             'is_active' => ['required', 'boolean'],
-            'reason' => ['nullable', 'string', 'max:1000'],
+            // A reason is required to deactivate, optional to reactivate.
+            'reason' => ['nullable', 'string', 'max:1000', 'required_if:is_active,false,0'],
+        ], [
+            'reason.required_if' => 'A reason is required to deactivate an account.',
         ]);
 
         $user = $this->users->setActive(
@@ -167,7 +235,9 @@ class ProgramUserController extends Controller
     public function removeAssignment(Request $request, User $user, Project $project)
     {
         $data = $request->validate([
-            'reason' => ['nullable', 'string', 'max:1000'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ], [
+            'reason.required' => 'A reason is required to remove someone from a project.',
         ]);
 
         $this->users->removeAssignment($user, $project, $request->user(), $data['reason'] ?? null);
