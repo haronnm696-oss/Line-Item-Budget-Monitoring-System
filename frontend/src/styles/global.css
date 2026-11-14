@@ -3310,3 +3310,46 @@ select.signin-input:disabled{
 /* Reports: Executive summary opened from the Overview (?report=executive) */
 .program-shell .program-card.is-selected{border-color:#BE9A3E;box-shadow:0 0 0 3px rgba(190,154,62,.18)}
 .program-shell .program-card[tabindex="-1"]:focus{outline:none}
+
+/* Program Approvals page (/program-approvals) */
+.pa-controls{justify-content:space-between}
+.program-shell .pa-tabs .program-tab{min-height:44px;background:#fff;border-color:#D6CBBB;color:var(--pg2-ink)}
+.program-shell .pa-tabs .program-tab:hover{background:#FAF7F2}
+.program-shell .pa-tabs .program-tab.active{background:#6F1D2A;border-color:#6F1D2A;color:#fff}
+.pa-tabs .program-tab:focus-visible{outline:3px solid rgba(111,29,42,.4);outline-offset:2px}
+.program-shell .program-card.pa-empty{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:0;
+  padding:16px 20px;font-size:14px;color:#4A4040;
+}
+.pa-empty .pp-clear{min-height:44px}
+.pa-remark{
+  margin:10px 0 0;background:#FAF7F2;border-radius:10px;padding:10px 14px;
+  font-size:14px;line-height:1.5;color:#2B2023;overflow-wrap:anywhere;
+}
+.pa-remark.is-empty{color:#6B5F5F}
+.pa-decided-list{list-style:none;margin:0;padding:0}
+.pa-decided-row{
+  display:flex;align-items:flex-start;gap:16px;padding:18px 0;border-top:1px solid #F1ECE4;
+}
+.pa-decided-row:first-child{border-top:none;padding-top:4px}
+.pa-decided-main{flex:1;min-width:0}
+.pa-decided-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:#2B2023;overflow-wrap:anywhere}
+.pa-status,.pa-type{
+  display:inline-flex;align-items:center;gap:4px;border-radius:999px;
+  padding:3px 9px;font-size:11px;font-weight:650;line-height:1.5;white-space:nowrap;
+}
+.pa-status.is-approved{background:#DDF0E4;color:#1E5A37}
+.pa-status.is-rejected{background:#FDECEC;color:#8E1B1B}
+.pa-type{background:#ECE7DD;color:#4A4040}
+.pa-meta{font-size:13px;color:#6B5F5F;margin-top:4px;overflow-wrap:anywhere}
+.pa-meta b{color:#2B2023;font-weight:700}
+.pa-audit-link{
+  display:inline-flex;align-items:center;min-height:44px;flex:0 0 auto;
+  font-size:13px;font-weight:700;color:#6F1D2A;text-decoration:none;
+}
+.pa-audit-link:hover{text-decoration:underline;text-underline-offset:2px}
+.pa-audit-link:focus-visible{outline:3px solid rgba(111,29,42,.4);outline-offset:2px;border-radius:4px}
+.pa-more{display:flex;justify-content:center;padding-top:14px;border-top:1px solid #F1ECE4}
+@media (max-width: 720px){
+  .pa-decided-row{flex-direction:column;gap:6px}
+}
