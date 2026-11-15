@@ -2034,6 +2034,9 @@ select.signin-input:disabled{
 .program-user-menu-item.danger{color:#8E1B1B}
 .program-user-menu-item.danger:hover{background:#FCEFED}
 
+/* Payroll page: rows of controls and per-row actions */
+.payroll-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
 /* Notification bell (RoleShell header, every role) */
 .notif-bell{position:relative}
 .notif-badge{

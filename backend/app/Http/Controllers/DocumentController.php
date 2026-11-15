@@ -2,75 +2,63 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ApprovalRequest;
+use App\Models\Contracts\HasDocuments;
 use App\Models\Document;
 use App\Models\Expense;
+use App\Models\Payroll;
+use App\Models\Project;
+use App\Models\PurchaseRequest;
+use App\Models\User;
 use App\Services\AuditLogger;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
- * Documents attached to an expense. Project scoping (project.access) limits
- * every route to the Program Leader and members of the expense's project.
+ * Documents attached to a record (expense, payroll entry, purchase request,
+ * budget request). Project scoping (project.access) limits every route to
+ * the Program Leader and members of the record's project; each record type
+ * sets who may upload, when, and which types (HasDocuments::documentRules).
  * Upload and delete each write exactly one audit entry.
  */
 class DocumentController extends Controller
 {
-    private const UPLOADERS = ['research-assistant', 'finance-admin'];
+    // One typed pair per record so route-model binding resolves the record.
+    public function indexForExpense(Expense $expense) { return $this->index($expense); }
+    public function storeForExpense(Request $request, Expense $expense) { return $this->store($request, $expense); }
+    public function indexForPayroll(Payroll $payroll) { return $this->index($payroll); }
+    public function storeForPayroll(Request $request, Payroll $payroll) { return $this->store($request, $payroll); }
+    public function indexForPurchaseRequest(PurchaseRequest $purchaseRequest) { return $this->index($purchaseRequest); }
+    public function storeForPurchaseRequest(Request $request, PurchaseRequest $purchaseRequest) { return $this->store($request, $purchaseRequest); }
+    public function indexForApproval(ApprovalRequest $approval) { return $this->index($approval); }
+    public function storeForApproval(Request $request, ApprovalRequest $approval) { return $this->store($request, $approval); }
 
-    public function index(Expense $expense)
+    private function index(HasDocuments $record)
     {
         return response()->json([
-            'documents' => $expense->documents()->with('uploader')->orderBy('id')->get()->map(fn (Document $d) => $this->row($d))->values(),
+            'documents' => $record->documents()->with('uploader')->orderBy('id')->get()->map(fn (Document $d) => self::row($d))->values(),
         ]);
     }
 
-    public function store(Request $request, Expense $expense)
+    private function store(Request $request, HasDocuments $record)
     {
         $actor = $request->user();
-        abort_unless(
-            in_array($actor->roleOn($expense->project), self::UPLOADERS, true),
-            403,
-            'Only a Research Assistant or Finance/Admin staff of this project can attach documents.'
-        );
-        abort_unless(
-            in_array($expense->workflow_status, ['draft', 'returned'], true),
-            422,
-            'Documents can be attached only while the expense is a draft or returned.'
-        );
+        $rules = $record->documentRules();
+        abort_unless(self::mayUpload($record, $actor), 403, $rules['uploader_message']);
+        abort_unless($rules['open'], 422, $rules['closed_message']);
 
         $data = $request->validate([
-            'file' => ['required', 'file', 'mimes:' . implode(',', config('documents.mimes')), 'max:' . config('documents.max_kb')],
-            'document_type' => ['required', Rule::in(Document::TYPES)],
-        ], [
-            'file.mimes' => 'Upload a PDF, JPG or PNG file.',
-            'file.max' => 'The file must not be larger than 10 MB.',
-        ]);
+            'file' => self::fileRules(),
+            'document_type' => ['required', Rule::in($rules['types'])],
+        ], self::fileMessages());
 
-        $file = $data['file'];
-        $disk = config('documents.disk');
-        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-        $path = $file->storeAs('documents/expenses/' . $expense->id, Str::uuid() . '.' . $extension, ['disk' => $disk]);
+        $document = AuditLogger::transaction(fn () => self::attach($record, $data['file'], $data['document_type'], $actor));
 
-        $document = AuditLogger::transaction(function () use ($expense, $actor, $data, $file, $disk, $path) {
-            $document = $expense->documents()->create([
-                'uploaded_by' => $actor->id,
-                'document_type' => $data['document_type'],
-                'file_name' => Str::limit($file->getClientOriginalName(), 250, ''),
-                'file_path' => $path,
-                'disk' => $disk,
-                'size' => $file->getSize(),
-                'mime' => $file->getMimeType(),
-                'uploaded_at' => now(),
-            ]);
-
-            AuditLogger::write('created', $document, [], $this->auditValues($document, $expense), $actor);
-
-            return $document;
-        });
-
-        return response()->json(['message' => 'Document uploaded.', 'document' => $this->row($document->load('uploader'))], 201);
+        return response()->json(['message' => 'Document uploaded.', 'document' => self::row($document->load('uploader'))], 201);
     }
 
     public function download(Document $document)
@@ -86,11 +74,14 @@ class DocumentController extends Controller
         $actor = $request->user();
         abort_unless((int) $document->uploaded_by === (int) $actor->id, 403, 'Only the person who uploaded a document can delete it.');
 
-        $expense = $document->documentable;
-        abort_if($expense instanceof Expense && $expense->workflow_status === 'verified', 422, 'Documents of a verified expense cannot be deleted.');
+        $record = $document->documentable;
+        if ($record instanceof HasDocuments) {
+            $rules = $record->documentRules();
+            abort_if($rules['locked'], 422, $rules['locked_message']);
+        }
 
-        AuditLogger::transaction(function () use ($document, $expense, $actor) {
-            $values = $this->auditValues($document, $expense);
+        AuditLogger::transaction(function () use ($document, $record, $actor) {
+            $values = self::auditValues($document, $record);
             $document->delete();
             AuditLogger::write('deleted', $document, $values, [], $actor);
         });
@@ -101,17 +92,79 @@ class DocumentController extends Controller
         return response()->json(['message' => 'Document deleted.']);
     }
 
-    private function auditValues(Document $document, $expense): array
+    // ------------------------------------------------------------ shared helpers
+
+    public static function fileRules(): array
+    {
+        return ['required', 'file', 'mimes:' . implode(',', config('documents.mimes')), 'max:' . config('documents.max_kb')];
+    }
+
+    public static function fileMessages(string $prefix = 'file'): array
     {
         return [
-            'project_id' => $expense?->project_id,
-            'expense_id' => $document->documentable_id,
+            "{$prefix}.mimes" => 'Upload a PDF, JPG or PNG file.',
+            "{$prefix}.max" => 'The file must not be larger than 10 MB.',
+        ];
+    }
+
+    public static function mayUpload(HasDocuments $record, User $actor): bool
+    {
+        $rules = $record->documentRules();
+        if (array_key_exists('uploader_ids', $rules)) {
+            return in_array((int) $actor->id, array_map('intval', $rules['uploader_ids']), true);
+        }
+
+        $project = $record->getAttribute('project_id') ? Project::find($record->getAttribute('project_id')) : null;
+
+        return $project !== null && in_array($actor->roleOn($project), $rules['uploader_roles'], true);
+    }
+
+    /**
+     * Store the file and its row with one "created" audit entry. Call inside
+     * an AuditLogger::transaction. If the transaction fails, the stored file
+     * is removed.
+     */
+    public static function attach(HasDocuments $record, UploadedFile $file, string $type, User $actor): Document
+    {
+        /** @var Model&HasDocuments $record */
+        $disk = config('documents.disk');
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $folder = 'documents/' . $record->documentRules()['folder'] . '/' . $record->getKey();
+        $path = $file->storeAs($folder, Str::uuid() . '.' . $extension, ['disk' => $disk]);
+
+        try {
+            $document = $record->documents()->create([
+                'uploaded_by' => $actor->id,
+                'document_type' => $type,
+                'file_name' => Str::limit($file->getClientOriginalName(), 250, ''),
+                'file_path' => $path,
+                'disk' => $disk,
+                'size' => $file->getSize(),
+                'mime' => $file->getMimeType(),
+                'uploaded_at' => now(),
+            ]);
+
+            AuditLogger::write('created', $document, [], self::auditValues($document, $record), $actor);
+        } catch (\Throwable $exception) {
+            Storage::disk($disk)->delete($path);
+            throw $exception;
+        }
+
+        return $document;
+    }
+
+    private static function auditValues(Document $document, $record): array
+    {
+        return [
+            'project_id' => $record?->project_id,
+            'record' => class_basename($document->documentable_type),
+            'record_id' => $document->documentable_id,
             'document_type' => $document->document_type,
             'file_name' => $document->file_name,
         ];
     }
 
-    private function row(Document $document): array
+    public static function row(Document $document): array
     {
         return [
             'id' => $document->id,

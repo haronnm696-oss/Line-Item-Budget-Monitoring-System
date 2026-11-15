@@ -6,6 +6,7 @@ use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
 use App\Models\Document;
 use App\Models\Expense;
+use App\Models\PurchaseRequest;
 use App\Models\LibCategory;
 use App\Models\Liquidation;
 use App\Models\Payroll;
@@ -42,6 +43,7 @@ class AuditEntryPresenter
         'Liquidation' => 'Liquidation',
         'ProjectReport' => 'Project report',
         'Document' => 'Document',
+        'PurchaseRequest' => 'Purchase request',
     ];
 
     /** Labels for the ACTION filter (no record type known). */
@@ -55,6 +57,8 @@ class AuditEntryPresenter
         'submitted' => 'Expense submitted',
         'endorsed' => 'Approved by Project Leader',
         'returned' => 'Returned',
+        'computed' => 'Payroll computed',
+        'pay_rate_changed' => 'Pay rate changed',
         'requested' => 'Submitted',
         'budget_changed' => 'Budget changed',
         'assignment_created' => 'Assigned to project',
@@ -141,11 +145,16 @@ class AuditEntryPresenter
         'document_type' => 'Document type',
         'file_name' => 'File',
         'uploaded_by' => 'Uploaded by',
+        'quantity' => 'Quantity',
+        'estimated_amount' => 'Estimated amount',
+        'monthly_rate' => 'Monthly rate',
+        'allowance' => 'Allowance',
     ];
 
     private const MONEY = [
         'amount', 'allocated_amount', 'total_approved_budget', 'funding_agency_amount', 'budget', 'spent', 'remaining',
         'implementing_agency_counterpart', 'basic_rate', 'gross_pay', 'total_deductions', 'net_pay',
+        'estimated_amount', 'monthly_rate', 'allowance',
     ];
 
     private const USER_KEYS = [
@@ -160,7 +169,7 @@ class AuditEntryPresenter
         'assigned_at', 'payload', 'role_label', 'project', 'ip_address', 'attachment_path',
         'document_path', 'liquidation_id', 'registration_rejection_reason', 'reason',
         'return_reason', 'pl_reviewed_at', 'expense_id', 'documentable_type', 'documentable_id',
-        'file_path', 'disk', 'mime', 'size', 'uploaded_at',
+        'file_path', 'disk', 'mime', 'size', 'uploaded_at', 'record', 'record_id',
     ];
 
     private array $users = [];
@@ -216,6 +225,7 @@ class AuditEntryPresenter
             // Deleted (soft-deleted) expenses still name the record.
             'Expense' => Expense::withTrashed()->whereIn('id', $ids('Expense'))->get()->keyBy('id')->all(),
             'Document' => Document::query()->whereIn('id', $ids('Document'))->get()->keyBy('id')->all(),
+            'PurchaseRequest' => PurchaseRequest::withTrashed()->whereIn('id', $ids('PurchaseRequest'))->get()->keyBy('id')->all(),
             'Payroll' => Payroll::query()->whereIn('id', $ids('Payroll'))->get()->keyBy('id')->all(),
             'Liquidation' => Liquidation::query()->whereIn('id', $ids('Liquidation'))->get()->keyBy('id')->all(),
             'ProjectUser' => ProjectUser::query()->whereIn('id', $ids('ProjectUser'))->get()->keyBy('id')->all(),
@@ -236,6 +246,7 @@ class AuditEntryPresenter
             $values('lib_category_id'),
             $budgetIds,
             collect($this->records['Expense'])->pluck('lib_category_id')->all(),
+            collect($this->records['PurchaseRequest'])->pluck('lib_category_id')->all(),
             collect($this->records['Payroll'])->pluck('lib_category_id')->all()
         );
         $this->lineItems = LibCategory::query()->whereIn('id', array_unique(array_filter($lineItemIds)))->get()->keyBy('id')->all();
@@ -342,6 +353,7 @@ class AuditEntryPresenter
             'submitted' => "{$noun} submitted",
             'endorsed' => "{$noun} approved by Project Leader",
             'returned' => "{$noun} returned",
+            'computed' => "{$noun} computed",
             'requested' => $type === 'ApprovalRequest' ? 'Request submitted' : "{$noun} submitted",
             default => self::ACTION_LABELS[$action] ?? self::humanize($action),
         };
@@ -414,6 +426,16 @@ class AuditEntryPresenter
                 return [
                     'label' => $label !== '' ? $label : 'Deleted expense',
                     'type' => 'Expense' . ($lineItem ? ' · ' . $lineItem->line_item_name : ''),
+                    'link' => $projectLink,
+                ];
+
+            case 'PurchaseRequest':
+                $request = $this->records['PurchaseRequest'][$id] ?? null;
+                $lineItem = $this->lineItems[$request?->lib_category_id ?? $pick('lib_category_id')] ?? null;
+
+                return [
+                    'label' => $request?->description ?? $pick('description') ?? 'Deleted purchase request',
+                    'type' => 'Purchase request' . ($lineItem ? ' · ' . $lineItem->line_item_name : ''),
                     'link' => $projectLink,
                 ];
 

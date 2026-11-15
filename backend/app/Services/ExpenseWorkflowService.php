@@ -4,13 +4,11 @@ namespace App\Services;
 
 use App\Models\Expense;
 use App\Models\Project;
-use App\Models\ProjectUser;
 use App\Models\User;
 use App\Notifications\ExpenseWorkflowNotification;
+use App\Services\Concerns\RunsWorkflow;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 /**
  * The one place that moves an expense through its workflow:
@@ -29,6 +27,8 @@ use Throwable;
  */
 class ExpenseWorkflowService
 {
+    use RunsWorkflow;
+
     public const LABELS = [
         'draft' => 'Draft',
         'submitted' => 'Submitted',
@@ -192,73 +192,37 @@ class ExpenseWorkflowService
 
     // ---------------------------------------------------------------- helpers
 
-    /**
-     * Change the workflow status (and keep `status` in sync) with exactly one
-     * audit entry. The state is checked again under a row lock.
-     */
+    protected function stageLabels(): array
+    {
+        return self::LABELS;
+    }
+
+    protected function noun(): string
+    {
+        return 'expense';
+    }
+
+    /** Change the stage (and keep `status` in sync) with exactly one audit entry. */
     private function move(Expense $expense, string $to, User $actor, string $auditAction, array $from, array $extra, ?string $reason = null): Expense
     {
-        return AuditLogger::transaction(function () use ($expense, $to, $actor, $auditAction, $from, $extra, $reason) {
-            $locked = $this->lock($expense);
-            $this->requireState($locked, $from, $auditAction === 'endorsed' ? 'approved' : $auditAction);
+        $verb = $auditAction === 'endorsed' ? 'approved' : $auditAction;
 
-            $old = $locked->only(array_merge(['workflow_status', 'status'], array_keys($extra)));
-            $locked->update(array_merge($extra, [
-                'workflow_status' => $to,
-                'status' => Expense::STATUS_FOR_WORKFLOW[$to],
-            ]));
-            $new = $locked->fresh()->only(array_keys($old));
-
-            AuditLogger::write($auditAction, $locked, $old, $new, $actor, $reason);
-
-            return $locked->fresh();
-        });
+        return $this->moveRecord($expense, $to, $actor, $auditAction, $from, $verb, $extra, $reason, Expense::STATUS_FOR_WORKFLOW);
     }
 
     private function lock(Expense $expense): Expense
     {
-        return Expense::query()->whereKey($expense->id)->lockForUpdate()->firstOrFail();
-    }
-
-    private function requireRole(?Project $project, User $actor, array $slugs, string $message): void
-    {
-        if (! $project || ! in_array($actor->roleOn($project), $slugs, true)) {
-            abort(403, $message);
-        }
+        return $this->lockRecord($expense);
     }
 
     private function requireNotMaker(Expense $expense, User $actor, string $message): void
     {
-        if ((int) $expense->recorded_by === (int) $actor->id) {
-            abort(403, $message);
-        }
+        $this->requireNotSame($expense->recorded_by, $actor, $message);
     }
 
     private function requireNotEndorser(Expense $expense, User $actor): void
     {
-        if ($expense->pl_reviewed_by !== null && (int) $expense->pl_reviewed_by === (int) $actor->id) {
-            abort(403, 'You approved this expense as Project Leader; another person must verify it.');
-        }
-    }
-
-    private function requireState(Expense $expense, array $allowed, string $verb): void
-    {
-        if (! in_array($expense->workflow_status, $allowed, true)) {
-            $label = strtolower(self::LABELS[$expense->workflow_status] ?? (string) $expense->workflow_status);
-            throw ValidationException::withMessages([
-                'workflow_status' => ["This expense cannot be {$verb} while it is {$label}."],
-            ]);
-        }
-    }
-
-    private function requireReason(string $reason, string $message): string
-    {
-        $reason = trim($reason);
-        if ($reason === '') {
-            throw ValidationException::withMessages(['reason' => [$message]]);
-        }
-
-        return $reason;
+        $this->requireNotSame($expense->pl_reviewed_by, $actor, 'You approved this expense as Project Leader; another person must verify it.');
     }
 
     /** Fields a Research Assistant or Finance/Admin may set on a draft. */
@@ -276,39 +240,13 @@ class ExpenseWorkflowService
         ]);
     }
 
-    /** Active members of a project holding a role on it. */
-    private function projectMembers(int $projectId, string $roleSlug): Collection
-    {
-        return ProjectUser::query()
-            ->where('project_id', $projectId)
-            ->whereHas('role', fn ($q) => $q->where('slug', $roleSlug))
-            ->with('user')
-            ->get()
-            ->pluck('user')
-            ->filter(fn (?User $user) => $user && $user->is_active)
-            ->unique('id')
-            ->values();
-    }
-
     private function recorder(Expense $expense): Collection
     {
-        $user = $expense->recordedBy()->first();
-
-        return collect($user && $user->is_active ? [$user] : []);
+        return $this->activeUser($expense->recorded_by);
     }
 
-    /** One notification per recipient (never the actor). A failure never undoes the change. */
     private function notify(Collection $recipients, Expense $expense, string $event, User $actor, ?string $reason = null): void
     {
-        $recipients = $recipients->reject(fn (User $user) => (int) $user->id === (int) $actor->id);
-        if ($recipients->isEmpty()) {
-            return;
-        }
-
-        try {
-            Notification::send($recipients, new ExpenseWorkflowNotification($expense->loadMissing(['project', 'libCategory']), $event, $actor, $reason));
-        } catch (Throwable $exception) {
-            report($exception);
-        }
+        $this->notifyUsers($recipients, new ExpenseWorkflowNotification($expense->loadMissing(['project', 'libCategory']), $event, $actor, $reason), $actor);
     }
 }

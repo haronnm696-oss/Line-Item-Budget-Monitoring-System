@@ -5,16 +5,21 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuditTrailController;
+use App\Http\Controllers\BalancingController;
+use App\Http\Controllers\BudgetRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PayRateController;
+use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramAuditController;
 use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ProgramProjectController;
 use App\Http\Controllers\ProgramUserController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\PurchaseRequestController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserApprovalController;
 
@@ -71,9 +76,46 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::patch('/expenses/{expense}/verify', [ExpenseController::class, 'verify']);
     Route::patch('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);
 
-    // Documents attached to an expense (project members only).
-    Route::get('/expenses/{expense}/documents', [DocumentController::class, 'index']);
-    Route::post('/expenses/{expense}/documents', [DocumentController::class, 'store']);
+    // Payroll (PayrollService): create / compute a month, then the same
+    // workflow as expenses. Not part of LIB spent.
+    Route::get('/projects/{project}/payroll', [PayrollController::class, 'index']);
+    Route::post('/projects/{project}/payroll', [PayrollController::class, 'store']);
+    Route::post('/projects/{project}/payroll/compute', [PayrollController::class, 'compute']);
+    Route::patch('/payroll/{payroll}', [PayrollController::class, 'update']);
+    Route::post('/payroll/{payroll}/submit', [PayrollController::class, 'submit']);
+    Route::post('/payroll/{payroll}/endorse', [PayrollController::class, 'endorse']);
+    Route::post('/payroll/{payroll}/return', [PayrollController::class, 'returnPayroll']);
+    Route::post('/payroll/{payroll}/verify', [PayrollController::class, 'verify']);
+    Route::post('/payroll/{payroll}/reject', [PayrollController::class, 'reject']);
+    Route::get('/projects/{project}/pay-rates', [PayRateController::class, 'index']);
+    Route::patch('/projects/{project}/pay-rates/{user}', [PayRateController::class, 'update']);
+
+    // Purchase requests (PurchaseRequestService): draft -> submitted ->
+    // approved by Project Leader, or returned. No Finance step.
+    Route::get('/projects/{project}/purchase-requests', [PurchaseRequestController::class, 'index']);
+    Route::post('/projects/{project}/purchase-requests', [PurchaseRequestController::class, 'store']);
+    Route::patch('/purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'update']);
+    Route::delete('/purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'destroy']);
+    Route::post('/purchase-requests/{purchaseRequest}/submit', [PurchaseRequestController::class, 'submit']);
+    Route::post('/purchase-requests/{purchaseRequest}/endorse', [PurchaseRequestController::class, 'endorse']);
+    Route::post('/purchase-requests/{purchaseRequest}/return', [PurchaseRequestController::class, 'returnRequest']);
+
+    // Budget requests from the Project Leader to the Program Leader.
+    Route::get('/projects/{project}/budget-requests', [BudgetRequestController::class, 'index']);
+    Route::post('/projects/{project}/budget-requests', [BudgetRequestController::class, 'store']);
+
+    // Balancing query per line item.
+    Route::get('/projects/{project}/balancing', [BalancingController::class, 'show']);
+
+    // Documents attached to a record (project members only).
+    Route::get('/expenses/{expense}/documents', [DocumentController::class, 'indexForExpense']);
+    Route::post('/expenses/{expense}/documents', [DocumentController::class, 'storeForExpense']);
+    Route::get('/payroll/{payroll}/documents', [DocumentController::class, 'indexForPayroll']);
+    Route::post('/payroll/{payroll}/documents', [DocumentController::class, 'storeForPayroll']);
+    Route::get('/purchase-requests/{purchaseRequest}/documents', [DocumentController::class, 'indexForPurchaseRequest']);
+    Route::post('/purchase-requests/{purchaseRequest}/documents', [DocumentController::class, 'storeForPurchaseRequest']);
+    Route::get('/approvals/{approval}/documents', [DocumentController::class, 'indexForApproval']);
+    Route::post('/approvals/{approval}/documents', [DocumentController::class, 'storeForApproval']);
     Route::get('/documents/{document}/download', [DocumentController::class, 'download']);
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy']);
 

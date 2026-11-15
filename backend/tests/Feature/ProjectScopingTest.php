@@ -166,11 +166,14 @@ class ProjectScopingTest extends TestCase
         $this->actingAs($assistant)
             ->postJson("/api/projects/{$this->mine->id}/expenses", ['description' => 'Field forms', 'amount' => 1500])
             ->assertStatus(422);
+        // Payroll compute exists too: with no payroll for the month it is
+        // refused with 422 and stores nothing.
         $this->actingAs($assistant)
             ->postJson("/api/projects/{$this->mine->id}/payroll/compute", ['month' => '2026-11'])
-            ->assertNotFound();
+            ->assertStatus(422);
 
         $this->assertSame($before, [Expense::count(), AuditTrail::count()]);
+        $this->assertSame(0, \App\Models\Payroll::count());
     }
 
     private function person(string $slug): User

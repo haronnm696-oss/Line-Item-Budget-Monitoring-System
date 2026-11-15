@@ -10,13 +10,14 @@ use Illuminate\Http\Request;
 
 /**
  * Project scoping for every route that names a project or a project's record
- * ({project}, {expense}, {approval}, {tranche}, {liquidation}, {document}): only the
+ * ({project}, {expense}, {payroll}, {purchaseRequest}, {approval}, {tranche},
+ * {liquidation}, {document}): only the
  * Program Leader or a user assigned to that project gets through; everyone
  * else receives 403. Routes without such a parameter pass unchanged.
  */
 class EnsureProjectAccess
 {
-    private const PROJECT_PARAMETERS = ['project', 'expense', 'approval', 'tranche', 'liquidation', 'document'];
+    private const PROJECT_PARAMETERS = ['project', 'expense', 'payroll', 'purchaseRequest', 'approval', 'tranche', 'liquidation', 'document'];
 
     public function handle(Request $request, Closure $next)
     {

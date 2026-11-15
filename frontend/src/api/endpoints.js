@@ -55,10 +55,35 @@
  *   PATCH  /api/notifications/:id/read
  *   PATCH  /api/notifications/read-all
  *
- * Payroll:
- *   GET  /api/projects/:id/payroll?month=YYYY-MM   (not built yet)
- *   POST /api/projects/:id/payroll/compute  -> { month } (not built yet)
- *   PATCH /api/payroll/:id/approve          (not built yet)
+ * Payroll (same workflow as expenses; not part of LIB spent):
+ *   GET    /api/projects/:id/payroll?month=YYYY-MM
+ *          -> { month, month_label, rows, deductionBreakdown, totals, unset_rules, rated_members, ps_line_items }
+ *   POST   /api/projects/:id/payroll          -> { month, lib_category_id (PS) } create + compute the month (RA / FIN)
+ *   POST   /api/projects/:id/payroll/compute  -> { month } recompute draft / returned rows (RA / FIN)
+ *   PATCH  /api/payroll/:id                   -> { basic_rate?, allowance?, lib_category_id? } draft / returned only
+ *   POST   /api/payroll/:id/submit | endorse | return { reason } | verify | reject { reason }
+ *   GET    /api/projects/:id/pay-rates        (FIN, RA, Program Leader)
+ *   PATCH  /api/projects/:id/pay-rates/:userId -> { monthly_rate|null, allowance? } (FIN, Program Leader)
+ *   Documents: GET/POST /api/payroll/:id/documents (document_type payroll_file | other)
+ *
+ * Purchase requests (draft -> submitted -> endorsed, or returned; no Finance step):
+ *   GET    /api/projects/:id/purchase-requests?workflow_status=
+ *   POST   /api/projects/:id/purchase-requests -> { lib_category_id, description, quantity, estimated_amount }
+ *   PATCH  /api/purchase-requests/:id          (draft / returned)
+ *   DELETE /api/purchase-requests/:id          (own draft)
+ *   POST   /api/purchase-requests/:id/submit (needs a quotation or invoice) | endorse | return { reason }
+ *   Documents: GET/POST /api/purchase-requests/:id/documents (quotation | invoice | other)
+ *
+ * Budget requests (Project Leader -> Program Leader; shown on Program Approvals):
+ *   GET    /api/projects/:id/budget-requests
+ *   POST   /api/projects/:id/budget-requests  -> { type: fund_release|realignment|liquidation, justification, ... }
+ *          fund_release: project_tranche_id; realignment: from_lib_category_id, to_lib_category_id, amount;
+ *          liquidation: amount, title?, files[] (multipart, at least one)
+ *   Documents: GET/POST /api/approvals/:id/documents (requester, while pending)
+ *
+ * Balancing query:
+ *   GET    /api/projects/:id/balancing?line_item=
+ *          -> { line_items: [{ allocated, spent, pending_expenses, pending_purchase_requests, pending, available }], totals }
  *
  * Reports:
  *   GET /api/projects/:id/reports/:type     -> type = utilization | ledger | payroll-register | monthly-summary
@@ -124,7 +149,18 @@ export const ENDPOINTS = {
   notificationRead: (id) => `/api/notifications/${id}/read`,
   payroll: (projectId) => `/api/projects/${projectId}/payroll`,
   computePayroll: (projectId) => `/api/projects/${projectId}/payroll/compute`,
-  approvePayroll: (id) => `/api/payroll/${id}/approve`,
+  payrollEntry: (id) => `/api/payroll/${id}`,
+  payrollStep: (id, action) => `/api/payroll/${id}/${action}`,
+  payrollDocuments: (id) => `/api/payroll/${id}/documents`,
+  payRates: (projectId) => `/api/projects/${projectId}/pay-rates`,
+  payRate: (projectId, userId) => `/api/projects/${projectId}/pay-rates/${userId}`,
+  purchaseRequests: (projectId) => `/api/projects/${projectId}/purchase-requests`,
+  purchaseRequest: (id) => `/api/purchase-requests/${id}`,
+  purchaseRequestStep: (id, action) => `/api/purchase-requests/${id}/${action}`,
+  purchaseRequestDocuments: (id) => `/api/purchase-requests/${id}/documents`,
+  budgetRequests: (projectId) => `/api/projects/${projectId}/budget-requests`,
+  approvalDocuments: (id) => `/api/approvals/${id}/documents`,
+  balancing: (projectId) => `/api/projects/${projectId}/balancing`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,

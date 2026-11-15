@@ -2,11 +2,34 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\HasDocuments;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Validation\ValidationException;
 
-class Payroll extends Model
+/**
+ * One person's pay on a project for one month. Workflow like expenses:
+ * draft -> submitted -> endorsed -> verified, or returned. Payroll is not
+ * part of LIB spent / utilization.
+ */
+class Payroll extends Model implements HasDocuments
 {
+    /** workflow_status -> the existing status enum (draft / approved / released). */
+    public const STATUS_FOR_WORKFLOW = [
+        'draft' => 'draft',
+        'submitted' => 'draft',
+        'endorsed' => 'draft',
+        'returned' => 'draft',
+        'verified' => 'approved',
+    ];
+
+    /** status -> workflow_status for rows written with a status only. */
+    public const WORKFLOW_FOR_STATUS = [
+        'draft' => 'draft',
+        'approved' => 'verified',
+        'released' => 'verified',
+    ];
+
     protected static function booted()
     {
         // Deactivation must stop new payroll entries while preserving history.
@@ -19,19 +42,31 @@ class Payroll extends Model
                 ]);
             }
         });
+
+        static::saving(function (Payroll $payroll) {
+            if ($payroll->workflow_status === null) {
+                $payroll->workflow_status = self::WORKFLOW_FOR_STATUS[$payroll->status ?? 'draft'] ?? 'draft';
+            }
+        });
     }
 
     protected $fillable = [
         'project_id', 'lib_category_id', 'personnel_id', 'computed_by',
-        'pay_month', 'pay_year', 'basic_rate', 'gross_pay',
+        'pay_month', 'pay_year', 'basic_rate', 'allowance', 'gross_pay',
         'total_deductions', 'net_pay', 'status',
+        'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at',
+        'verified_by', 'verified_at', 'return_reason',
     ];
 
     protected $casts = [
         'basic_rate' => 'decimal:2',
+        'allowance' => 'decimal:2',
         'gross_pay' => 'decimal:2',
         'total_deductions' => 'decimal:2',
         'net_pay' => 'decimal:2',
+        'submitted_at' => 'datetime',
+        'pl_reviewed_at' => 'datetime',
+        'verified_at' => 'datetime',
     ];
 
     public function project()
@@ -54,9 +89,30 @@ class Payroll extends Model
         return $this->belongsTo(User::class, 'computed_by');
     }
 
+    public function plReviewedBy()
+    {
+        return $this->belongsTo(User::class, 'pl_reviewed_by');
+    }
+
+    public function verifiedBy()
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
     public function deductions()
     {
         return $this->hasMany(PayrollDeduction::class);
+    }
+
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'documentable');
+    }
+
+    /** "2026-11" */
+    public function monthKey(): string
+    {
+        return sprintf('%04d-%02d', $this->pay_year, $this->pay_month);
     }
 
     /** Recompute total_deductions and net_pay from related deduction rows. */
@@ -65,5 +121,19 @@ class Payroll extends Model
         $this->total_deductions = $this->deductions()->sum('amount');
         $this->net_pay = $this->gross_pay - $this->total_deductions;
         $this->save();
+    }
+
+    public function documentRules(): array
+    {
+        return [
+            'folder' => 'payroll',
+            'types' => ['payroll_file', 'other'],
+            'uploader_roles' => ['research-assistant', 'finance-admin'],
+            'uploader_message' => 'Only a Research Assistant or Finance/Admin staff of this project can attach payroll files.',
+            'open' => in_array($this->workflow_status, ['draft', 'returned'], true),
+            'closed_message' => 'Payroll files can be attached only while the payroll is a draft or returned.',
+            'locked' => $this->workflow_status === 'verified',
+            'locked_message' => 'Files of a verified payroll cannot be deleted.',
+        ];
     }
 }

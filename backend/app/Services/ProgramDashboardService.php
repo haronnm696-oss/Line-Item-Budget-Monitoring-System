@@ -587,6 +587,10 @@ class ProgramDashboardService
             ]);
         });
 
+        // Tell the requester once the decision is committed (a failed
+        // notification never undoes it).
+        app(BudgetRequestService::class)->notifyDecision($approval->fresh(), $actor);
+
         return $approval->fresh()->load(['requestedBy', 'tranche', 'liquidation']);
     }
 

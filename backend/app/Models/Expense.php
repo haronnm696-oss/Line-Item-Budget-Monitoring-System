@@ -2,11 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\HasDocuments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Expense extends Model
+class Expense extends Model implements HasDocuments
 {
     use SoftDeletes;
 
@@ -85,5 +86,19 @@ class Expense extends Model
     public function receipts(): MorphMany
     {
         return $this->documents()->where('document_type', Document::TYPE_RECEIPT);
+    }
+
+    public function documentRules(): array
+    {
+        return [
+            'folder' => 'expenses',
+            'types' => Document::TYPES,
+            'uploader_roles' => ['research-assistant', 'finance-admin'],
+            'uploader_message' => 'Only a Research Assistant or Finance/Admin staff of this project can attach documents.',
+            'open' => in_array($this->workflow_status, ['draft', 'returned'], true),
+            'closed_message' => 'Documents can be attached only while the expense is a draft or returned.',
+            'locked' => $this->workflow_status === 'verified',
+            'locked_message' => 'Documents of a verified expense cannot be deleted.',
+        ];
     }
 }

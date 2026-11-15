@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Project;
+use App\Models\PurchaseRequest;
 
 /**
  * Canonical financial calculations for a project.
@@ -134,6 +136,70 @@ class ProjectFinancialService
             })
             ->values()
             ->all();
+    }
+
+    /** Workflow stages that are waiting for a decision (not yet verified). */
+    public const PENDING_STAGES = ['submitted', 'endorsed'];
+
+    /**
+     * Balancing query per line item: allocated, spent (verified expenses),
+     * pending (submitted + endorsed expenses and purchase requests, not yet
+     * verified) and available = allocated - spent - pending. Payroll is not
+     * included.
+     *
+     * @return array{line_items: array<int, array<string, mixed>>, totals: array<string, float>}
+     */
+    public function balancing(Project $project, ?int $lineItemId = null): array
+    {
+        $sums = function ($query, string $column) use ($project) {
+            return $query->where('project_id', $project->id)
+                ->selectRaw("lib_category_id, SUM({$column}) as total")
+                ->groupBy('lib_category_id')
+                ->pluck('total', 'lib_category_id')
+                ->map(fn ($v) => round((float) $v, 2));
+        };
+
+        $spent = $sums(self::onlySpent(Expense::query()), 'amount');
+        $pendingExpenses = $sums(Expense::query()->whereIn('workflow_status', self::PENDING_STAGES), 'amount');
+        $pendingRequests = $sums(PurchaseRequest::query()->whereIn('workflow_status', self::PENDING_STAGES), 'estimated_amount');
+
+        $rows = $project->libCategories()
+            ->when($lineItemId, fn ($q) => $q->whereKey($lineItemId))
+            ->orderBy('category_type')->orderBy('id')
+            ->get()
+            ->map(function (LibCategory $item) use ($spent, $pendingExpenses, $pendingRequests) {
+                $allocated = round((float) $item->allocated_amount, 2);
+                $itemSpent = $spent[$item->id] ?? 0.0;
+                $fromExpenses = $pendingExpenses[$item->id] ?? 0.0;
+                $fromRequests = $pendingRequests[$item->id] ?? 0.0;
+                $pending = round($fromExpenses + $fromRequests, 2);
+
+                return [
+                    'id' => $item->id,
+                    'type' => $item->category_type,
+                    'code' => $item->line_item_code,
+                    'name' => $item->line_item_name,
+                    'allocated' => $allocated,
+                    'spent' => $itemSpent,
+                    'pending_expenses' => $fromExpenses,
+                    'pending_purchase_requests' => $fromRequests,
+                    'pending' => $pending,
+                    'available' => round($allocated - $itemSpent - $pending, 2),
+                ];
+            })
+            ->values();
+
+        $total = fn (string $key) => round((float) $rows->sum($key), 2);
+
+        return [
+            'line_items' => $rows->all(),
+            'totals' => [
+                'allocated' => $total('allocated'),
+                'spent' => $total('spent'),
+                'pending' => $total('pending'),
+                'available' => $total('available'),
+            ],
+        ];
     }
 
     /**

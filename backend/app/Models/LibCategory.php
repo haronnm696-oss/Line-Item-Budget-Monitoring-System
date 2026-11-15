@@ -31,6 +31,11 @@ class LibCategory extends Model
         return $this->hasMany(Payroll::class);
     }
 
+    public function purchaseRequests()
+    {
+        return $this->hasMany(PurchaseRequest::class);
+    }
+
     /** Verified expenses charged to this line item (payroll is excluded). */
     public function spentAmount(): float
     {
