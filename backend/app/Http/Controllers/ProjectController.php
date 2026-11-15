@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use App\Models\Project;
 use App\Services\DashboardService;
 
@@ -12,12 +13,14 @@ class ProjectController extends Controller
     }
 
     /**
-     * Project list. Spent is the same verified-expense + payroll rollup used
-     * by the Program Leader dashboard, so both pages share one source.
+     * Project list: every project for the Program Leader, otherwise only the
+     * projects the user is assigned to. Spent comes from
+     * ProjectFinancialService: verified expenses only (payroll is excluded),
+     * the same figure as the Program Leader dashboard.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json($this->dashboard->projectSummaries());
+        return response()->json($this->dashboard->projectSummaries($request->user()->accessibleProjectIds()));
     }
 
     /**

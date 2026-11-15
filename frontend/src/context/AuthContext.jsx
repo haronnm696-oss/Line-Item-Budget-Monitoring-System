@@ -7,7 +7,7 @@ import {
   forgotPassword as forgotPasswordApi,
   resetPassword as resetPasswordApi,
 } from '../api/auth';
-import { ROLE_MAP, normalizeRole } from '../data/mockData';
+import { ROLE_MAP, normalizeRole } from '../lib/roles';
 
 const AuthContext = createContext(null);
 

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Chip from '../components/Chip';
-import { getWithFallback } from '../api/http';
+import LoadState from '../components/LoadState';
 import { ENDPOINTS } from '../api/endpoints';
-import { auditLog } from '../data/mockData';
+import { useApiData } from '../lib/useApiData';
 
 const ACTION_TONE = {
   created: 'neutral',
@@ -133,7 +133,9 @@ function buildPrintHTML(title, subtitle, rows, meta) {
 }
 
 export default function AuditTrail() {
-  const [log, setLog] = useState([]);
+  // Entries of the user's assigned projects only (the API scopes the feed).
+  const state = useApiData(ENDPOINTS.audit);
+  const log = Array.isArray(state.data) ? state.data : [];
   const [search, setSearch] = useState('');
   const [action, setAction] = useState('All');
   const [recordType, setRecordType] = useState('All');
@@ -141,10 +143,6 @@ export default function AuditTrail() {
   const [toast, setToast] = useState(null); // { msg }
   const [printOpen, setPrintOpen] = useState(false);
   const [printContent, setPrintContent] = useState(null); // { title, html }
-
-  useEffect(() => {
-    getWithFallback(ENDPOINTS.audit, auditLog).then(setLog);
-  }, []);
 
   const actions = ['All', ...new Set(log.map((a) => a.action))];
   const recordTypes = ['All', ...new Set(log.map((a) => a.recordType))];
@@ -233,6 +231,7 @@ export default function AuditTrail() {
         <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
       </div>
 
+      <LoadState state={state} loadingText="Loading audit entries…">
       <div className="panel wide-scroll">
         <table>
           <thead>
@@ -273,6 +272,7 @@ export default function AuditTrail() {
           {filtered.length} of {log.length} entr{log.length === 1 ? 'y' : 'ies'} displayed
         </div>
       </div>
+      </LoadState>
 
       {/* Print / PDF modal */}
       {printOpen && printContent && (

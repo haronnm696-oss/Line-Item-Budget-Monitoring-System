@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\ProjectFinancialService;
 use App\Models\Expense;
 use App\Models\Project;
 use Illuminate\Console\Command;
@@ -87,7 +88,7 @@ class AuditLineItems extends Command
     public static function uncategorizedExpenses(): array
     {
         return Expense::query()
-            ->where('status', 'verified')
+            ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
             ->with(['libCategory:id,category_type', 'project:id,code'])
             ->orderBy('id')
             ->get()

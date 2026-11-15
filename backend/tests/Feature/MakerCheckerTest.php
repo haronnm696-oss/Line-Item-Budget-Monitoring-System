@@ -47,10 +47,11 @@ class MakerCheckerTest extends TestCase
 
         $this->assertSame('pending', $approval->fresh()->status);
 
+        // The legacy decision route was removed; decisions go through the
+        // Program Leader endpoint above only.
         $this->actingAs($leader)
             ->patchJson("/api/approvals/{$approval->id}/approve")
-            ->assertForbidden()
-            ->assertJsonPath('message', 'You cannot approve or reject a request you created.');
+            ->assertNotFound();
 
         $this->assertSame('pending', $approval->fresh()->status);
     }
@@ -72,6 +73,15 @@ class MakerCheckerTest extends TestCase
             'category_type' => 'MOOE',
             'line_item_name' => 'Field travel',
             'allocated_amount' => 100000,
+        ]);
+
+        // Assigned to the project, so the maker-checker rule (not project
+        // scoping) is what refuses the verification.
+        \App\Models\ProjectUser::create([
+            'project_id' => $project->id,
+            'user_id' => $finance->id,
+            'role_id' => Role::where('slug', 'finance-admin')->value('id'),
+            'assigned_at' => now(),
         ]);
 
         $expense = \App\Models\Expense::create([

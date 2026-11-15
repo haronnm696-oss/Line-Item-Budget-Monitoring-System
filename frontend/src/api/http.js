@@ -1,32 +1,19 @@
 import client from './client';
-
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+import { performRead, performWrite } from '../lib/apiResult';
 
 /**
- * Tries the real Laravel endpoint. Falls back to mock data when
- * VITE_USE_MOCK=true (local frontend-only dev) or when the request fails
- * because the backend controller doesn't exist yet (404/501). Once every
- * endpoint in api/endpoints.js is implemented, set VITE_USE_MOCK=false and
- * remove the catch fallback if you'd rather surface real errors.
+ * Reads from the API. A failed request rejects with an ApiError ("Could not
+ * load this data. Please try again.") — there is no sample-data fallback.
  */
-export async function getWithFallback(url, mockValue, config) {
-  if (USE_MOCK) return mockValue;
-  try {
-    const res = await client.get(url, config);
-    return res.data;
-  } catch (err) {
-    if ([404, 501].includes(err.response?.status)) return mockValue;
-    throw err;
-  }
+export function apiGet(url, config) {
+  return performRead(() => client.get(url, config));
 }
 
-export async function mutateWithFallback(method, url, body, mockValue) {
-  if (USE_MOCK) return mockValue;
-  try {
-    const res = await client.request({ method, url, data: body });
-    return res.data;
-  } catch (err) {
-    if ([404, 501].includes(err.response?.status)) return mockValue;
-    throw err;
-  }
+/**
+ * Writes to the API. Any failure (404, other 4xx, 5xx, network) rejects with
+ * an ApiError ("Could not save. Please try again."); a failed write is never
+ * reported as saved and never returns sample data.
+ */
+export function apiWrite(method, url, body) {
+  return performWrite(() => client.request({ method, url, data: body }));
 }

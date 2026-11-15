@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ProjectFinancialService;
 use Illuminate\Database\Eloquent\Model;
 
 class LibCategory extends Model
@@ -33,7 +34,7 @@ class LibCategory extends Model
     /** Verified expenses charged to this line item (payroll is excluded). */
     public function spentAmount(): float
     {
-        return (float) $this->expenses()->where('status', 'verified')->sum('amount');
+        return (float) ProjectFinancialService::onlySpent($this->expenses())->sum('amount');
     }
 
     public function remainingAmount(): float

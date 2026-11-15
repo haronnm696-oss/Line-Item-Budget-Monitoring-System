@@ -32,7 +32,15 @@ class AuditTrailController extends Controller
             'project_id' => ['nullable', 'integer'],
         ]);
 
-        $query = AuditTrail::with('user');
+        // Project scoping: outside the Program Leader, only entries of the
+        // projects the user is assigned to.
+        $projectIds = $request->user()->accessibleProjectIds();
+        if (($validated['project_id'] ?? null) && ! $request->user()->canAccessProject((int) $validated['project_id'])) {
+            abort(403, 'You are not assigned to this project.');
+        }
+
+        $query = AuditTrail::with('user')
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds));
         $from = $validated['from'] ?? null;
         $to = $validated['to'] ?? null;
 

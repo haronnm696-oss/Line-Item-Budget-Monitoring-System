@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { normalizeRole } from '../data/mockData';
-import { ROUTE_BY_ROLE } from '../pages/Dashboard';
+import { normalizeRole } from '../lib/roles';
+import { ROUTE_BY_ROLE } from './access';
 import Landing from '../pages/Landing';
 
 export default function HomeRoute() {

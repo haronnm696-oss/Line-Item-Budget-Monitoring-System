@@ -1,108 +1,99 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Chip, { statusTone } from '../components/Chip';
+import LoadState from '../components/LoadState';
+import ProjectPicker from '../components/ProjectPicker';
 import { peso } from '../components/money';
-import { getWithFallback, mutateWithFallback } from '../api/http';
+import { apiWrite } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
-import { payrollRun, CURRENT_PROJECT } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
+import { SAVE_ERROR } from '../lib/apiResult';
+import { useApiData } from '../lib/useApiData';
+import { useAssignedProject } from '../lib/useAssignedProject';
 
 export default function Payroll() {
   const { user } = useAuth();
-  const [run, setRun] = useState(null);
+  const picker = useAssignedProject();
+  // GET /api/projects/:id/payroll (not built yet): a failure shows an error
+  // with "Try again"; there is no sample payroll.
+  const payroll = useApiData(picker.projectId ? ENDPOINTS.payroll(picker.projectId) : null);
   const [computing, setComputing] = useState(false);
+  const [notice, setNotice] = useState(null);
 
-  useEffect(() => {
-    getWithFallback(ENDPOINTS.payroll(CURRENT_PROJECT.id), payrollRun).then(setRun);
-  }, []);
+  const run = payroll.data;
+  const rows = Array.isArray(run?.rows) ? run.rows : [];
+  const breakdown = Array.isArray(run?.deductionBreakdown) ? run.deductionBreakdown : [];
 
   async function compute() {
     setComputing(true);
+    setNotice(null);
     try {
-      const fresh = await mutateWithFallback('post', ENDPOINTS.computePayroll(CURRENT_PROJECT.id), { month: run.month }, payrollRun);
-      setRun(fresh);
+      await apiWrite('post', ENDPOINTS.computePayroll(picker.projectId), { month: run?.month });
+      setNotice({ tone: 'ok', text: 'Payroll computed.' });
+      payroll.retry();
+    } catch (error) {
+      setNotice({ tone: 'over', text: error.message || SAVE_ERROR });
     } finally {
       setComputing(false);
     }
   }
-
-  if (!run) return <div className="center-fill">Loading payroll…</div>;
-
-  const totalGross = run.rows.reduce((t, r) => t + r.gross, 0);
-  const totalDeductions = run.deductionBreakdown.reduce((t, d) => t + d.amount, 0);
 
   return (
     <>
       <div className="page-head">
         <div>
           <h2>Payroll</h2>
-          <p>SAGIP-Lawa · Monthly PS computation and release tracking</p>
+          <p>{picker.project ? `${picker.project.title} · ` : ''}Monthly PS computation and release tracking</p>
         </div>
-        <div className="actions">
-          <button className="btn">Payroll register (PDF)</button>
+        <ProjectPicker picker={picker} id="payroll-project" />
+      </div>
+
+      <LoadState state={picker.state} loadingText="Loading your projects…" isEmpty={picker.projects.length === 0} emptyText="You are not assigned to any project yet.">
+        <LoadState state={payroll} loadingText="Loading payroll…" isEmpty={rows.length === 0} emptyText="No payroll has been computed for this project yet.">
+          {notice && <div className={`banner ${notice.tone}`} role={notice.tone === 'over' ? 'alert' : 'status'}>{notice.text}</div>}
           {user.role === 'RA' && (
-            <button className="btn primary" onClick={compute} disabled={computing}>
-              {computing && <span className="spin" />}Compute {run.month}
-            </button>
+            <div className="actions" style={{ marginBottom: 12 }}>
+              <button className="btn primary" onClick={compute} disabled={computing}>
+                {computing && <span className="spin" />}Compute {run?.month ?? ''}
+              </button>
+            </div>
           )}
-        </div>
-      </div>
 
-      <div className="filter-row">
-        <select defaultValue={run.month}><option>{run.month}</option></select>
-        <select><option>All personnel</option><option>Project Leader</option><option>Research Aides</option><option>Consultants</option></select>
-      </div>
-
-      <div className="panel wide-scroll" style={{ marginBottom: 14 }}>
-        <table>
-          <thead><tr><th>Personnel</th><th>Line item</th><th className="r">Basic rate</th><th className="r">Gross pay</th><th className="r">Deductions</th><th className="r">Net pay</th><th>Status</th></tr></thead>
-          <tbody>
-            {run.rows.map((r) => (
-              <tr key={r.id}>
-                <td><b>{r.name}</b><br /><small style={{ color: 'var(--muted)' }}>{r.position}</small></td>
-                <td>{r.category}</td>
-                <td className="r num">{peso(r.basic)}</td>
-                <td className="r num">{peso(r.gross)}</td>
-                <td className="r num">{peso(r.deductions)}</td>
-                <td className="r num mono-b">{peso(r.net)}</td>
-                <td><Chip tone={statusTone(r.status)}>{r.status}</Chip></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="grid c2">
-        <div className="panel">
-          <div className="panel-head"><h3>Deductions · {run.rows[1]?.name} · {run.month}</h3></div>
-          <div className="wide-scroll">
+          <div className="panel wide-scroll" style={{ marginBottom: 14 }}>
             <table>
-              <thead><tr><th>Type</th><th className="r">Amount</th></tr></thead>
+              <thead><tr><th>Personnel</th><th>Line item</th><th className="r">Basic rate</th><th className="r">Gross pay</th><th className="r">Deductions</th><th className="r">Net pay</th><th>Status</th></tr></thead>
               <tbody>
-                {run.deductionBreakdown.map((d) => (
-                  <tr key={d.type}><td>{d.type}</td><td className="r num">{peso(d.amount)}</td></tr>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td><b>{r.name}</b><br /><small style={{ color: 'var(--muted)' }}>{r.position}</small></td>
+                    <td>{r.category}</td>
+                    <td className="r num">{peso(r.basic)}</td>
+                    <td className="r num">{peso(r.gross)}</td>
+                    <td className="r num">{peso(r.deductions)}</td>
+                    <td className="r num mono-b">{peso(r.net)}</td>
+                    <td><Chip tone={statusTone(r.status)}>{r.status}</Chip></td>
+                  </tr>
                 ))}
-                <tr style={{ background: 'color-mix(in srgb, var(--gold) 8%, transparent)' }}>
-                  <td className="mono-b">Total deductions</td><td className="r num mono-b">{peso(totalDeductions)}</td>
-                </tr>
               </tbody>
             </table>
           </div>
-        </div>
-        <div className="panel">
-          <div className="panel-head"><h3>Approval flow</h3><span className="hint">{run.month} run</span></div>
-          <div>
-            <div className="alert-line"><span className="alert-dot" style={{ background: 'var(--ok)' }} />
-              <div><b>Computed by N. Haron (Research Assistant)</b><small>{run.rows.length} personnel · gross {peso(totalGross)}</small></div>
+
+          {breakdown.length > 0 && (
+            <div className="panel">
+              <div className="panel-head"><h3>Deductions · {run?.month}</h3></div>
+              <div className="wide-scroll">
+                <table>
+                  <thead><tr><th>Type</th><th className="r">Amount</th></tr></thead>
+                  <tbody>
+                    {breakdown.map((d) => (
+                      <tr key={d.type}><td>{d.type}</td><td className="r num">{peso(d.amount)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="alert-line"><span className="alert-dot" style={{ background: 'var(--warn)' }} />
-              <div><b>Awaiting Project Leader approval</b><small>Notified on submission</small></div>
-            </div>
-            <div className="alert-line"><span className="alert-dot" style={{ background: 'var(--line-strong)' }} />
-              <div><b>Release &amp; charge to LIB</b><small>Net pay is charged to PS line items only after approval.</small></div>
-            </div>
-          </div>
-        </div>
-      </div>
+          )}
+        </LoadState>
+      </LoadState>
     </>
   );
 }

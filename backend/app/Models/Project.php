@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ProjectFinancialService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -102,7 +103,7 @@ class Project extends Model
     public function totalSpent(?string $categoryType = null): float
     {
         return (float) $this->expenses()
-            ->where('status', 'verified')
+            ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
             ->whereHas('libCategory', function ($q) use ($categoryType) {
                 if ($categoryType) {
                     $q->where('category_type', $categoryType);

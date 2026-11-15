@@ -1,30 +1,33 @@
-import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Chip, { statusTone } from '../components/Chip';
+import LoadState from '../components/LoadState';
 import UtilBar from '../components/UtilBar';
 import { peso } from '../components/money';
-import { getWithFallback } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
-import { CURRENT_PROJECT, libCategoriesPS, libCategoriesMOOE } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
+import { canOpen } from '../routes/access';
+import { useApiData } from '../lib/useApiData';
 
-function sum(rows, key) { return rows.reduce((t, r) => t + r[key], 0); }
+function sum(rows, key) { return rows.reduce((t, r) => t + (Number(r[key]) || 0), 0); }
+function pct(part, whole) { return whole > 0 ? ((part / whole) * 100).toFixed(1) : '0.0'; }
 
 export default function ProjectDetail() {
   const { id } = useParams();
+  // 403 for a project the user is not assigned to; shown as an error.
+  const state = useApiData(ENDPOINTS.project(id));
+  return (
+    <LoadState state={state} loadingText="Loading project…">
+      {state.data && <ProjectView data={state.data} />}
+    </LoadState>
+  );
+}
+
+function ProjectView({ data }) {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-
-  useEffect(() => {
-    getWithFallback(ENDPOINTS.project(id), {
-      project: CURRENT_PROJECT,
-      ps: libCategoriesPS,
-      mooe: libCategoriesMOOE,
-    }).then(setData);
-  }, [id]);
-
-  if (!data) return <div className="center-fill">Loading project…</div>;
-
-  const { project, ps, mooe } = data;
+  const { user } = useAuth();
+  const project = data.project;
+  const ps = Array.isArray(data.ps) ? data.ps : [];
+  const mooe = Array.isArray(data.mooe) ? data.mooe : [];
   const psAllocated = sum(ps, 'allocated');
   const psSpent = sum(ps, 'spent');
   const mooeAllocated = sum(mooe, 'allocated');
@@ -39,17 +42,16 @@ export default function ProjectDetail() {
           <h2>{project.title}</h2>
           <p><span className="num">{project.code}</span> · {project.agency} · {project.period} · <Chip tone={statusTone(project.status)}>{project.status}</Chip></p>
         </div>
-        <div className="actions">
-          <button className="btn">Edit project</button>
-          <button className="btn primary">Add line item</button>
-        </div>
       </div>
 
       <div className="tabs">
         <button className="active">LIB line items</button>
-        <button onClick={() => navigate('/expenses')}>Expenses</button>
-        <button onClick={() => navigate('/payroll')}>Payroll</button>
-        <button onClick={() => navigate('/users')}>Team</button>
+        {canOpen(user?.role, '/expenses') && (
+          <button onClick={() => navigate(`/expenses?project=${project.id}`)}>Expenses</button>
+        )}
+        {canOpen(user?.role, '/payroll') && (
+          <button onClick={() => navigate(`/payroll?project=${project.id}`)}>Payroll</button>
+        )}
       </div>
 
       <div className="grid c2" style={{ marginBottom: 14 }}>
@@ -68,21 +70,21 @@ export default function ProjectDetail() {
                 <td className="r num">{peso(psAllocated)}</td>
                 <td className="r num">{peso(psSpent)}</td>
                 <td className="r num">{peso(psAllocated - psSpent)}</td>
-                <td className="r num">{((psSpent / psAllocated) * 100).toFixed(1)}%</td>
+                <td className="r num">{pct(psSpent, psAllocated)}%</td>
               </tr>
               <tr>
                 <td className="mono-b">MOOE</td>
                 <td className="r num">{peso(mooeAllocated)}</td>
                 <td className="r num">{peso(mooeSpent)}</td>
                 <td className="r num">{peso(mooeAllocated - mooeSpent)}</td>
-                <td className="r num">{((mooeSpent / mooeAllocated) * 100).toFixed(1)}%</td>
+                <td className="r num">{pct(mooeSpent, mooeAllocated)}%</td>
               </tr>
               <tr style={{ background: 'color-mix(in srgb, var(--gold) 8%, transparent)' }}>
                 <td className="mono-b">Total</td>
                 <td className="r num mono-b">{peso(totalAllocated)}</td>
                 <td className="r num mono-b">{peso(totalSpent)}</td>
                 <td className="r num mono-b">{peso(totalAllocated - totalSpent)}</td>
-                <td className="r num mono-b">{((totalSpent / totalAllocated) * 100).toFixed(1)}%</td>
+                <td className="r num mono-b">{pct(totalSpent, totalAllocated)}%</td>
               </tr>
             </tbody>
           </table>
@@ -106,7 +108,7 @@ function LibTable({ title, hint, rows }) {
                 <td className="r num">{peso(r.allocated)}</td>
                 <td className="r num">{peso(r.spent)}</td>
                 <td className="r num mono-b">{peso(r.allocated - r.spent)}</td>
-                <td><UtilBar pct={(r.spent / r.allocated) * 100} /></td>
+                <td><UtilBar pct={r.allocated > 0 ? (r.spent / r.allocated) * 100 : 0} /></td>
               </tr>
             ))}
           </tbody>

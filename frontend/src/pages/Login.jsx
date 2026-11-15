@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ROUTE_BY_ROLE } from './Dashboard';
+import { ROUTE_BY_ROLE } from '../routes/access';
 import { useAuth } from '../context/AuthContext';
 import {
   AuthAlert,

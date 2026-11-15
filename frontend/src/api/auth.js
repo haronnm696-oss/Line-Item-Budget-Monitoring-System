@@ -1,6 +1,6 @@
 import client from './client';
 import { ENDPOINTS } from './endpoints';
-import { ROLE_MAP, normalizeRole } from '../data/mockData';
+import { ROLE_MAP, normalizeRole } from '../lib/roles';
 import {
   isValidLoginEmail,
   isValidStudentEmail,
@@ -35,10 +35,18 @@ const MOCK_USERS = [
   { email: 'researcher.sample@msumain.edu.ph', password: 'Password123!', code: 'RES' },
 ];
 
+// Display names for the demo login only (VITE_USE_MOCK=true).
+const MOCK_NAMES = {
+  PRG: ['Dr. Rahana Bayabao', 'RB'],
+  PL: ['Dr. Aminah Macarambon', 'AM'],
+  RES: ['Sittie Dimaporo', 'SD'],
+  RA: ['Norjannah Haron', 'NH'],
+  FIN: ['Faisal Sarip', 'FS'],
+};
+
 function toMockUser(code, email) {
   const role = ROLE_MAP[code];
-  const name = role.name;
-  const initials = role.initials;
+  const [name, initials] = MOCK_NAMES[code];
   return { id: 0, name, email, role: code, role_slug: role.slug, roleLabel: role.label, avatar_initials: initials };
 }
 
