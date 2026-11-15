@@ -33,6 +33,27 @@ import ProgramUsers from './pages/program/ProgramUsers';
 import HomeRoute from './routes/HomeRoute';
 import NotFound from './pages/NotFound';
 
+// Pages inside the shared role shell. Who may open each one is in
+// routes/access.js (ROUTE_ROLES).
+const ROLE_PAGES = [
+  ['/dashboard', <Dashboard />],
+  ['/program-leader-dashboard', <Navigate to="/program-dashboard" replace />],
+  ['/dashboard/program-leader', <Navigate to="/program-dashboard" replace />],
+  ['/project-leader-dashboard', <ProjectLeaderDashboard />],
+  ['/dashboard/project-leader', <ProjectLeaderDashboard />],
+  ['/research-assistant-dashboard', <ResearchAssistantDashboard />],
+  ['/dashboard/research-assistant', <ResearchAssistantDashboard />],
+  ['/researcher-dashboard', <ResearcherDashboard />],
+  ['/dashboard/researcher', <ResearcherDashboard />],
+  ['/dashboard/finance', <FinanceDashboard />],
+  ['/projects', <Projects />],
+  ['/projects/:id', <ProjectDetail />],
+  ['/expenses', <Expenses />],
+  ['/payroll', <Payroll />],
+  ['/reports', <Reports />],
+  ['/audit', <AuditTrail />],
+];
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -49,34 +70,13 @@ export default function App() {
             {/* Shared role shell for the Project Leader, Research Assistant,
                 Finance/Admin and Researcher (same shell as the Program Leader). */}
             <Route element={<RoleLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route
-                path="/program-leader-dashboard"
-                element={<Navigate to="/program-dashboard" replace />}
-              />
-              <Route
-                path="/dashboard/program-leader"
-                element={<Navigate to="/program-dashboard" replace />}
-              />
-              <Route path="/project-leader-dashboard" element={<ProjectLeaderDashboard />} />
-              <Route path="/dashboard/project-leader" element={<ProjectLeaderDashboard />} />
-              <Route path="/research-assistant-dashboard" element={<ResearchAssistantDashboard />} />
-              <Route path="/dashboard/research-assistant" element={<ResearchAssistantDashboard />} />
-              <Route path="/researcher-dashboard" element={<ResearcherDashboard />} />
-              <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
-              <Route path="/dashboard/project-leader" element={<ProjectLeaderDashboard />} />
-              <Route path="/dashboard/research-assistant" element={<ResearchAssistantDashboard />} />
-              <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
-              <Route path="/dashboard/finance" element={<FinanceDashboard />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-              <Route path="/expenses" element={<Expenses />} />
-              <Route path="/payroll" element={<Payroll />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/audit" element={<AuditTrail />} />
-              {/* Menu items whose page is not built yet. */}
+              {/* Every route is guarded by role (routes/access.js); a user
+                  who opens another role's route goes to their own dashboard. */}
+              {ROLE_PAGES.map(([path, element]) => (
+                <Route key={path} path={path} element={<RoleRoute path={path}>{element}</RoleRoute>} />
+              ))}
               {COMING_SOON_PATHS.map((path) => (
-                <Route key={path} path={path} element={<ComingSoon />} />
+                <Route key={path} path={path} element={<RoleRoute path={path}><ComingSoon /></RoleRoute>} />
               ))}
             </Route>
 

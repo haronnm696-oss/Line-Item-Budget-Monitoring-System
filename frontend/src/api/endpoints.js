@@ -1,7 +1,8 @@
 /**
- * API CONTRACT — what the Laravel backend needs to expose for this frontend
- * to work with real data. None of these controllers exist yet in `backend/`
- * (only models + migrations do), so build these routes/controllers next.
+ * API CONTRACT — what this frontend calls. Routes marked (not built yet) do
+ * not exist in `backend/routes/api.php`: calls to them fail with a clear
+ * error ("Could not load…" / "Could not save…"); there is no sample-data
+ * fallback (see api/http.js).
  *
  * Auth (Sanctum SPA cookie flow):
  *   GET  /sanctum/csrf-cookie              -> 204, sets XSRF-TOKEN cookie
@@ -23,21 +24,21 @@
  *   GET /api/dashboard/research-assistant   -> RA summary
  *
  * Projects:
- *   GET  /api/projects                      -> list (scoped to role)
- *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups
- *   POST /api/projects                      -> create
- *   PUT  /api/projects/:id                  -> update
+ *   GET  /api/projects                      -> list (Program Leader: all; others: assigned projects only)
+ *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups and expenses (403 if not assigned)
+ *   POST /api/projects                      -> create (not built yet)
+ *   PUT  /api/projects/:id                  -> update (not built yet)
  *
  * Expenses:
- *   GET  /api/projects/:id/expenses
- *   POST /api/projects/:id/expenses         -> { lib_category_id, description, amount, expense_date, reference_no, attachment }
+ *   GET  /api/projects/:id/expenses         (not built yet; the list comes from GET /api/projects/:id)
+ *   POST /api/projects/:id/expenses         -> { lib_category_id, description, amount, expense_date, reference_no, attachment } (not built yet)
  *   PATCH /api/expenses/:id/verify
  *   PATCH /api/expenses/:id/reject          -> { reason }
  *
  * Payroll:
- *   GET  /api/projects/:id/payroll?month=YYYY-MM
- *   POST /api/projects/:id/payroll/compute  -> { month }
- *   PATCH /api/payroll/:id/approve
+ *   GET  /api/projects/:id/payroll?month=YYYY-MM   (not built yet)
+ *   POST /api/projects/:id/payroll/compute  -> { month } (not built yet)
+ *   PATCH /api/payroll/:id/approve          (not built yet)
  *
  * Reports:
  *   GET /api/projects/:id/reports/:type     -> type = utilization | ledger | payroll-register | monthly-summary
@@ -85,8 +86,6 @@ export const ENDPOINTS = {
   projectBurnRate: (projectId) => `/api/projects/${projectId}/burn-rate`,
   projectCompliance: (projectId) => `/api/projects/${projectId}/compliance`,
   approvals: '/api/approvals',
-  approveApproval: (id) => `/api/approvals/${id}/approve`,
-  rejectApproval: (id) => `/api/approvals/${id}/reject`,
   projects: '/api/projects',
   project: (id) => `/api/projects/${id}`,
   expenses: (projectId) => `/api/projects/${projectId}/expenses`,

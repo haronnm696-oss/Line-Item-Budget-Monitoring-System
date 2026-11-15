@@ -19,7 +19,15 @@ class DashboardService
      */
     public function resolveProject(Request $request): Project
     {
-        $query = Project::query()->with('fundingAgency');
+        $projectIds = $request->user()?->accessibleProjectIds();
+
+        if ($request->filled('project_id') && ! $request->user()?->canAccessProject((int) $request->query('project_id'))) {
+            abort(403, 'You are not assigned to this project.');
+        }
+
+        $query = Project::query()
+            ->with('fundingAgency')
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('id', $projectIds));
 
         if ($request->filled('project_id')) {
             $query->whereKey((int) $request->query('project_id'));
@@ -27,7 +35,10 @@ class DashboardService
             $query->where('status', 'ongoing')->orderBy('id');
         }
 
-        $project = $query->first() ?? Project::query()->orderBy('id')->first();
+        $project = $query->first() ?? Project::query()
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('id', $projectIds))
+            ->orderBy('id')
+            ->first();
 
         abort_unless($project, 404, 'No project found.');
 
@@ -40,10 +51,14 @@ class DashboardService
      *
      * @return array<int, array<string, mixed>>
      */
-    public function projectSummaries(): array
+    /**
+     * @param array<int, int>|null $projectIds limit to these projects (null = all)
+     */
+    public function projectSummaries(?array $projectIds = null): array
     {
         return Project::query()
             ->with('fundingAgency')
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('id', $projectIds))
             ->orderBy('code')
             ->get()
             ->map(function (Project $project) {

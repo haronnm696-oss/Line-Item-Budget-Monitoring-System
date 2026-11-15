@@ -1,27 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Chip, { statusTone } from '../components/Chip';
-import NewProjectModal from '../components/NewProjectModal';
+import LoadState from '../components/LoadState';
 import UtilBar from '../components/UtilBar';
 import { peso } from '../components/money';
-import { getWithFallback } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
-import { projects as mockProjects } from '../data/mockData';
-import { useAuth } from '../context/AuthContext';
+import { useApiData } from '../lib/useApiData';
 
 export default function Projects() {
-  const [projects, setProjects] = useState([]);
+  // Only the projects the user is assigned to (the API scopes the list).
+  const state = useApiData(ENDPOINTS.projects);
+  const projects = Array.isArray(state.data) ? state.data : [];
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [agency, setAgency] = useState('All');
   const [program, setProgram] = useState('All Projects — MSU–Main Campus');
-  const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    getWithFallback(ENDPOINTS.projects, mockProjects).then(setProjects);
-  }, []);
 
   const agencies = ['All', ...new Set(projects.map((p) => p.agency).filter(Boolean))];
   const statuses = ['All', 'Planning', 'Ongoing', 'Completed', 'Terminated'];
@@ -41,11 +35,6 @@ export default function Projects() {
     );
   });
 
-  function handleNewProject(newProject) {
-    setProjects((prev) => [newProject, ...prev]);
-    setModalOpen(false);
-  }
-
   return (
     <>
       <div className="page-head">
@@ -63,11 +52,6 @@ export default function Projects() {
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
-          {user.role === 'PRG' && (
-            <button className="btn primary" onClick={() => setModalOpen(true)}>
-              New project
-            </button>
-          )}
         </div>
       </div>
 
@@ -90,6 +74,7 @@ export default function Projects() {
         </select>
       </div>
 
+      <LoadState state={state} loadingText="Loading your projects…" isEmpty={projects.length === 0} emptyText="You are not assigned to any project yet.">
       <div className="panel wide-scroll">
         <table>
           <thead>
@@ -127,8 +112,7 @@ export default function Projects() {
           </tbody>
         </table>
       </div>
-
-      <NewProjectModal open={modalOpen} onSave={handleNewProject} onClose={() => setModalOpen(false)} />
+      </LoadState>
     </>
   );
 }

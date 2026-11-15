@@ -39,7 +39,9 @@ Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum', 'ac
 
 // Dashboard analytics & quick actions.
 // active.account: a deactivated user loses access on the next request.
-Route::middleware(['auth:sanctum', 'active.account'])->group(function () {
+// project.access: routes naming a project (or a project's record) are open
+// only to the Program Leader and users assigned to that project.
+Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(function () {
     Route::get('/dashboard/program-leader', [DashboardController::class, 'programLeader']);
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::get('/projects/{project}', [ProjectController::class, 'show']);
@@ -49,9 +51,8 @@ Route::middleware(['auth:sanctum', 'active.account'])->group(function () {
 
     Route::get('/audit', [AuditTrailController::class, 'index']);
 
+    // Read-only. Decisions are Program Leader-only: POST /program/approvals/{approval}/decision.
     Route::get('/approvals', [ApprovalController::class, 'index']);
-    Route::patch('/approvals/{approval}/approve', [ApprovalController::class, 'approve']);
-    Route::patch('/approvals/{approval}/reject', [ApprovalController::class, 'reject']);
 
     Route::patch('/expenses/{expense}/verify', [ExpenseController::class, 'verify']);
     Route::patch('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);

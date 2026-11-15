@@ -106,7 +106,7 @@ class ProgramDashboardService
         if ($projects->isNotEmpty()) {
             Expense::query()
                 ->whereIn('project_id', $projects->pluck('id'))
-                ->where('status', 'verified')
+                ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
                 ->whereBetween('expense_date', [
                     Carbon::create($year, 1, 1)->toDateString(),
                     Carbon::create($year, 12, 31)->toDateString(),
@@ -155,7 +155,7 @@ class ProgramDashboardService
         if ($projects->isNotEmpty()) {
             Expense::query()
                 ->whereIn('project_id', $projects->pluck('id'))
-                ->where('status', 'verified')
+                ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
                 ->with('libCategory:id,category_type')
                 ->get(['id', 'lib_category_id', 'amount'])
                 ->each(function ($expense) use (&$spent, &$uncategorized, &$uncategorizedCount) {
@@ -1366,7 +1366,7 @@ class ProgramDashboardService
     {
         return $project->expenses()
             ->with('libCategory')
-            ->where('status', 'verified')
+            ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
             ->orderByDesc('expense_date')
             ->orderByDesc('id')
             ->limit(10)

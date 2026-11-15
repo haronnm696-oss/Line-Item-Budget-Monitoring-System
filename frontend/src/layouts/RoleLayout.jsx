@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { normalizeRole } from '../data/mockData';
+import { normalizeRole } from '../lib/roles';
 import RoleShell from './RoleShell';
 import { BELL_TARGET, ROLE_NAV, navItemFor } from './roleNav';
 

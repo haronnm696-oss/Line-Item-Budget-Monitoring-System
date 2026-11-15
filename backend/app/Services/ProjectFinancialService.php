@@ -32,14 +32,30 @@ class ProjectFinancialService
         return round($budget, 2);
     }
 
+    /** The only expense status that counts as spent. */
+    public const SPENT_STATUS = 'verified';
+
+    /**
+     * The single rule for "spent": only verified expense records count
+     * (payroll is excluded). Every screen, report and command that sums or
+     * lists spending applies this to its expense query, so the figures can
+     * never drift apart.
+     *
+     * @template T of \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
+     * @param T $expenses
+     * @return T
+     */
+    public static function onlySpent($expenses)
+    {
+        return $expenses->where('status', self::SPENT_STATUS);
+    }
+
     /**
      * Spend is the sum of verified expense records only.
      */
     public function spent(Project $project): float
     {
-        return round((float) $project->expenses()
-            ->where('status', 'verified')
-            ->sum('amount'), 2);
+        return round((float) self::onlySpent($project->expenses())->sum('amount'), 2);
     }
 
     /**

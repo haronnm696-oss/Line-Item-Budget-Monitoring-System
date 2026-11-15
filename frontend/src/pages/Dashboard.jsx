@@ -1,17 +1,11 @@
 import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { normalizeRole } from '../data/mockData';
+import { normalizeRole } from '../lib/roles';
+import { ROUTE_BY_ROLE } from '../routes/access';
 
-// Post-login role routing. Each role lands on its own dashboard URL so the
-// address bar (and direct links) reflect the user's module.
-export const ROUTE_BY_ROLE = {
-  PRG: '/program-dashboard',           // Program-wide Program Leader dashboard
-  PL:  '/dashboard/project-leader',    // Project Budget Dashboard
-  RA:  '/dashboard/research-assistant',// Data Entry / Payroll Module
-  RES: '/dashboard/researcher',        // Budget Analytics View
-  FIN: '/dashboard/finance',
-};
+// Post-login role routing: each role lands on its own dashboard URL
+// (ROUTE_BY_ROLE in routes/access.js).
 
 export default function Dashboard() {
   const { user } = useAuth();

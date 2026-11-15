@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ProjectFinancialService;
 use App\Models\Project;
 use App\Services\DashboardService;
 use Illuminate\Http\Request;
@@ -184,7 +185,7 @@ class ReportController extends Controller
             ->orderBy('expense_date');
 
         if ($compliance === 'verified') {
-            $query->where('status', 'verified');
+            ProjectFinancialService::onlySpent($query);
         } elseif ($compliance === 'missing_receipts') {
             $query->where(function ($q) {
                 $q->whereNull('attachment_path')->orWhere('attachment_path', '');

@@ -1,8 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { normalizeRole } from '../data/mockData';
+import { normalizeRole } from '../lib/roles';
 import { navItemFor } from '../layouts/roleNav';
-import { ROUTE_BY_ROLE } from './Dashboard';
+import { ROUTE_BY_ROLE } from '../routes/access';
 
 /** Placeholder for a menu item whose page is not built yet. */
 export default function ComingSoon() {

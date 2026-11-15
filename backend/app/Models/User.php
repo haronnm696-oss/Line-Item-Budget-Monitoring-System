@@ -102,4 +102,35 @@ class User extends Authenticatable
     {
         return $this->roleOn($project) === $roleSlug;
     }
+
+    public function isProgramLeader(): bool
+    {
+        return $this->primaryRole?->slug === 'program-leader';
+    }
+
+    /**
+     * Project scoping: the Program Leader sees every project; everyone else
+     * only the projects they are assigned to. Null means "all projects".
+     *
+     * @return array<int, int>|null
+     */
+    public function accessibleProjectIds(): ?array
+    {
+        if ($this->isProgramLeader()) {
+            return null;
+        }
+
+        return $this->projectUsers()->pluck('project_id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    public function canAccessProject(Project|int $project): bool
+    {
+        if ($this->isProgramLeader()) {
+            return true;
+        }
+
+        $projectId = $project instanceof Project ? $project->getKey() : $project;
+
+        return $this->projectUsers()->where('project_id', $projectId)->exists();
+    }
 }

@@ -51,7 +51,8 @@ Local mail testing: set `MAIL_MAILER=log` in `backend/.env`; reset links land in
 - Migrations must be additive — never drop/rename columns or delete data (production data on Aiven). Money columns are `decimal(15,2)`.
 
 ### Frontend data layer
-- `src/api/endpoints.js` documents the API contract; `src/api/http.js` provides `getWithFallback`/`mutateWithFallback`, which return mock data from `src/data/` when `VITE_USE_MOCK=true` or when the endpoint returns 404/501. Missing backend endpoints therefore fail silently into mock data — check this when debugging "wrong" numbers.
+- `src/api/endpoints.js` documents the API contract and marks routes that are not built yet. `src/api/http.js` provides `apiGet`/`apiWrite` (via `src/lib/apiResult.js`): any failed request rejects with a clear error ("Could not load…" / "Could not save. Please try again."). There is no sample-data fallback; pages show loading, error ("Try again") or empty states (`useApiData`, `LoadState`).
+- Route access per role lives in `src/routes/access.js` (`ROUTE_ROLES`); `RoleRoute` redirects other roles to their own dashboard. Pages pick the user's assigned project with `useAssignedProject` (`?project=`). The backend scopes projects too (`EnsureProjectAccess`, `User::accessibleProjectIds()`).
 - Auth state lives in `src/context/AuthContext.jsx`; `ProtectedRoute` gates authentication, `RoleRoute` gates role.
 
 ### Deployment (see `DEPLOYMENT.md`)
