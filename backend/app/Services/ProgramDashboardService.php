@@ -36,7 +36,7 @@ class ProgramDashboardService
             ->values();
 
         $approvals = $this->approvalRows($projects, $today);
-        $expenseCount = (int) $rows->sum('expenses_count');
+        $verifiedCount = (int) $rows->sum('verified_count');
         $receiptCount = (int) $rows->sum('receipts_count');
         $oldestWaiting = (int) ($approvals->max('days_waiting') ?? 0);
         $forecast = $this->forecast($projects, $today);
@@ -60,8 +60,9 @@ class ProgramDashboardService
                     'at_risk' => $rows->where('health', 'At risk')->count(),
                     'closed' => $rows->where('health', 'Closed')->count(),
                 ],
-                'avg_receipt_compliance' => $expenseCount > 0
-                    ? round(($receiptCount / $expenseCount) * 100, 1)
+                // Verified expenses with a receipt document, all projects.
+                'avg_receipt_compliance' => $verifiedCount > 0
+                    ? round(($receiptCount / $verifiedCount) * 100, 1)
                     : null,
                 'pending_approvals' => $approvals->count(),
                 'pending_approvals_total' => $approvals->count(),
@@ -674,6 +675,7 @@ class ProgramDashboardService
             'total_days' => $time['total_days'],
             'receipt_compliance_pct' => $receiptPct,
             'expenses_count' => $expenseCount,
+            'verified_count' => $metrics['verified_count'],
             'receipts_count' => $withReceipt,
             'tranche_status' => $tranche['status'],
             'tranche_overdue' => $tranche['overdue'],

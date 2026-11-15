@@ -332,16 +332,27 @@ class ProgramDashboardTest extends TestCase
             'allocated_amount' => max($amount, $project->total_approved_budget),
         ]);
 
-        return Expense::create([
+        $expense = Expense::create([
             'project_id' => $project->id,
             'lib_category_id' => $category->id,
             'recorded_by' => $this->userWithRole('research-assistant')->id,
             'description' => 'Demo expense',
             'amount' => $amount,
             'expense_date' => '2026-06-01',
-            'attachment_path' => 'receipts/demo.pdf',
             'status' => 'verified',
         ]);
+
+        // Receipt compliance reads receipt documents.
+        $expense->documents()->create([
+            'uploaded_by' => $expense->recorded_by,
+            'document_type' => 'receipt',
+            'file_name' => 'demo.pdf',
+            'file_path' => 'documents/expenses/' . $expense->id . '/demo.pdf',
+            'disk' => 'local',
+            'uploaded_at' => now(),
+        ]);
+
+        return $expense;
     }
 
     protected function approvalFor(Project $project, string $type, array $overrides = []): ApprovalRequest

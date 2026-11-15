@@ -539,7 +539,7 @@ export default function ProgramLeaderDashboard() {
                       </td>
                       <td><ProgramPill value={project.tranche_status} /></td>
                       <td className="num">
-                        {project.expenses_count > 0 && project.receipt_compliance_pct != null
+                        {project.receipt_compliance_pct != null
                           ? formatPct(project.receipt_compliance_pct)
                           : '—'}
                       </td>

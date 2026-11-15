@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
+use App\Models\Document;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Liquidation;
@@ -40,6 +41,7 @@ class AuditEntryPresenter
         'ProjectUser' => 'Project assignment',
         'Liquidation' => 'Liquidation',
         'ProjectReport' => 'Project report',
+        'Document' => 'Document',
     ];
 
     /** Labels for the ACTION filter (no record type known). */
@@ -50,6 +52,9 @@ class AuditEntryPresenter
         'updated' => 'Edited',
         'deleted' => 'Deleted',
         'verified' => 'Verified',
+        'submitted' => 'Expense submitted',
+        'endorsed' => 'Approved by Project Leader',
+        'returned' => 'Returned',
         'requested' => 'Submitted',
         'budget_changed' => 'Budget changed',
         'assignment_created' => 'Assigned to project',
@@ -130,6 +135,12 @@ class AuditEntryPresenter
         'pay_month' => 'Month',
         'pay_year' => 'Year',
         'funder_reference' => 'Funder reference',
+        'workflow_status' => 'Stage',
+        'pl_reviewed_by' => 'Approved by (Project Leader)',
+        'payee' => 'Payee',
+        'document_type' => 'Document type',
+        'file_name' => 'File',
+        'uploaded_by' => 'Uploaded by',
     ];
 
     private const MONEY = [
@@ -139,7 +150,7 @@ class AuditEntryPresenter
 
     private const USER_KEYS = [
         'user_id', 'reviewed_by', 'verified_by', 'recorded_by', 'requested_by', 'computed_by',
-        'personnel_id', 'registration_reviewed_by',
+        'personnel_id', 'registration_reviewed_by', 'pl_reviewed_by', 'uploaded_by',
     ];
 
     /** Technical fields that repeat the row or carry no meaning for a reader. */
@@ -148,6 +159,8 @@ class AuditEntryPresenter
         'registration_rejected_at', 'registration_reviewed_by', 'email_verified_at', 'last_login_at',
         'assigned_at', 'payload', 'role_label', 'project', 'ip_address', 'attachment_path',
         'document_path', 'liquidation_id', 'registration_rejection_reason', 'reason',
+        'return_reason', 'pl_reviewed_at', 'expense_id', 'documentable_type', 'documentable_id',
+        'file_path', 'disk', 'mime', 'size', 'uploaded_at',
     ];
 
     private array $users = [];
@@ -200,7 +213,9 @@ class AuditEntryPresenter
 
         $this->records = [
             'ApprovalRequest' => ApprovalRequest::query()->whereIn('id', $ids('ApprovalRequest'))->get()->keyBy('id')->all(),
-            'Expense' => Expense::query()->whereIn('id', $ids('Expense'))->get()->keyBy('id')->all(),
+            // Deleted (soft-deleted) expenses still name the record.
+            'Expense' => Expense::withTrashed()->whereIn('id', $ids('Expense'))->get()->keyBy('id')->all(),
+            'Document' => Document::query()->whereIn('id', $ids('Document'))->get()->keyBy('id')->all(),
             'Payroll' => Payroll::query()->whereIn('id', $ids('Payroll'))->get()->keyBy('id')->all(),
             'Liquidation' => Liquidation::query()->whereIn('id', $ids('Liquidation'))->get()->keyBy('id')->all(),
             'ProjectUser' => ProjectUser::query()->whereIn('id', $ids('ProjectUser'))->get()->keyBy('id')->all(),
@@ -320,10 +335,13 @@ class AuditEntryPresenter
         return match ($action) {
             'approved' => $type === 'User' ? 'Account approved' : ($type === 'ApprovalRequest' ? 'Request approved' : "{$noun} approved"),
             'rejected' => $type === 'User' ? 'Registration rejected' : ($type === 'ApprovalRequest' ? 'Request rejected' : "{$noun} rejected"),
-            'created' => $type === 'ProjectUser' ? 'Assigned to project' : "{$noun} added",
+            'created' => $type === 'ProjectUser' ? 'Assigned to project' : ($type === 'Document' ? 'Document uploaded' : "{$noun} added"),
             'updated' => $type === 'ProjectUser' ? 'Project role changed' : "{$noun} edited",
             'deleted' => $type === 'ProjectUser' ? 'Removed from project' : "{$noun} deleted",
             'verified' => "{$noun} verified",
+            'submitted' => "{$noun} submitted",
+            'endorsed' => "{$noun} approved by Project Leader",
+            'returned' => "{$noun} returned",
             'requested' => $type === 'ApprovalRequest' ? 'Request submitted' : "{$noun} submitted",
             default => self::ACTION_LABELS[$action] ?? self::humanize($action),
         };
@@ -331,11 +349,11 @@ class AuditEntryPresenter
 
     private function tone(string $action): string
     {
-        if ($action === 'approved') {
+        if (in_array($action, ['approved', 'endorsed', 'verified'], true)) {
             return 'success';
         }
 
-        return in_array($action, ['rejected', 'deleted', 'assignment_removed'], true) ? 'danger' : 'neutral';
+        return in_array($action, ['rejected', 'returned', 'deleted', 'assignment_removed'], true) ? 'danger' : 'neutral';
     }
 
     // ---------------------------------------------------------------- record
@@ -396,6 +414,16 @@ class AuditEntryPresenter
                 return [
                     'label' => $label !== '' ? $label : 'Deleted expense',
                     'type' => 'Expense' . ($lineItem ? ' · ' . $lineItem->line_item_name : ''),
+                    'link' => $projectLink,
+                ];
+
+            case 'Document':
+                $document = $this->records['Document'][$id] ?? null;
+                $kind = $document?->document_type ?? $pick('document_type');
+
+                return [
+                    'label' => $document?->file_name ?? $pick('file_name') ?? 'Deleted document',
+                    'type' => 'Document' . ($kind ? ' · ' . self::humanize($kind) : ''),
                     'link' => $projectLink,
                 ];
 

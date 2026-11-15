@@ -53,6 +53,20 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
         ],
 
+        // S3-compatible bucket for uploaded documents (AWS S3, Cloudflare R2,
+        // Backblaze B2, MinIO...). Keys come only from the environment.
+        // Requires the league/flysystem-aws-s3-v3 (^1.0) package.
+        'documents_s3' => [
+            'driver' => 's3',
+            'key' => env('DOCUMENTS_S3_KEY'),
+            'secret' => env('DOCUMENTS_S3_SECRET'),
+            'region' => env('DOCUMENTS_S3_REGION', 'auto'),
+            'bucket' => env('DOCUMENTS_S3_BUCKET'),
+            'endpoint' => env('DOCUMENTS_S3_ENDPOINT'),
+            'use_path_style_endpoint' => env('DOCUMENTS_S3_PATH_STYLE', true),
+            'visibility' => 'private',
+        ],
+
     ],
 
     /*

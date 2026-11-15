@@ -85,6 +85,7 @@ class DashboardService
                     'end_date' => $project->end_date?->toDateString(),
                     'program' => $this->programLabel($project),
                     'expenses_count' => $metrics['expenses_count'],
+                    'verified_count' => $metrics['verified_count'],
                     'receipts_count' => $metrics['receipts_count'],
                     'receipt_compliance_pct' => $metrics['receipt_compliance_pct'],
                 ];
@@ -145,6 +146,7 @@ class DashboardService
                 'tranches_released' => $tranches['summary']['released_count'],
                 'tranches_total' => $tranches['summary']['total_count'],
                 'expenses_count' => $metrics['expenses_count'],
+                'verified_count' => $metrics['verified_count'],
                 'receipts_count' => $metrics['receipts_count'],
                 'receipt_compliance_pct' => $metrics['receipt_compliance_pct'],
             ],

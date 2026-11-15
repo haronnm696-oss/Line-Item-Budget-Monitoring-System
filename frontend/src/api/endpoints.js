@@ -29,11 +29,31 @@
  *   POST /api/projects                      -> create (not built yet)
  *   PUT  /api/projects/:id                  -> update (not built yet)
  *
- * Expenses:
- *   GET  /api/projects/:id/expenses         (not built yet; the list comes from GET /api/projects/:id)
- *   POST /api/projects/:id/expenses         -> { lib_category_id, description, amount, expense_date, reference_no, attachment } (not built yet)
- *   PATCH /api/expenses/:id/verify
- *   PATCH /api/expenses/:id/reject          -> { reason }
+ * Expenses (workflow: draft -> submitted -> endorsed "Approved by Project
+ * Leader" -> verified, or returned; only verified counts as spent):
+ *   GET    /api/projects/:id/expenses?workflow_status=draft|submitted|endorsed|returned|verified
+ *   POST   /api/projects/:id/expenses       -> { lib_category_id, description, amount, expense_date, reference_no?, payee? }
+ *          creates a DRAFT (RA / FIN of the project)
+ *   PATCH  /api/expenses/:id                -> same fields; draft or returned only
+ *   DELETE /api/expenses/:id                -> own draft or returned only (soft delete)
+ *   POST   /api/expenses/:id/submit         -> RA / FIN; needs at least one receipt document
+ *   POST   /api/expenses/:id/endorse        -> Project Leader of the project
+ *   POST   /api/expenses/:id/return         -> { reason } Project Leader
+ *   POST   /api/expenses/:id/verify         -> FIN of the project (PATCH also accepted)
+ *   POST   /api/expenses/:id/reject         -> { reason } FIN; sends it back as returned (PATCH also accepted)
+ *   403 = wrong role or maker = checker; 422 = not allowed in the current stage.
+ *
+ * Documents (PDF / JPG / PNG, up to 10 MB):
+ *   GET    /api/expenses/:id/documents
+ *   POST   /api/expenses/:id/documents      -> multipart { file, document_type: receipt|invoice|quotation|payroll_file|other }
+ *   GET    /api/documents/:id/download      -> the file (project members only)
+ *   DELETE /api/documents/:id               -> uploader only, not after verification
+ *
+ * Notifications (the signed-in user's own):
+ *   GET    /api/notifications?page=         -> { notifications: [{ id, title, message, link, read, created_at }], meta: { unread, has_more, ... } }
+ *   GET    /api/notifications/unread-count  -> { unread }
+ *   PATCH  /api/notifications/:id/read
+ *   PATCH  /api/notifications/read-all
  *
  * Payroll:
  *   GET  /api/projects/:id/payroll?month=YYYY-MM   (not built yet)
@@ -89,8 +109,19 @@ export const ENDPOINTS = {
   projects: '/api/projects',
   project: (id) => `/api/projects/${id}`,
   expenses: (projectId) => `/api/projects/${projectId}/expenses`,
+  expense: (id) => `/api/expenses/${id}`,
+  submitExpense: (id) => `/api/expenses/${id}/submit`,
+  endorseExpense: (id) => `/api/expenses/${id}/endorse`,
+  returnExpense: (id) => `/api/expenses/${id}/return`,
   verifyExpense: (id) => `/api/expenses/${id}/verify`,
   rejectExpense: (id) => `/api/expenses/${id}/reject`,
+  expenseDocuments: (id) => `/api/expenses/${id}/documents`,
+  documentDownload: (id) => `/api/documents/${id}/download`,
+  document: (id) => `/api/documents/${id}`,
+  notifications: '/api/notifications',
+  notificationsUnread: '/api/notifications/unread-count',
+  notificationsReadAll: '/api/notifications/read-all',
+  notificationRead: (id) => `/api/notifications/${id}/read`,
   payroll: (projectId) => `/api/projects/${projectId}/payroll`,
   computePayroll: (projectId) => `/api/projects/${projectId}/payroll/compute`,
   approvePayroll: (id) => `/api/payroll/${id}/approve`,

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { formatInManila } from '../lib/datetime';
 import PageErrorBoundary from '../components/program/PageErrorBoundary';
+import NotificationBell from '../components/NotificationBell';
 
 const stroke = {
   fill: 'none',
@@ -109,12 +110,6 @@ const ICONS = {
       <path d="M4 7h16M4 12h16M4 17h16" />
     </svg>
   ),
-  bell: (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke}>
-      <path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6" />
-      <path d="M10 19a2.2 2.2 0 0 0 4 0" />
-    </svg>
-  ),
   logout: (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke}>
       <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 8l-4 4 4 4M6 12h10" />
@@ -188,10 +183,9 @@ function todayLabel() {
  * @param {string} props.breadcrumb    text at the left of the header
  * @param {Object<string, number>} props.badges  counts by item `badge` key
  * @param {(key: string, count: number) => string} props.badgeLabel
- * @param {{ count: number, to: string, label: string }} props.bell
  * @param {string} props.fallbackName  name shown before the user loads
  */
-export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}, badgeLabel, bell, fallbackName }) {
+export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}, badgeLabel, fallbackName }) {
   const { user, roleInfo, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -236,7 +230,6 @@ export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}
 
   const initials = initialsFrom(user?.name) || user?.avatar_initials || 'U';
   const roleLabel = roleInfo?.label ?? fallbackName;
-  const bellCount = Number(bell?.count) || 0;
 
   return (
     <div className="program-shell">
@@ -345,16 +338,7 @@ export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}
             {todayLabel()}
           </span>
 
-          <button
-            type="button"
-            className="program-icon-btn"
-            title="Notifications"
-            aria-label={`Notifications${bellCount ? `, ${bell.label}` : ''}`}
-            onClick={() => navigate(bell?.to ?? '/dashboard')}
-          >
-            {ICONS.bell}
-            {bellCount > 0 && <span className="program-icon-dot" aria-hidden="true" />}
-          </button>
+          <NotificationBell />
 
           <div className="program-user-menu" ref={profileRef}>
             <button

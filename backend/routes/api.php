@@ -6,7 +6,9 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuditTrailController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramAuditController;
 use App\Http\Controllers\ProgramDashboardController;
@@ -54,8 +56,32 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     // Read-only. Decisions are Program Leader-only: POST /program/approvals/{approval}/decision.
     Route::get('/approvals', [ApprovalController::class, 'index']);
 
+    // Expense workflow (ExpenseWorkflowService): draft -> submitted ->
+    // endorsed ("Approved by Project Leader") -> verified, or returned.
+    Route::get('/projects/{project}/expenses', [ExpenseController::class, 'index']);
+    Route::post('/projects/{project}/expenses', [ExpenseController::class, 'store']);
+    Route::patch('/expenses/{expense}', [ExpenseController::class, 'update']);
+    Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy']);
+    Route::post('/expenses/{expense}/submit', [ExpenseController::class, 'submit']);
+    Route::post('/expenses/{expense}/endorse', [ExpenseController::class, 'endorse']);
+    Route::post('/expenses/{expense}/return', [ExpenseController::class, 'returnExpense']);
+    Route::post('/expenses/{expense}/verify', [ExpenseController::class, 'verify']);
+    Route::post('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);
+    // Earlier PATCH form of verify / reject, same rules.
     Route::patch('/expenses/{expense}/verify', [ExpenseController::class, 'verify']);
     Route::patch('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);
+
+    // Documents attached to an expense (project members only).
+    Route::get('/expenses/{expense}/documents', [DocumentController::class, 'index']);
+    Route::post('/expenses/{expense}/documents', [DocumentController::class, 'store']);
+    Route::get('/documents/{document}/download', [DocumentController::class, 'download']);
+    Route::delete('/documents/{document}', [DocumentController::class, 'destroy']);
+
+    // In-app notifications of the signed-in user.
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markRead']);
 
     // Self-registration approval queue (Program Leader / Finance-Admin).
     Route::get('/users/pending', [UserApprovalController::class, 'index']);

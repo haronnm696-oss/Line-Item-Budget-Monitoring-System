@@ -2,7 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 import RoleShell from './RoleShell';
-import { BELL_TARGET, ROLE_NAV, navItemFor } from './roleNav';
+import { ROLE_NAV, navItemFor } from './roleNav';
 
 /**
  * Shell for the Project Leader, Research Assistant, Finance/Admin and
@@ -22,7 +22,6 @@ export default function RoleLayout() {
       navLabel={`${roleLabel} navigation`}
       breadcrumb={current ? `${roleLabel}: ${current.label}` : `${roleLabel} — MSU–Main Campus`}
       badges={{}}
-      bell={{ count: 0, to: BELL_TARGET[code] ?? '/dashboard', label: '' }}
       fallbackName={roleLabel}
     />
   );

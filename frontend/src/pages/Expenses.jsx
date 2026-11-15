@@ -60,7 +60,7 @@ export default function Expenses() {
         reference_no: form.reference || null,
       });
       setForm(EMPTY_FORM);
-      setNotice({ tone: 'ok', text: 'Expense submitted for verification.' });
+      setNotice({ tone: 'ok', text: 'Expense saved as a draft. It is sent for review once a receipt is attached and it is submitted.' });
       detail.retry();
     } catch (error) {
       setNotice({ tone: 'over', text: error.message || SAVE_ERROR });
