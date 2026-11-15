@@ -12,8 +12,10 @@ use Tests\TestCase;
 
 /**
  * Balancing query per line item: allocated, spent (verified), pending
- * (submitted + endorsed expenses and purchase requests) and
- * available = allocated - spent - pending. Payroll is not included.
+ * (submitted / approved expenses, unverified expenses linked to a purchase
+ * request, and approved open purchase requests) and
+ * available = allocated - spent - pending. Payroll is not included. The
+ * same money is never counted twice.
  */
 class BalancingTest extends TestCase
 {
@@ -33,7 +35,9 @@ class BalancingTest extends TestCase
             $this->expenseIn('draft', null, true, ['amount' => 999]);      // not pending
             $this->expenseIn('returned', null, true, ['amount' => 50]);    // not pending
             $this->expenseIn('submitted', null, true, ['amount' => 777])->delete(); // deleted: ignored
-            foreach (['submitted' => 400, 'endorsed' => 100, 'draft' => 77, 'returned' => 5] as $stage => $amount) {
+            // Only an approved, open request counts: submitted, draft, returned,
+            // fulfilled and cancelled ones do not.
+            foreach (['submitted' => 400, 'endorsed' => 100, 'draft' => 77, 'returned' => 5, 'fulfilled' => 3000, 'cancelled' => 2000] as $stage => $amount) {
                 PurchaseRequest::create([
                     'project_id' => $this->project->id, 'lib_category_id' => $this->lineItem->id, 'requested_by' => $this->assistant->id,
                     'description' => "PR {$stage}", 'quantity' => 1, 'estimated_amount' => $amount, 'workflow_status' => $stage,
@@ -58,17 +62,17 @@ class BalancingTest extends TestCase
         $this->assertSame(500000, $supplies['allocated']);
         $this->assertSame(1250.5, $supplies['spent']);
         $this->assertSame(500, $supplies['pending_expenses']);
-        $this->assertSame(500, $supplies['pending_purchase_requests']);
-        $this->assertSame(1000, $supplies['pending']);
-        $this->assertSame(497749.5, $supplies['available']);
+        $this->assertSame(100, $supplies['pending_purchase_requests']);
+        $this->assertSame(600, $supplies['pending']);
+        $this->assertSame(498149.5, $supplies['available']);
 
         $salaries = $rows[$ps->id];
         $this->assertSame([60000, 0, 0, 60000], [$salaries['allocated'], $salaries['spent'], $salaries['pending'], $salaries['available']]);
 
         $response->assertJsonPath('totals.allocated', 560000)
             ->assertJsonPath('totals.spent', 1250.5)
-            ->assertJsonPath('totals.pending', 1000)
-            ->assertJsonPath('totals.available', 557749.5);
+            ->assertJsonPath('totals.pending', 600)
+            ->assertJsonPath('totals.available', 558149.5);
 
         // One line item.
         $this->getJson("/api/projects/{$this->project->id}/balancing?line_item={$ps->id}")
@@ -80,5 +84,88 @@ class BalancingTest extends TestCase
         ]));
         $this->getJson("/api/projects/{$this->project->id}/balancing?line_item={$foreign->id}")->assertStatus(422);
         $this->actingAs($this->outsider)->getJson("/api/projects/{$this->project->id}/balancing")->assertForbidden();
+    }
+
+    public function test_linking_an_expense_moves_the_money_from_the_request_without_double_counting(): void
+    {
+        $this->buildWorkflowFixtures();
+        $request = $this->approvedRequest(10000);
+        $this->assertLine(0, 10000, 490000);
+
+        // Record an expense that fulfils it: the request stops counting and
+        // the (still draft) expense counts instead: 9,500, not 19,500.
+        $audit = \App\Models\AuditTrail::count();
+        $id = $this->actingAs($this->assistant)
+            ->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload(['amount' => 9500, 'purchase_request_id' => $request->id]))
+            ->assertCreated()
+            ->assertJsonPath('expense.purchase_request_id', $request->id)
+            ->json('expense.id');
+        $this->assertSame('fulfilled', $request->fresh()->workflow_status);
+        $this->assertSame($audit + 2, \App\Models\AuditTrail::count()); // expense created + request fulfilled
+        $this->assertSame(['created', 'fulfilled'], \App\Models\AuditTrail::orderBy('id')->get()->slice(-2)->pluck('action')->values()->all());
+        $this->assertCount(1, $this->projectLeader->notifications()->get()->filter(fn ($n) => $n->data['event'] === 'fulfilled'));
+        $this->assertLine(0, 9500, 490500);
+
+        // Through the workflow: pending until verified, then spent.
+        $expense = \App\Models\Expense::findOrFail($id);
+        $this->receiptFor($expense, $this->assistant);
+        $this->actingAs($this->assistant)->postJson("/api/expenses/{$id}/submit")->assertOk();
+        $this->assertLine(0, 9500, 490500);
+        $this->actingAs($this->projectLeader)->postJson("/api/expenses/{$id}/endorse")->assertOk();
+        $this->assertLine(0, 9500, 490500);
+        $this->actingAs($this->finance)->postJson("/api/expenses/{$id}/reject", ['reason' => 'Wrong OR number.'])->assertOk();
+        $this->assertLine(0, 9500, 490500); // returned but still linked: still pending
+        $this->actingAs($this->assistant)->postJson("/api/expenses/{$id}/submit")->assertOk();
+        $this->actingAs($this->projectLeader)->postJson("/api/expenses/{$id}/endorse")->assertOk();
+        $this->actingAs($this->finance)->postJson("/api/expenses/{$id}/verify")->assertOk();
+        $this->assertLine(9500, 0, 490500);
+    }
+
+    public function test_cancelling_an_approved_request_releases_its_pending_amount(): void
+    {
+        $this->buildWorkflowFixtures();
+        $request = $this->approvedRequest(8000);
+        $this->assertLine(0, 8000, 492000);
+
+        $this->actingAs($this->assistant)
+            ->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => 'Supplier closed.'])
+            ->assertOk()
+            ->assertJsonPath('purchase_request.workflow_status', 'cancelled');
+        $this->assertLine(0, 0, 500000);
+    }
+
+    public function test_deleting_a_linked_draft_reopens_the_request(): void
+    {
+        $this->buildWorkflowFixtures();
+        $request = $this->approvedRequest(6000);
+        $id = $this->actingAs($this->assistant)
+            ->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload(['amount' => 5000, 'purchase_request_id' => $request->id]))
+            ->assertCreated()->json('expense.id');
+        $this->assertLine(0, 5000, 495000);
+
+        $this->actingAs($this->assistant)->deleteJson("/api/expenses/{$id}")->assertOk();
+        $this->assertSame('endorsed', $request->fresh()->workflow_status);
+        $this->assertSame('reopened', \App\Models\AuditTrail::latest('id')->value('action'));
+        $this->assertLine(0, 6000, 494000);
+    }
+
+    private function approvedRequest(float $amount): PurchaseRequest
+    {
+        return AuditLogger::muted(fn () => PurchaseRequest::create([
+            'project_id' => $this->project->id, 'lib_category_id' => $this->lineItem->id, 'requested_by' => $this->assistant->id,
+            'description' => 'Reagents', 'quantity' => 1, 'estimated_amount' => $amount, 'workflow_status' => 'endorsed',
+            'pl_reviewed_by' => $this->projectLeader->id, 'pl_reviewed_at' => now(),
+        ]));
+    }
+
+    /** Supplies line (500,000 allocated): spent, pending, available. */
+    private function assertLine(float $spent, float $pending, float $available): void
+    {
+        $line = $this->actingAs($this->projectLeader)
+            ->getJson("/api/projects/{$this->project->id}/balancing?line_item={$this->lineItem->id}")
+            ->assertOk()
+            ->json('line_items.0');
+        $this->assertEquals([$spent, $pending, $available], [$line['spent'], $line['pending'], $line['available']]);
+        $this->assertEquals(500000 - $spent - $pending, $line['available']);
     }
 }

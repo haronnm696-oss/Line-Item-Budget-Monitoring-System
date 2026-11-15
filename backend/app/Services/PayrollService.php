@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\LibCategory;
 use App\Models\Payroll;
+use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\ProjectUser;
 use App\Models\User;
@@ -14,15 +15,17 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Payroll computation and workflow (FR: automatic payroll computation).
+ * Payroll computation and the monthly approval (FR: automatic payroll
+ * computation). One PayrollBatch per project and month groups the rows:
  *
  *   draft --submit--> submitted --endorse--> endorsed --verify--> verified
  *   draft/returned <------ return (Project Leader) / reject (Finance/Admin)
  *
- * "Create for a month" makes one draft row per active project member who
- * has a monthly rate (project_user.monthly_rate) and computes it with
- * PayrollCalculator (config/payroll.php). Payroll is not LIB spent.
- * Each change writes exactly one audit entry per payroll row.
+ * The hand-offs act on the whole batch: one audit entry and one
+ * notification per hand-off. Rows (one per person) are created and computed
+ * with PayrollCalculator (config/payroll.php) and can be edited only while
+ * the batch is draft or returned; each row change has its own audit entry.
+ * The rows' workflow columns follow the batch. Payroll is not LIB spent.
  */
 class PayrollService
 {
@@ -37,18 +40,33 @@ class PayrollService
     ];
 
     private const ENCODERS = ['research-assistant', 'finance-admin'];
-    private const EDITABLE = ['draft', 'returned'];
 
     public function __construct(private PayrollCalculator $calculator)
     {
     }
 
-    // ---------------------------------------------------------------- compute
+    public function batchFor(Project $project, int $year, int $month): ?PayrollBatch
+    {
+        return PayrollBatch::query()
+            ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
+            ->first();
+    }
 
-    /** @return Collection<int, Payroll> the rows created */
+    // ---------------------------------------------------------------- rows
+
+    /**
+     * Create the month's batch (if needed) and one computed row per active
+     * member with a monthly rate who has no row yet.
+     *
+     * @return Collection<int, Payroll> the rows created
+     */
     public function createMonth(Project $project, int $year, int $month, LibCategory $lineItem, User $actor): Collection
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can prepare payroll.');
+        $existingBatch = $this->batchFor($project, $year, $month);
+        if ($existingBatch) {
+            $this->requireState($existingBatch, PayrollBatch::EDITABLE, 'changed');
+        }
 
         $members = $this->ratedMembers($project);
         if ($members->isEmpty()) {
@@ -68,10 +86,18 @@ class PayrollService
         }
 
         return AuditLogger::transaction(function () use ($toCreate, $project, $year, $month, $lineItem, $actor) {
-            return $toCreate->map(function (ProjectUser $member) use ($project, $year, $month, $lineItem, $actor) {
+            $batch = PayrollBatch::query()->firstOrCreate(
+                ['project_id' => $project->id, 'pay_year' => $year, 'pay_month' => $month],
+                ['prepared_by' => $actor->id, 'workflow_status' => 'draft']
+            );
+            $batch = $this->lockRecord($batch);
+            $this->requireState($batch, PayrollBatch::EDITABLE, 'changed');
+
+            return $toCreate->map(function (ProjectUser $member) use ($batch, $project, $year, $month, $lineItem, $actor) {
                 $result = $this->calculator->compute((float) $member->monthly_rate, (float) $member->allowance);
                 $payroll = Payroll::create([
                     'project_id' => $project->id,
+                    'payroll_batch_id' => $batch->id,
                     'lib_category_id' => $lineItem->id,
                     'personnel_id' => $member->user_id,
                     'computed_by' => $actor->id,
@@ -82,8 +108,8 @@ class PayrollService
                     'gross_pay' => $result['gross'],
                     'total_deductions' => $result['total_deductions'],
                     'net_pay' => $result['net'],
-                    'status' => Payroll::STATUS_FOR_WORKFLOW['draft'],
-                    'workflow_status' => 'draft',
+                    'workflow_status' => $batch->workflow_status,
+                    'status' => Payroll::STATUS_FOR_WORKFLOW[$batch->workflow_status],
                 ]);
                 $this->storeDeductions($payroll, $result['deductions']);
                 AuditLogger::write('created', $payroll, [], $this->money($payroll), $actor);
@@ -94,8 +120,8 @@ class PayrollService
     }
 
     /**
-     * Recompute every draft / returned row of the month from the current pay
-     * rates and deduction rules.
+     * Recompute every row of the month's batch from the current pay rates and
+     * deduction rules (batch draft or returned only).
      *
      * @return Collection<int, Payroll>
      */
@@ -103,29 +129,32 @@ class PayrollService
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can compute payroll.');
 
-        $rows = Payroll::query()
-            ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
-            ->whereIn('workflow_status', self::EDITABLE)
-            ->get();
-        if ($rows->isEmpty()) {
+        $batch = $this->batchFor($project, $year, $month);
+        if (! $batch || ! $batch->rows()->exists()) {
             throw ValidationException::withMessages([
-                'month' => ['There is no draft or returned payroll for ' . self::monthLabel($year, $month) . ' to compute.'],
+                'month' => ['There is no payroll for ' . self::monthLabel($year, $month) . ' to compute.'],
             ]);
         }
+        $this->requireState($batch, PayrollBatch::EDITABLE, 'computed');
 
         $rates = ProjectUser::query()->where('project_id', $project->id)->get()->keyBy('user_id');
 
-        return AuditLogger::transaction(function () use ($rows, $rates, $actor) {
-            return $rows->map(function (Payroll $row) use ($rates, $actor) {
-                $locked = $this->lockRecord($row);
-                if (! in_array($locked->workflow_status, self::EDITABLE, true)) {
-                    return $locked; // moved on meanwhile; left as it is
-                }
-                $rate = $rates->get($locked->personnel_id);
-                $basic = $rate && $rate->monthly_rate !== null ? (float) $rate->monthly_rate : (float) $locked->basic_rate;
-                $allowance = $rate && $rate->monthly_rate !== null ? (float) $rate->allowance : (float) $locked->allowance;
+        return AuditLogger::transaction(function () use ($batch, $rates, $actor) {
+            $this->requireState($this->lockRecord($batch), PayrollBatch::EDITABLE, 'computed');
 
-                return $this->recompute($locked, $basic, $allowance, [], 'computed', $actor);
+            return $batch->rows()->orderBy('id')->get()->map(function (Payroll $row) use ($rates, $actor) {
+                $locked = $this->lockRecord($row);
+                $rate = $rates->get($locked->personnel_id);
+                $hasRate = $rate && $rate->monthly_rate !== null;
+
+                return $this->recompute(
+                    $locked,
+                    $hasRate ? (float) $rate->monthly_rate : (float) $locked->basic_rate,
+                    $hasRate ? (float) $rate->allowance : (float) $locked->allowance,
+                    [],
+                    'computed',
+                    $actor
+                );
             });
         });
     }
@@ -133,11 +162,11 @@ class PayrollService
     public function update(Payroll $payroll, array $data, User $actor): Payroll
     {
         $this->requireRole($payroll->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can edit payroll.');
-        $this->requireState($payroll, self::EDITABLE, 'edited');
+        $this->requireState($payroll->batch, PayrollBatch::EDITABLE, 'edited');
 
         return AuditLogger::transaction(function () use ($payroll, $data, $actor) {
+            $this->requireState($this->lockRecord($payroll->batch), PayrollBatch::EDITABLE, 'edited');
             $locked = $this->lockRecord($payroll);
-            $this->requireState($locked, self::EDITABLE, 'edited');
 
             return $this->recompute(
                 $locked,
@@ -150,92 +179,90 @@ class PayrollService
         });
     }
 
-    // ---------------------------------------------------------------- hand-offs
+    // ---------------------------------------------------------------- batch hand-offs
 
-    public function submit(Payroll $payroll, User $actor): Payroll
+    public function submit(PayrollBatch $batch, User $actor): PayrollBatch
     {
-        $this->requireRole($payroll->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can submit payroll.');
-        $this->requireState($payroll, self::EDITABLE, 'submitted');
+        $this->requireRole($batch->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can submit payroll.');
+        $this->requireState($batch, PayrollBatch::EDITABLE, 'submitted');
+        if (! $batch->rows()->exists()) {
+            throw ValidationException::withMessages(['rows' => ['There is no payroll in this batch to submit.']]);
+        }
 
-        $payroll = $this->move($payroll, 'submitted', $actor, 'submitted', self::EDITABLE, [
+        $batch = $this->move($batch, 'submitted', $actor, 'submitted', PayrollBatch::EDITABLE, [
             'submitted_at' => now(),
+            'submitted_by' => $actor->id,
             'return_reason' => null,
             'pl_reviewed_by' => null,
             'pl_reviewed_at' => null,
         ]);
 
-        $this->notify($this->projectMembers($payroll->project_id, 'project-leader'), $payroll, 'submitted', $actor);
+        $this->notify($this->projectMembers($batch->project_id, 'project-leader'), $batch, 'submitted', $actor);
 
-        return $payroll;
+        return $batch;
     }
 
-    public function endorse(Payroll $payroll, User $actor): Payroll
+    public function endorse(PayrollBatch $batch, User $actor): PayrollBatch
     {
-        $this->requireRole($payroll->project, $actor, ['project-leader'], 'Only the Project Leader of this project can approve payroll.');
-        $this->requireNotSame($payroll->computed_by, $actor, 'You cannot approve or return a payroll you computed.');
-        $this->requireNotSame($payroll->personnel_id, $actor, 'You cannot approve or return your own payroll.');
-        $this->requireState($payroll, ['submitted'], 'approved');
+        $this->checkLeader($batch, $actor, 'approve');
+        $this->requireState($batch, ['submitted'], 'approved');
 
-        $payroll = $this->move($payroll, 'endorsed', $actor, 'endorsed', ['submitted'], [
+        $batch = $this->move($batch, 'endorsed', $actor, 'endorsed', ['submitted'], [
             'pl_reviewed_by' => $actor->id,
             'pl_reviewed_at' => now(),
         ]);
 
-        $this->notify($this->projectMembers($payroll->project_id, 'finance-admin'), $payroll, 'endorsed', $actor);
+        $this->notify($this->projectMembers($batch->project_id, 'finance-admin'), $batch, 'endorsed', $actor);
 
-        return $payroll;
+        return $batch;
     }
 
-    public function returnToEncoder(Payroll $payroll, string $reason, User $actor): Payroll
+    public function returnToPreparer(PayrollBatch $batch, string $reason, User $actor): PayrollBatch
     {
-        $this->requireRole($payroll->project, $actor, ['project-leader'], 'Only the Project Leader of this project can return payroll.');
-        $this->requireNotSame($payroll->computed_by, $actor, 'You cannot approve or return a payroll you computed.');
-        $this->requireNotSame($payroll->personnel_id, $actor, 'You cannot approve or return your own payroll.');
-        $this->requireState($payroll, ['submitted'], 'returned');
+        $this->checkLeader($batch, $actor, 'return');
+        $this->requireState($batch, ['submitted'], 'returned');
         $reason = $this->requireReason($reason, 'A reason is required to return a payroll.');
 
-        $payroll = $this->move($payroll, 'returned', $actor, 'returned', ['submitted'], [
+        $batch = $this->move($batch, 'returned', $actor, 'returned', ['submitted'], [
             'return_reason' => $reason,
             'pl_reviewed_by' => $actor->id,
             'pl_reviewed_at' => now(),
         ], $reason);
 
-        $this->notify($this->activeUser($payroll->computed_by), $payroll, 'returned', $actor, $reason);
+        $this->notify($this->activeUser($batch->submitted_by), $batch, 'returned', $actor, $reason);
 
-        return $payroll;
+        return $batch;
     }
 
-    public function verify(Payroll $payroll, User $actor): Payroll
+    public function verify(PayrollBatch $batch, User $actor): PayrollBatch
     {
-        $this->checkVerifier($payroll, $actor, 'verify');
-        $this->requireState($payroll, ['endorsed'], 'verified');
+        $this->checkVerifier($batch, $actor, 'verify');
+        $this->requireState($batch, ['endorsed'], 'verified');
 
-        $payroll = $this->move($payroll, 'verified', $actor, 'verified', ['endorsed'], [
+        $batch = $this->move($batch, 'verified', $actor, 'verified', ['endorsed'], [
             'verified_by' => $actor->id,
             'verified_at' => now(),
         ]);
 
-        $this->notify($this->activeUser($payroll->computed_by), $payroll, 'verified', $actor);
+        $this->notify($this->activeUser($batch->submitted_by), $batch, 'verified', $actor);
 
-        return $payroll;
+        return $batch;
     }
 
-    public function reject(Payroll $payroll, string $reason, User $actor): Payroll
+    public function reject(PayrollBatch $batch, string $reason, User $actor): PayrollBatch
     {
-        $this->checkVerifier($payroll, $actor, 'reject');
-        $this->requireState($payroll, ['endorsed'], 'rejected');
+        $this->checkVerifier($batch, $actor, 'reject');
+        $this->requireState($batch, ['endorsed'], 'rejected');
         $reason = $this->requireReason($reason, 'A reason is required to reject a payroll.');
 
         // Rejected by Finance/Admin = sent back as returned.
-        $payroll = $this->move($payroll, 'returned', $actor, 'rejected', ['endorsed'], [
+        $batch = $this->move($batch, 'returned', $actor, 'rejected', ['endorsed'], [
             'return_reason' => $reason,
-            'verified_by' => $actor->id,
-            'verified_at' => now(),
         ], $reason);
 
-        $this->notify($this->activeUser($payroll->computed_by), $payroll, 'rejected', $actor, $reason);
+        $this->notify($this->activeUser($batch->submitted_by), $batch, 'rejected', $actor, $reason);
 
-        return $payroll;
+        return $batch;
     }
 
     // ---------------------------------------------------------------- helpers
@@ -269,19 +296,53 @@ class PayrollService
         return 'payroll';
     }
 
-    private function checkVerifier(Payroll $payroll, User $actor, string $verb): void
+    private function checkLeader(PayrollBatch $batch, User $actor, string $verb): void
     {
-        $this->requireRole($payroll->project, $actor, ['finance-admin'], "Only Finance/Admin staff of this project can {$verb} payroll.");
-        $this->requireNotSame($payroll->computed_by, $actor, 'You cannot verify or reject a payroll you computed.');
-        $this->requireNotSame($payroll->personnel_id, $actor, 'You cannot verify or reject your own payroll.');
-        $this->requireNotSame($payroll->pl_reviewed_by, $actor, 'You approved this payroll as Project Leader; another person must verify it.');
+        $this->requireRole($batch->project, $actor, ['project-leader'], "Only the Project Leader of this project can {$verb} payroll.");
+        $this->requireNotMaker($batch, $actor, 'You cannot approve or return a payroll you prepared.');
     }
 
-    private function move(Payroll $payroll, string $to, User $actor, string $auditAction, array $from, array $extra, ?string $reason = null): Payroll
+    private function checkVerifier(PayrollBatch $batch, User $actor, string $verb): void
+    {
+        $this->requireRole($batch->project, $actor, ['finance-admin'], "Only Finance/Admin staff of this project can {$verb} payroll.");
+        $this->requireNotMaker($batch, $actor, 'You cannot verify or reject a payroll you prepared.');
+        $this->requireNotSame($batch->pl_reviewed_by, $actor, 'You approved this payroll as Project Leader; another person must verify it.');
+    }
+
+    /** Maker = anyone who prepared, computed or submitted the batch. */
+    private function requireNotMaker(PayrollBatch $batch, User $actor, string $message): void
+    {
+        if (in_array((int) $actor->id, $batch->makerIds(), true)) {
+            abort(403, $message);
+        }
+    }
+
+    /**
+     * Move the batch with one audit entry and bring its rows to the same
+     * stage (no per-row audit entries), in one transaction.
+     */
+    private function move(PayrollBatch $batch, string $to, User $actor, string $auditAction, array $from, array $extra, ?string $reason = null): PayrollBatch
     {
         $verb = $auditAction === 'endorsed' ? 'approved' : $auditAction;
 
-        return $this->moveRecord($payroll, $to, $actor, $auditAction, $from, $verb, $extra, $reason, Payroll::STATUS_FOR_WORKFLOW);
+        return AuditLogger::transaction(function () use ($batch, $to, $actor, $auditAction, $from, $verb, $extra, $reason) {
+            $moved = $this->moveRecord($batch, $to, $actor, $auditAction, $from, $verb, $extra, $reason);
+
+            // The rows mirror the batch (query update: no per-row audit).
+            Payroll::query()->where('payroll_batch_id', $moved->id)->update([
+                'workflow_status' => $to,
+                'status' => Payroll::STATUS_FOR_WORKFLOW[$to],
+                'submitted_at' => $moved->submitted_at,
+                'pl_reviewed_by' => $moved->pl_reviewed_by,
+                'pl_reviewed_at' => $moved->pl_reviewed_at,
+                'verified_by' => $moved->verified_by,
+                'verified_at' => $moved->verified_at,
+                'return_reason' => $moved->return_reason,
+                'updated_at' => now(),
+            ]);
+
+            return $moved;
+        });
     }
 
     /** Recompute one locked row with one audit entry (old / new money fields). */
@@ -291,6 +352,8 @@ class PayrollService
         $old = $this->money($locked);
 
         $locked->update(array_merge($extra, [
+            // Whoever last computed or edited the row is one of its makers.
+            'computed_by' => $actor->id,
             'basic_rate' => $result['basic'],
             'allowance' => $result['allowance'],
             'gross_pay' => $result['gross'],
@@ -328,20 +391,22 @@ class PayrollService
         ];
     }
 
-    private function notify(Collection $recipients, Payroll $payroll, string $event, User $actor, ?string $reason = null): void
+    /** One notification per recipient for the whole batch. */
+    private function notify(Collection $recipients, PayrollBatch $batch, string $event, User $actor, ?string $reason = null): void
     {
-        $payroll->loadMissing(['project', 'personnel']);
-        $who = $payroll->personnel?->name ?? 'a staff member';
-        $period = self::monthLabel((int) $payroll->pay_year, (int) $payroll->pay_month);
-        $net = '₱' . number_format((float) $payroll->net_pay, 2);
+        $batch->loadMissing('project');
+        $period = $batch->monthLabel();
+        $count = $batch->rows()->count();
+        $people = $count . ' ' . ($count === 1 ? 'person' : 'people');
+        $net = '₱' . number_format((float) $batch->rows()->sum('net_pay'), 2);
         $because = $reason ? ' Reason: ' . $reason : '';
 
         [$title, $message] = match ($event) {
-            'submitted' => ['Payroll waiting for your approval', "{$actor->name} submitted the {$period} payroll of {$who} (net {$net})."],
-            'endorsed' => ['Payroll ready for verification', "{$actor->name} (Project Leader) approved the {$period} payroll of {$who} (net {$net})."],
-            'returned' => ['Payroll returned to you', "{$actor->name} returned the {$period} payroll of {$who}.{$because}"],
-            'rejected' => ['Payroll rejected', "{$actor->name} rejected the {$period} payroll of {$who} and sent it back.{$because}"],
-            'verified' => ['Payroll verified', "{$actor->name} verified the {$period} payroll of {$who} (net {$net})."],
+            'submitted' => ['Payroll waiting for your approval', "{$actor->name} submitted the {$period} payroll ({$people}, net {$net})."],
+            'endorsed' => ['Payroll ready for verification', "{$actor->name} (Project Leader) approved the {$period} payroll ({$people}, net {$net})."],
+            'returned' => ['Payroll returned to you', "{$actor->name} returned the {$period} payroll.{$because}"],
+            'rejected' => ['Payroll rejected', "{$actor->name} rejected the {$period} payroll and sent it back.{$because}"],
+            'verified' => ['Payroll verified', "{$actor->name} verified the {$period} payroll ({$people}, net {$net})."],
         };
 
         $this->notifyUsers($recipients, new WorkflowNotification([
@@ -349,12 +414,12 @@ class PayrollService
             'event' => $event,
             'title' => $title,
             'message' => $message,
-            'payroll_id' => $payroll->id,
-            'project_id' => $payroll->project_id,
-            'project' => $payroll->project?->title,
+            'payroll_batch_id' => $batch->id,
+            'project_id' => $batch->project_id,
+            'project' => $batch->project?->title,
             'actor' => $actor->name,
             'reason' => $reason,
-            'link' => '/payroll?project=' . $payroll->project_id . '&month=' . $payroll->monthKey(),
+            'link' => '/payroll?project=' . $batch->project_id . '&month=' . $batch->monthKey(),
         ]), $actor);
     }
 }

@@ -28,7 +28,7 @@ class Expense extends Model implements HasDocuments
     ];
 
     protected $fillable = [
-        'project_id', 'lib_category_id', 'recorded_by', 'verified_by',
+        'project_id', 'lib_category_id', 'purchase_request_id', 'recorded_by', 'verified_by',
         'reference_no', 'payee', 'description', 'amount', 'expense_date',
         'attachment_path', 'status', 'remarks', 'verified_at',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at', 'return_reason',
@@ -36,6 +36,7 @@ class Expense extends Model implements HasDocuments
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'purchase_request_id' => 'integer',
         'expense_date' => 'date',
         'verified_at' => 'datetime',
         'submitted_at' => 'datetime',
@@ -76,6 +77,12 @@ class Expense extends Model implements HasDocuments
     public function plReviewedBy()
     {
         return $this->belongsTo(User::class, 'pl_reviewed_by');
+    }
+
+    /** The approved purchase request this expense fulfils, if any. */
+    public function purchaseRequest()
+    {
+        return $this->belongsTo(PurchaseRequest::class)->withTrashed();
     }
 
     public function documents(): MorphMany

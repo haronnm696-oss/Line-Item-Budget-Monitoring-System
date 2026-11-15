@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Project;
+use App\Models\PurchaseRequest;
 use App\Services\ExpenseWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -112,8 +113,11 @@ class ExpenseController extends Controller
             'expense_date' => [$required, 'date'],
             'reference_no' => ['nullable', 'string', 'max:100'],
             'payee' => ['nullable', 'string', 'max:255'],
+            // An approved purchase request of this project that the expense fulfils.
+            'purchase_request_id' => ['nullable', 'integer', Rule::exists((new PurchaseRequest())->getTable(), 'id')->where('project_id', $project->id)->whereNull('deleted_at')],
         ], [
             'lib_category_id.exists' => 'Choose a line item of this project.',
+            'purchase_request_id.exists' => 'Choose a purchase request of this project.',
         ]);
     }
 
@@ -126,6 +130,7 @@ class ExpenseController extends Controller
             'id' => $expense->id,
             'project_id' => $expense->project_id,
             'lib_category_id' => $expense->lib_category_id,
+            'purchase_request_id' => $expense->purchase_request_id,
             'line_item' => $expense->libCategory?->line_item_name,
             'description' => $expense->description,
             'payee' => $expense->payee,

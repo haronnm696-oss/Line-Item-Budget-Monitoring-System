@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Expense;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\User;
@@ -13,9 +14,17 @@ use Illuminate\Validation\ValidationException;
 /**
  * Purchase request workflow: draft -> submitted -> endorsed ("Approved by
  * Project Leader") or returned (back to draft-like editing). No Finance
- * step. A submit needs a quotation or invoice document. One audit entry per
- * step; the Project Leader is notified on submit, the requester on a
- * decision.
+ * step. A submit needs a quotation or invoice document.
+ *
+ * An approved request then ends as:
+ *   fulfilled  an expense of the same project and line item is linked to it
+ *              (ExpenseWorkflowService calls fulfil()); deleting that draft
+ *              expense reopens the request (release())
+ *   cancelled  by the Project Leader or the requester, with a reason
+ *
+ * One audit entry per step. The Project Leader is notified on submit,
+ * fulfil and cancel; the requester on a decision (and on a cancel by
+ * someone else).
  */
 class PurchaseRequestService
 {
@@ -26,6 +35,8 @@ class PurchaseRequestService
         'submitted' => 'Submitted',
         'endorsed' => 'Approved by Project Leader',
         'returned' => 'Returned',
+        'fulfilled' => 'Fulfilled',
+        'cancelled' => 'Cancelled',
     ];
 
     private const ENCODERS = ['research-assistant', 'finance-admin'];
@@ -134,6 +145,89 @@ class PurchaseRequestService
         return $request;
     }
 
+    // ---------------------------------------------------------------- after approval
+
+    /**
+     * Link an expense to an approved request and mark the request fulfilled,
+     * with one audit entry. Runs inside the caller's transaction; the
+     * caller sends notifyFulfilled() after the commit.
+     */
+    public function fulfil(PurchaseRequest $request, Expense $expense, User $actor): PurchaseRequest
+    {
+        $locked = $this->lockRecord($request);
+
+        if ((int) $locked->project_id !== (int) $expense->project_id || (int) $locked->lib_category_id !== (int) $expense->lib_category_id) {
+            throw ValidationException::withMessages([
+                'purchase_request_id' => ['Link an approved purchase request of the same project and line item.'],
+            ]);
+        }
+        if ($locked->workflow_status !== PurchaseRequest::OPEN_APPROVED) {
+            $label = strtolower(self::LABELS[$locked->workflow_status] ?? $locked->workflow_status);
+            throw ValidationException::withMessages([
+                'purchase_request_id' => ["Only an approved purchase request can be linked; this one is {$label}."],
+            ]);
+        }
+        if (Expense::query()->where('purchase_request_id', $locked->id)->whereKeyNot($expense->id)->exists()) {
+            throw ValidationException::withMessages([
+                'purchase_request_id' => ['This purchase request is already linked to another expense.'],
+            ]);
+        }
+
+        $old = $locked->only(['workflow_status', 'fulfilled_at', 'fulfilled_by']);
+        $locked->update(['workflow_status' => 'fulfilled', 'fulfilled_at' => now(), 'fulfilled_by' => $actor->id]);
+        AuditLogger::write('fulfilled', $locked, $old + ['expense_id' => null], $locked->fresh()->only(array_keys($old)) + ['expense_id' => $expense->id], $actor);
+
+        return $locked->fresh();
+    }
+
+    public function notifyFulfilled(PurchaseRequest $request, Expense $expense, User $actor): void
+    {
+        $this->notify($this->projectMembers($request->project_id, 'project-leader'), $request, 'fulfilled', $actor, null, $expense);
+    }
+
+    /**
+     * The linked draft / returned expense was deleted: the request is open
+     * again (approved, unfulfilled), with one audit entry. Runs inside the
+     * caller's transaction.
+     */
+    public function release(PurchaseRequest $request, Expense $expense, User $actor): void
+    {
+        $locked = $this->lockRecord($request);
+        if ($locked->workflow_status !== 'fulfilled') {
+            return;
+        }
+
+        $old = $locked->only(['workflow_status', 'fulfilled_at', 'fulfilled_by']);
+        $locked->update(['workflow_status' => PurchaseRequest::OPEN_APPROVED, 'fulfilled_at' => null, 'fulfilled_by' => null]);
+        AuditLogger::write('reopened', $locked, $old + ['expense_id' => $expense->id], $locked->fresh()->only(array_keys($old)) + ['expense_id' => null], $actor, 'The linked expense was deleted.');
+    }
+
+    /** Cancel an approved, unfulfilled request (Project Leader or requester; reason required). */
+    public function cancel(PurchaseRequest $request, string $reason, User $actor): PurchaseRequest
+    {
+        $isLeader = $request->project && $actor->roleOn($request->project) === 'project-leader';
+        $isRequester = (int) $request->requested_by === (int) $actor->id;
+        if (! $isLeader && ! $isRequester) {
+            abort(403, 'Only the Project Leader or the person who made this request can cancel it.');
+        }
+        $this->requireState($request, [PurchaseRequest::OPEN_APPROVED], 'cancelled');
+        $reason = $this->requireReason($reason, 'A reason is required to cancel a purchase request.');
+
+        $request = $this->moveRecord($request, 'cancelled', $actor, 'cancelled', [PurchaseRequest::OPEN_APPROVED], 'cancelled', [
+            'cancelled_at' => now(),
+            'cancelled_by' => $actor->id,
+            'cancel_reason' => $reason,
+        ], $reason);
+
+        $recipients = $this->projectMembers($request->project_id, 'project-leader')
+            ->merge($this->activeUser($request->requested_by))
+            ->unique('id')
+            ->values();
+        $this->notify($recipients, $request, 'cancelled', $actor, $reason);
+
+        return $request;
+    }
+
     protected function stageLabels(): array
     {
         return self::LABELS;
@@ -162,7 +256,7 @@ class PurchaseRequestService
         return $request->only(['project_id', 'lib_category_id', 'description', 'quantity', 'estimated_amount', 'workflow_status']);
     }
 
-    private function notify(Collection $recipients, PurchaseRequest $request, string $event, User $actor, ?string $reason = null): void
+    private function notify(Collection $recipients, PurchaseRequest $request, string $event, User $actor, ?string $reason = null, ?Expense $expense = null): void
     {
         $request->loadMissing('project');
         $what = $request->description . ' (' . $request->quantity . ' × ₱' . number_format((float) $request->estimated_amount, 2) . ' est.)';
@@ -172,6 +266,8 @@ class PurchaseRequestService
             'submitted' => ['Purchase request waiting for your approval', "{$actor->name} submitted a purchase request: {$what}."],
             'endorsed' => ['Purchase request approved', "{$actor->name} (Project Leader) approved your purchase request: {$what}."],
             'returned' => ['Purchase request returned to you', "{$actor->name} returned your purchase request: {$request->description}.{$because}"],
+            'fulfilled' => ['Purchase request fulfilled', "{$actor->name} recorded an expense (₱" . number_format((float) $expense?->amount, 2) . ") that fulfils the purchase request: {$request->description}."],
+            'cancelled' => ['Purchase request cancelled', "{$actor->name} cancelled the approved purchase request: {$request->description}.{$because}"],
         };
 
         $this->notifyUsers($recipients, new WorkflowNotification([

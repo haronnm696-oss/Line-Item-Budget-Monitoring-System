@@ -6,7 +6,9 @@ use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
 use App\Models\Document;
 use App\Models\Expense;
+use App\Models\PayrollBatch;
 use App\Models\PurchaseRequest;
+use App\Services\PayrollService;
 use App\Models\LibCategory;
 use App\Models\Liquidation;
 use App\Models\Payroll;
@@ -44,6 +46,7 @@ class AuditEntryPresenter
         'ProjectReport' => 'Project report',
         'Document' => 'Document',
         'PurchaseRequest' => 'Purchase request',
+        'PayrollBatch' => 'Payroll',
     ];
 
     /** Labels for the ACTION filter (no record type known). */
@@ -58,6 +61,9 @@ class AuditEntryPresenter
         'endorsed' => 'Approved by Project Leader',
         'returned' => 'Returned',
         'computed' => 'Payroll computed',
+        'fulfilled' => 'Fulfilled',
+        'cancelled' => 'Cancelled',
+        'reopened' => 'Reopened',
         'pay_rate_changed' => 'Pay rate changed',
         'requested' => 'Submitted',
         'budget_changed' => 'Budget changed',
@@ -146,6 +152,10 @@ class AuditEntryPresenter
         'file_name' => 'File',
         'uploaded_by' => 'Uploaded by',
         'quantity' => 'Quantity',
+        'cancel_reason' => 'Cancel reason',
+        'submitted_by' => 'Submitted by',
+        'cancelled_by' => 'Cancelled by',
+        'fulfilled_by' => 'Fulfilled by',
         'estimated_amount' => 'Estimated amount',
         'monthly_rate' => 'Monthly rate',
         'allowance' => 'Allowance',
@@ -159,7 +169,7 @@ class AuditEntryPresenter
 
     private const USER_KEYS = [
         'user_id', 'reviewed_by', 'verified_by', 'recorded_by', 'requested_by', 'computed_by',
-        'personnel_id', 'registration_reviewed_by', 'pl_reviewed_by', 'uploaded_by',
+        'personnel_id', 'registration_reviewed_by', 'pl_reviewed_by', 'uploaded_by', 'submitted_by', 'cancelled_by', 'fulfilled_by',
     ];
 
     /** Technical fields that repeat the row or carry no meaning for a reader. */
@@ -170,6 +180,7 @@ class AuditEntryPresenter
         'document_path', 'liquidation_id', 'registration_rejection_reason', 'reason',
         'return_reason', 'pl_reviewed_at', 'expense_id', 'documentable_type', 'documentable_id',
         'file_path', 'disk', 'mime', 'size', 'uploaded_at', 'record', 'record_id',
+        'fulfilled_at', 'cancelled_at',
     ];
 
     private array $users = [];
@@ -226,6 +237,7 @@ class AuditEntryPresenter
             'Expense' => Expense::withTrashed()->whereIn('id', $ids('Expense'))->get()->keyBy('id')->all(),
             'Document' => Document::query()->whereIn('id', $ids('Document'))->get()->keyBy('id')->all(),
             'PurchaseRequest' => PurchaseRequest::withTrashed()->whereIn('id', $ids('PurchaseRequest'))->get()->keyBy('id')->all(),
+            'PayrollBatch' => PayrollBatch::query()->whereIn('id', $ids('PayrollBatch'))->get()->keyBy('id')->all(),
             'Payroll' => Payroll::query()->whereIn('id', $ids('Payroll'))->get()->keyBy('id')->all(),
             'Liquidation' => Liquidation::query()->whereIn('id', $ids('Liquidation'))->get()->keyBy('id')->all(),
             'ProjectUser' => ProjectUser::query()->whereIn('id', $ids('ProjectUser'))->get()->keyBy('id')->all(),
@@ -354,6 +366,9 @@ class AuditEntryPresenter
             'endorsed' => "{$noun} approved by Project Leader",
             'returned' => "{$noun} returned",
             'computed' => "{$noun} computed",
+            'fulfilled' => "{$noun} fulfilled",
+            'cancelled' => "{$noun} cancelled",
+            'reopened' => "{$noun} reopened",
             'requested' => $type === 'ApprovalRequest' ? 'Request submitted' : "{$noun} submitted",
             default => self::ACTION_LABELS[$action] ?? self::humanize($action),
         };
@@ -361,11 +376,11 @@ class AuditEntryPresenter
 
     private function tone(string $action): string
     {
-        if (in_array($action, ['approved', 'endorsed', 'verified'], true)) {
+        if (in_array($action, ['approved', 'endorsed', 'verified', 'fulfilled'], true)) {
             return 'success';
         }
 
-        return in_array($action, ['rejected', 'returned', 'deleted', 'assignment_removed'], true) ? 'danger' : 'neutral';
+        return in_array($action, ['rejected', 'returned', 'cancelled', 'deleted', 'assignment_removed'], true) ? 'danger' : 'neutral';
     }
 
     // ---------------------------------------------------------------- record
@@ -426,6 +441,15 @@ class AuditEntryPresenter
                 return [
                     'label' => $label !== '' ? $label : 'Deleted expense',
                     'type' => 'Expense' . ($lineItem ? ' · ' . $lineItem->line_item_name : ''),
+                    'link' => $projectLink,
+                ];
+
+            case 'PayrollBatch':
+                $batch = $this->records['PayrollBatch'][$id] ?? null;
+
+                return [
+                    'label' => $batch ? $batch->monthLabel() . ' payroll' : 'Payroll',
+                    'type' => 'Payroll' . ($batch ? ' · ' . self::humanize(PayrollService::LABELS[$batch->workflow_status] ?? $batch->workflow_status) : ''),
                     'link' => $projectLink,
                 ];
 

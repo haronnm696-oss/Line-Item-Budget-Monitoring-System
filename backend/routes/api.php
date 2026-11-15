@@ -76,22 +76,24 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::patch('/expenses/{expense}/verify', [ExpenseController::class, 'verify']);
     Route::patch('/expenses/{expense}/reject', [ExpenseController::class, 'reject']);
 
-    // Payroll (PayrollService): create / compute a month, then the same
-    // workflow as expenses. Not part of LIB spent.
+    // Payroll (PayrollService): create / compute a month's rows; submit,
+    // approve / return and verify / reject act on the month's batch.
+    // Not part of LIB spent.
     Route::get('/projects/{project}/payroll', [PayrollController::class, 'index']);
     Route::post('/projects/{project}/payroll', [PayrollController::class, 'store']);
     Route::post('/projects/{project}/payroll/compute', [PayrollController::class, 'compute']);
     Route::patch('/payroll/{payroll}', [PayrollController::class, 'update']);
-    Route::post('/payroll/{payroll}/submit', [PayrollController::class, 'submit']);
-    Route::post('/payroll/{payroll}/endorse', [PayrollController::class, 'endorse']);
-    Route::post('/payroll/{payroll}/return', [PayrollController::class, 'returnPayroll']);
-    Route::post('/payroll/{payroll}/verify', [PayrollController::class, 'verify']);
-    Route::post('/payroll/{payroll}/reject', [PayrollController::class, 'reject']);
+    Route::post('/payroll-batches/{payrollBatch}/submit', [PayrollController::class, 'submit']);
+    Route::post('/payroll-batches/{payrollBatch}/endorse', [PayrollController::class, 'endorse']);
+    Route::post('/payroll-batches/{payrollBatch}/return', [PayrollController::class, 'returnBatch']);
+    Route::post('/payroll-batches/{payrollBatch}/verify', [PayrollController::class, 'verify']);
+    Route::post('/payroll-batches/{payrollBatch}/reject', [PayrollController::class, 'reject']);
     Route::get('/projects/{project}/pay-rates', [PayRateController::class, 'index']);
     Route::patch('/projects/{project}/pay-rates/{user}', [PayRateController::class, 'update']);
 
     // Purchase requests (PurchaseRequestService): draft -> submitted ->
-    // approved by Project Leader, or returned. No Finance step.
+    // approved by Project Leader, or returned; an approved request ends as
+    // fulfilled (an expense is linked) or cancelled. No Finance step.
     Route::get('/projects/{project}/purchase-requests', [PurchaseRequestController::class, 'index']);
     Route::post('/projects/{project}/purchase-requests', [PurchaseRequestController::class, 'store']);
     Route::patch('/purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'update']);
@@ -99,6 +101,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::post('/purchase-requests/{purchaseRequest}/submit', [PurchaseRequestController::class, 'submit']);
     Route::post('/purchase-requests/{purchaseRequest}/endorse', [PurchaseRequestController::class, 'endorse']);
     Route::post('/purchase-requests/{purchaseRequest}/return', [PurchaseRequestController::class, 'returnRequest']);
+    Route::post('/purchase-requests/{purchaseRequest}/cancel', [PurchaseRequestController::class, 'cancel']);
 
     // Budget requests from the Project Leader to the Program Leader.
     Route::get('/projects/{project}/budget-requests', [BudgetRequestController::class, 'index']);
@@ -110,8 +113,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     // Documents attached to a record (project members only).
     Route::get('/expenses/{expense}/documents', [DocumentController::class, 'indexForExpense']);
     Route::post('/expenses/{expense}/documents', [DocumentController::class, 'storeForExpense']);
-    Route::get('/payroll/{payroll}/documents', [DocumentController::class, 'indexForPayroll']);
-    Route::post('/payroll/{payroll}/documents', [DocumentController::class, 'storeForPayroll']);
+    Route::get('/payroll-batches/{payrollBatch}/documents', [DocumentController::class, 'indexForPayrollBatch']);
+    Route::post('/payroll-batches/{payrollBatch}/documents', [DocumentController::class, 'storeForPayrollBatch']);
     Route::get('/purchase-requests/{purchaseRequest}/documents', [DocumentController::class, 'indexForPurchaseRequest']);
     Route::post('/purchase-requests/{purchaseRequest}/documents', [DocumentController::class, 'storeForPurchaseRequest']);
     Route::get('/approvals/{approval}/documents', [DocumentController::class, 'indexForApproval']);

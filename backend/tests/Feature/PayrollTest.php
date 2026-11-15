@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AuditTrail;
 use App\Models\LibCategory;
 use App\Models\Payroll;
+use App\Models\PayrollBatch;
 use App\Models\ProjectUser;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -19,8 +20,8 @@ use Tests\TestCase;
 
 /**
  * Payroll: pay rates on the assignment, "create for a month", compute with
- * the deduction rules, and the expense-style workflow with maker-checker,
- * one audit entry per change and one notification per hand-off.
+ * the deduction rules, and the monthly batch workflow with maker-checker,
+ * one audit entry and one notification per batch hand-off.
  */
 class PayrollTest extends TestCase
 {
@@ -190,30 +191,35 @@ class PayrollTest extends TestCase
         $this->assertSame(0, Payroll::count());
     }
 
-    public function test_compute_refreshes_draft_rows_from_current_rates_only(): void
+    public function test_compute_refreshes_every_row_while_the_batch_is_editable(): void
     {
         $this->rate($this->researcher, 30000, 2000);
         $this->rate($this->assistant, 20000);
         $this->createMonth();
-        $verified = Payroll::where('personnel_id', $this->assistant->id)->firstOrFail();
-        AuditLogger::muted(fn () => $verified->update(['workflow_status' => 'verified', 'status' => 'approved']));
 
         $this->rate($this->researcher, 40000, 0);
-        $this->rate($this->assistant, 99999);
+        $this->rate($this->assistant, 25000);
 
         $audit = AuditTrail::count();
         $this->actingAs($this->assistant)
             ->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => $this->month])
             ->assertOk()
-            ->assertJsonPath('message', 'Payroll computed for 1 entry.');
-
-        $this->assertSame($audit + 1, AuditTrail::count());
-        $this->assertSame('computed', AuditTrail::latest('id')->value('action'));
+            ->assertJsonPath('message', 'Payroll computed for 2 entries.');
+        $this->assertSame($audit + 2, AuditTrail::count()); // one per row changed
         $this->assertSame(40000.0, (float) Payroll::where('personnel_id', $this->researcher->id)->value('gross_pay'));
-        $this->assertSame(20000.0, (float) $verified->fresh()->basic_rate); // verified: untouched
+        $this->assertSame(25000.0, (float) Payroll::where('personnel_id', $this->assistant->id)->value('gross_pay'));
+
+        // Not once the batch is submitted.
+        $this->postJson("/api/payroll-batches/{$this->batch()->id}/submit")->assertOk();
+        $this->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => $this->month])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.workflow_status.0', 'This payroll cannot be computed while it is submitted.');
+        $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $this->month, 'lib_category_id' => $this->ps->id])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.workflow_status.0', 'This payroll cannot be changed while it is submitted.');
     }
 
-    public function test_edit_recomputes_while_draft_and_is_refused_after_submit(): void
+    public function test_rows_are_edited_only_while_the_batch_is_draft_or_returned(): void
     {
         $payroll = $this->onePayroll();
         $audit = AuditTrail::count();
@@ -224,117 +230,132 @@ class PayrollTest extends TestCase
             ->assertJsonPath('payroll.gross', 31000);
         $this->assertSame($audit + 1, AuditTrail::count());
 
-        $this->postJson("/api/payroll/{$payroll->id}/submit")->assertOk();
+        $batch = $this->batch();
+        $this->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
         $this->patchJson("/api/payroll/{$payroll->id}", ['allowance' => 5])
             ->assertStatus(422)
             ->assertJsonPath('errors.workflow_status.0', 'This payroll cannot be edited while it is submitted.');
+
+        // Returned: editable again.
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Check the allowance.'])->assertOk();
+        $this->actingAs($this->assistant)->patchJson("/api/payroll/{$payroll->id}", ['allowance' => 500])->assertOk();
     }
 
-    // ------------------------------------------------------------ workflow
+    // ------------------------------------------------------------ batch workflow
 
-    public function test_full_workflow_with_one_audit_entry_and_notification_per_hand_off(): void
+    public function test_the_whole_month_moves_with_one_audit_entry_and_one_notification_per_hand_off(): void
     {
-        $payroll = $this->onePayroll();
+        $this->rate($this->researcher, 30000);
+        $this->rate($this->assistant, 20000);
+        $this->rate($this->projectLeader, 45000);
+        $this->createMonth();
+        $batch = $this->batch();
         $link = "/payroll?project={$this->project->id}&month={$this->month}";
 
         $audit = AuditTrail::count();
-        $this->actingAs($this->assistant)->postJson("/api/payroll/{$payroll->id}/submit")
-            ->assertOk()->assertJsonPath('payroll.workflow_status', 'submitted');
-        $this->assertStep($audit, 'submitted', $payroll->id);
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")
+            ->assertOk()
+            ->assertJsonPath('batch.workflow_status', 'submitted')
+            ->assertJsonPath('batch.submitted_by.id', $this->assistant->id);
+        $this->assertStep($audit, 'submitted', $batch->id);
         $this->assertNotified($this->projectLeader, 'submitted', $link);
+        $this->assertRowsAre('submitted', 'draft');
 
         $audit = AuditTrail::count();
-        $this->actingAs($this->projectLeader)->postJson("/api/payroll/{$payroll->id}/endorse")
-            ->assertOk()->assertJsonPath('payroll.workflow_label', 'Approved by Project Leader');
-        $this->assertStep($audit, 'endorsed', $payroll->id);
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")
+            ->assertOk()->assertJsonPath('batch.workflow_label', 'Approved by Project Leader');
+        $this->assertStep($audit, 'endorsed', $batch->id);
         $this->assertNotified($this->finance, 'endorsed', $link);
         $this->assertNotified($this->finance2, 'endorsed', $link);
+        $this->assertRowsAre('endorsed', 'draft');
 
         $audit = AuditTrail::count();
-        $this->actingAs($this->finance)->postJson("/api/payroll/{$payroll->id}/verify")
-            ->assertOk()
-            ->assertJsonPath('payroll.workflow_status', 'verified')
-            ->assertJsonPath('payroll.status', 'approved');
-        $this->assertStep($audit, 'verified', $payroll->id);
+        $this->actingAs($this->finance)->postJson("/api/payroll-batches/{$batch->id}/verify")
+            ->assertOk()->assertJsonPath('batch.workflow_status', 'verified');
+        $this->assertStep($audit, 'verified', $batch->id);
         $this->assertNotified($this->assistant, 'verified', $link);
-        $this->assertSame(4, DB::table('notifications')->count());
+        $this->assertRowsAre('verified', 'approved');
 
-        // Payroll is not LIB spent.
+        // Three rows, three hand-offs: 1 + 2 + 1 notifications (one per recipient per hand-off).
+        $this->assertSame(4, DB::table('notifications')->count());
         $this->assertSame(0.0, app(ProjectFinancialService::class)->spent($this->project));
+
+        // Files of a verified payroll stay.
+        $this->actingAs($this->assistant)->post("/api/payroll-batches/{$batch->id}/documents", [
+            'file' => UploadedFile::fake()->create('late.pdf', 10, 'application/pdf'), 'document_type' => 'payroll_file',
+        ], ['Accept' => 'application/json'])->assertStatus(422);
     }
 
-    public function test_return_and_reject_need_a_reason_and_go_back_to_the_preparer(): void
+    public function test_return_and_reject_need_a_reason_and_go_back_to_the_submitter(): void
     {
-        $payroll = $this->onePayroll();
-        $this->actingAs($this->assistant)->postJson("/api/payroll/{$payroll->id}/submit")->assertOk();
+        $this->onePayroll();
+        $batch = $this->batch();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
 
-        $this->actingAs($this->projectLeader)->postJson("/api/payroll/{$payroll->id}/return", ['reason' => ' '])->assertStatus(422);
-        $this->postJson("/api/payroll/{$payroll->id}/return", ['reason' => 'Wrong allowance.'])
-            ->assertOk()->assertJsonPath('payroll.workflow_status', 'returned')->assertJsonPath('payroll.return_reason', 'Wrong allowance.');
-        $this->assertNotified($this->assistant, 'returned');
-
-        $this->actingAs($this->assistant)->postJson("/api/payroll/{$payroll->id}/submit")->assertOk()->assertJsonPath('payroll.return_reason', null);
-        $this->actingAs($this->projectLeader)->postJson("/api/payroll/{$payroll->id}/endorse")->assertOk();
-
-        $this->actingAs($this->finance)->postJson("/api/payroll/{$payroll->id}/reject", [])->assertStatus(422)->assertJsonValidationErrors(['reason']);
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => ' '])->assertStatus(422);
         $audit = AuditTrail::count();
-        $this->postJson("/api/payroll/{$payroll->id}/reject", ['reason' => 'Missing DTR.'])
-            ->assertOk()->assertJsonPath('payroll.workflow_status', 'returned')->assertJsonPath('payroll.status', 'draft');
-        $this->assertStep($audit, 'rejected', $payroll->id);
+        $this->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Wrong allowance.'])
+            ->assertOk()->assertJsonPath('batch.workflow_status', 'returned')->assertJsonPath('batch.return_reason', 'Wrong allowance.');
+        $this->assertStep($audit, 'returned', $batch->id);
+        $this->assertNotified($this->assistant, 'returned');
+        $this->assertRowsAre('returned', 'draft');
+
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk()->assertJsonPath('batch.return_reason', null);
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")->assertOk();
+
+        $this->actingAs($this->finance)->postJson("/api/payroll-batches/{$batch->id}/reject", [])->assertStatus(422)->assertJsonValidationErrors(['reason']);
+        $audit = AuditTrail::count();
+        $this->postJson("/api/payroll-batches/{$batch->id}/reject", ['reason' => 'Missing DTR.'])
+            ->assertOk()->assertJsonPath('batch.workflow_status', 'returned');
+        $this->assertStep($audit, 'rejected', $batch->id);
         $this->assertSame('Missing DTR.', AuditTrail::latest('id')->value('reason'));
         $this->assertNotified($this->assistant, 'rejected');
     }
 
-    public function test_roles_maker_checker_and_own_pay_are_enforced(): void
+    public function test_batch_roles_and_maker_checker(): void
     {
-        // Prepared by Finance/Admin: that person cannot verify it.
-        $byFinance = $this->onePayroll($this->finance);
-        $this->actingAs($this->finance)->postJson("/api/payroll/{$byFinance->id}/submit")->assertOk();
-        $this->actingAs($this->projectLeader)->postJson("/api/payroll/{$byFinance->id}/endorse")->assertOk();
-        $this->actingAs($this->finance)->postJson("/api/payroll/{$byFinance->id}/verify")
-            ->assertForbidden()->assertJsonPath('message', 'You cannot verify or reject a payroll you computed.');
-        $this->actingAs($this->finance2)->postJson("/api/payroll/{$byFinance->id}/verify")->assertOk();
+        $this->onePayroll();
+        $batch = $this->batch();
 
-        // Wrong roles at each step.
-        $payroll = Payroll::query()->whereKeyNot($byFinance->id)->first() ?? $this->secondPayroll();
-        foreach ([$this->assistant, $this->researcher, $this->programLeader] as $user) {
-            $this->actingAs($user)->postJson("/api/payroll/{$payroll->id}/endorse")->assertForbidden();
+        // Only RA / FIN submit; only the Project Leader approves; only FIN verifies.
+        foreach ([$this->projectLeader, $this->researcher, $this->programLeader] as $user) {
+            $this->actingAs($user)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertForbidden();
         }
-        foreach ([$this->projectLeader, $this->researcher] as $user) {
-            $this->actingAs($user)->postJson("/api/payroll/{$payroll->id}/submit")->assertForbidden();
-        }
-        $this->actingAs($this->outsider)->postJson("/api/payroll/{$payroll->id}/submit")->assertForbidden();
-        $this->actingAs($this->assistant)->postJson("/api/payroll/{$payroll->id}/verify")->assertForbidden();
+        $this->actingAs($this->outsider)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertForbidden();
+        $this->actingAs($this->finance)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertStatus(422); // draft: invalid transition
 
-        // Invalid transition: verify a draft.
-        $this->actingAs($this->finance2)->postJson("/api/payroll/{$payroll->id}/verify")->assertStatus(422);
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+        foreach ([$this->assistant, $this->finance, $this->researcher, $this->programLeader] as $user) {
+            $this->actingAs($user)->postJson("/api/payroll-batches/{$batch->id}/endorse")->assertForbidden();
+        }
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")->assertOk();
+        foreach ([$this->assistant, $this->projectLeader, $this->researcher] as $user) {
+            $this->actingAs($user)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertForbidden();
+        }
+        $this->assertSame('endorsed', $batch->fresh()->workflow_status);
     }
 
-    public function test_nobody_approves_or_verifies_their_own_pay(): void
+    public function test_whoever_prepared_or_recomputed_the_batch_cannot_check_it(): void
     {
-        $this->rate($this->projectLeader, 50000);
-        $this->rate($this->finance2, 35000);
-        $this->createMonth();
-        $leaderPay = Payroll::where('personnel_id', $this->projectLeader->id)->firstOrFail();
-        $financePay = Payroll::where('personnel_id', $this->finance2->id)->firstOrFail();
+        // The Research Assistant prepares; Finance/Admin recomputes, so becomes a maker too.
+        $this->onePayroll();
+        $batch = $this->batch();
+        $this->actingAs($this->finance)->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => $this->month])->assertOk();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")->assertOk();
 
-        foreach ([$leaderPay, $financePay] as $row) {
-            $this->actingAs($this->assistant)->postJson("/api/payroll/{$row->id}/submit")->assertOk();
-        }
-        $this->actingAs($this->projectLeader)->postJson("/api/payroll/{$leaderPay->id}/endorse")
-            ->assertForbidden()->assertJsonPath('message', 'You cannot approve or return your own payroll.');
-
-        $this->postJson("/api/payroll/{$financePay->id}/endorse")->assertOk();
-        $this->actingAs($this->finance2)->postJson("/api/payroll/{$financePay->id}/verify")
-            ->assertForbidden()->assertJsonPath('message', 'You cannot verify or reject your own payroll.');
-        $this->actingAs($this->finance)->postJson("/api/payroll/{$financePay->id}/verify")->assertOk();
+        $this->actingAs($this->finance)->postJson("/api/payroll-batches/{$batch->id}/verify")
+            ->assertForbidden()->assertJsonPath('message', 'You cannot verify or reject a payroll you prepared.');
+        $this->postJson("/api/payroll-batches/{$batch->id}/reject", ['reason' => 'x'])->assertForbidden();
+        $this->actingAs($this->finance2)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk();
     }
 
-    public function test_payroll_files_use_documents(): void
+    public function test_payroll_files_attach_to_the_batch(): void
     {
-        $payroll = $this->onePayroll();
+        $this->onePayroll();
+        $batch = $this->batch();
         $this->actingAs($this->assistant);
-        $upload = fn (string $type) => $this->post("/api/payroll/{$payroll->id}/documents", [
+        $upload = fn (string $type) => $this->post("/api/payroll-batches/{$batch->id}/documents", [
             'file' => UploadedFile::fake()->create('payroll.pdf', 20, 'application/pdf'), 'document_type' => $type,
         ], ['Accept' => 'application/json']);
 
@@ -343,8 +364,8 @@ class PayrollTest extends TestCase
         $this->assertSame($audit + 1, AuditTrail::count());
         $upload('receipt')->assertStatus(422)->assertJsonValidationErrors(['document_type']);
 
-        $this->actingAs($this->projectLeader)->getJson("/api/payroll/{$payroll->id}/documents")->assertOk()->assertJsonCount(1, 'documents');
-        $this->actingAs($this->outsider)->getJson("/api/payroll/{$payroll->id}/documents")->assertForbidden();
+        $this->actingAs($this->projectLeader)->getJson("/api/payroll-batches/{$batch->id}/documents")->assertOk()->assertJsonCount(1, 'documents');
+        $this->actingAs($this->outsider)->getJson("/api/payroll-batches/{$batch->id}/documents")->assertForbidden();
     }
 
     public function test_backfill_maps_the_old_payroll_status(): void
@@ -365,6 +386,33 @@ class PayrollTest extends TestCase
         $this->assertNotNull(DB::table('payrolls')->where('id', $released)->value('verified_at'));
     }
 
+    public function test_existing_rows_are_grouped_into_monthly_batches(): void
+    {
+        $row = fn (int $month, int $personId, string $stage) => DB::table('payrolls')->insertGetId([
+            'project_id' => $this->project->id, 'lib_category_id' => $this->ps->id, 'computed_by' => $this->assistant->id,
+            'personnel_id' => $personId, 'pay_month' => $month, 'pay_year' => 2026, 'basic_rate' => 1, 'gross_pay' => 1,
+            'net_pay' => 1, 'status' => $stage === 'verified' ? 'approved' : 'draft', 'workflow_status' => $stage,
+            'created_at' => '2026-0' . $month . '-28 08:00:00', 'updated_at' => '2026-0' . $month . '-28 08:00:00',
+        ]);
+        // January: every row verified. February: mixed, so the batch is the least advanced (submitted).
+        $jan = [$row(1, $this->assistant->id, 'verified'), $row(1, $this->researcher->id, 'verified')];
+        $feb = [$row(2, $this->assistant->id, 'verified'), $row(2, $this->researcher->id, 'submitted')];
+
+        $migration = require database_path('migrations/2026_11_18_000002_create_payroll_batches_table.php');
+        $migration->backfill();
+        $migration->backfill(); // safe to rerun
+
+        $this->assertSame(2, PayrollBatch::count());
+        $january = PayrollBatch::where('pay_month', 1)->firstOrFail();
+        $february = PayrollBatch::where('pay_month', 2)->firstOrFail();
+        $this->assertSame(['verified', 'submitted'], [$january->workflow_status, $february->workflow_status]);
+        $this->assertSame($this->assistant->id, (int) $january->prepared_by);
+        $this->assertSame($jan, Payroll::where('payroll_batch_id', $january->id)->orderBy('id')->pluck('id')->all());
+        $this->assertSame($feb, Payroll::where('payroll_batch_id', $february->id)->orderBy('id')->pluck('id')->all());
+        // Rows are left as they were.
+        $this->assertSame('verified', Payroll::find($feb[0])->workflow_status);
+    }
+
     // ------------------------------------------------------------ helpers
 
     private function rate(User $user, float $monthly, float $allowance = 0): void
@@ -380,7 +428,7 @@ class PayrollTest extends TestCase
             ->assertCreated();
     }
 
-    /** One draft payroll (researcher, 30,000) prepared by $by. */
+    /** One draft payroll row (researcher, 30,000) prepared by $by. */
     private function onePayroll(?User $by = null): Payroll
     {
         $this->rate($this->researcher, 30000);
@@ -389,19 +437,24 @@ class PayrollTest extends TestCase
         return Payroll::where('personnel_id', $this->researcher->id)->firstOrFail();
     }
 
-    private function secondPayroll(): Payroll
+    private function batch(): PayrollBatch
     {
-        $this->rate($this->projectLeader, 45000);
-        $this->createMonth();
-
-        return Payroll::where('personnel_id', $this->projectLeader->id)->firstOrFail();
+        return PayrollBatch::where('project_id', $this->project->id)->where('pay_year', 2026)->where('pay_month', 11)->firstOrFail();
     }
 
-    private function assertStep(int $before, string $action, int $payrollId): void
+    private function assertRowsAre(string $stage, string $status): void
+    {
+        $rows = Payroll::where('payroll_batch_id', $this->batch()->id)->get();
+        $this->assertTrue($rows->isNotEmpty());
+        $this->assertSame([$stage], $rows->pluck('workflow_status')->unique()->values()->all());
+        $this->assertSame([$status], $rows->pluck('status')->unique()->values()->all());
+    }
+
+    private function assertStep(int $before, string $action, int $batchId): void
     {
         $this->assertSame($before + 1, AuditTrail::count(), "one audit entry for {$action}");
         $entry = AuditTrail::latest('id')->firstOrFail();
-        $this->assertSame([$action, 'Payroll', $payrollId, $this->project->id], [$entry->action, $entry->model_type, (int) $entry->model_id, (int) $entry->project_id]);
+        $this->assertSame([$action, 'PayrollBatch', $batchId, $this->project->id], [$entry->action, $entry->model_type, (int) $entry->model_id, (int) $entry->project_id]);
     }
 
     private function assertNotified(User $user, string $event, ?string $link = null): void

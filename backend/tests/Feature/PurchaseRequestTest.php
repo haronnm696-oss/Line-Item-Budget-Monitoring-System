@@ -152,6 +152,88 @@ class PurchaseRequestTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['quantity', 'estimated_amount']);
     }
 
+    public function test_an_expense_links_only_to_an_approved_open_request_of_the_same_line_item(): void
+    {
+        $approved = $this->approved();
+        $other = AuditLogger::muted(fn () => \App\Models\LibCategory::create([
+            'project_id' => $this->project->id, 'category_type' => 'MOOE', 'line_item_name' => 'Travel', 'allocated_amount' => 9000,
+        ]));
+        $this->actingAs($this->assistant);
+        $record = fn (array $extra) => $this->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload($extra));
+
+        $record(['purchase_request_id' => $approved->id, 'lib_category_id' => $other->id])
+            ->assertStatus(422)->assertJsonPath('errors.purchase_request_id.0', 'Link an approved purchase request of the same project and line item.');
+        $record(['purchase_request_id' => $this->submitted()->id])
+            ->assertStatus(422)->assertJsonPath('errors.purchase_request_id.0', 'Only an approved purchase request can be linked; this one is submitted.');
+        $this->assertSame(0, \App\Models\Expense::count()); // refused links store nothing
+
+        $record(['purchase_request_id' => $approved->id])->assertCreated();
+        $record(['purchase_request_id' => $approved->id])
+            ->assertStatus(422)->assertJsonPath('errors.purchase_request_id.0', 'Only an approved purchase request can be linked; this one is fulfilled.');
+
+        // A request of another project is not found for this project.
+        $foreign = AuditLogger::muted(fn () => PurchaseRequest::create([
+            'project_id' => $this->otherProject->id, 'lib_category_id' => $other->id, 'requested_by' => $this->outsider->id,
+            'description' => 'x', 'quantity' => 1, 'estimated_amount' => 1, 'workflow_status' => 'endorsed',
+        ]));
+        $record(['purchase_request_id' => $foreign->id])->assertStatus(422)->assertJsonValidationErrors(['purchase_request_id']);
+    }
+
+    public function test_an_unlinked_draft_can_be_linked_when_edited(): void
+    {
+        $approved = $this->approved();
+        $draft = $this->expenseIn('draft');
+
+        $this->actingAs($this->assistant)->patchJson("/api/expenses/{$draft->id}", ['purchase_request_id' => $approved->id])
+            ->assertOk()->assertJsonPath('expense.purchase_request_id', $approved->id);
+        $this->assertSame('fulfilled', $approved->fresh()->workflow_status);
+        $this->assertSame($this->assistant->id, (int) $approved->fresh()->fulfilled_by);
+
+        // The link cannot be swapped, and a linked expense stays on the request's line item.
+        $this->patchJson("/api/expenses/{$draft->id}", ['purchase_request_id' => $this->approved()->id])
+            ->assertStatus(422)->assertJsonPath('errors.purchase_request_id.0', 'This expense is already linked to a purchase request.');
+    }
+
+    public function test_cancel_by_the_project_leader_or_the_requester_with_a_reason(): void
+    {
+        $request = $this->approved();
+
+        foreach ([$this->finance, $this->researcher, $this->programLeader] as $user) {
+            $this->actingAs($user)->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => 'x'])
+                ->assertForbidden()->assertJsonPath('message', 'Only the Project Leader or the person who made this request can cancel it.');
+        }
+        $this->actingAs($this->outsider)->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => 'x'])->assertForbidden();
+        $this->actingAs($this->projectLeader)->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => ' '])
+            ->assertStatus(422)->assertJsonValidationErrors(['reason']);
+
+        $audit = AuditTrail::count();
+        $this->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => 'Budget moved to travel.'])
+            ->assertOk()
+            ->assertJsonPath('purchase_request.workflow_status', 'cancelled')
+            ->assertJsonPath('purchase_request.cancel_reason', 'Budget moved to travel.')
+            ->assertJsonPath('purchase_request.cancelled_by.id', $this->projectLeader->id);
+        $this->assertStep($audit, 'cancelled', $request->id);
+        $this->assertSame('Budget moved to travel.', AuditTrail::latest('id')->value('reason'));
+        // The Project Leader cancelled: the requester is told (the actor never is).
+        $this->assertNotified($this->assistant, 'cancelled', $request->id);
+        $this->assertCount(0, $this->projectLeader->notifications()->get());
+
+        // The requester cancels another one: the Project Leader is told.
+        $mine = $this->approved();
+        $this->actingAs($this->assistant)->postJson("/api/purchase-requests/{$mine->id}/cancel", ['reason' => 'No longer needed.'])->assertOk();
+        $this->assertNotified($this->projectLeader, 'cancelled', $mine->id);
+
+        // Only an approved, unfulfilled request can be cancelled.
+        $this->actingAs($this->projectLeader)->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => 'again'])->assertStatus(422);
+        $this->postJson("/api/purchase-requests/{$this->submitted()->id}/cancel", ['reason' => 'x'])->assertStatus(422);
+        $fulfilled = $this->approved();
+        $this->actingAs($this->assistant)
+            ->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload(['purchase_request_id' => $fulfilled->id]))
+            ->assertCreated();
+        $this->actingAs($this->projectLeader)->postJson("/api/purchase-requests/{$fulfilled->id}/cancel", ['reason' => 'x'])
+            ->assertStatus(422)->assertJsonPath('errors.workflow_status.0', 'This purchase request cannot be cancelled while it is fulfilled.');
+    }
+
     // ------------------------------------------------------------ helpers
 
     private function payload(array $overrides = []): array
@@ -183,6 +265,16 @@ class PurchaseRequestTest extends TestCase
             ]);
             $request->update(['workflow_status' => 'submitted', 'submitted_at' => now()]);
         });
+
+        return $request->fresh();
+    }
+
+    private function approved(): PurchaseRequest
+    {
+        $request = $this->submitted();
+        AuditLogger::muted(fn () => $request->update([
+            'workflow_status' => 'endorsed', 'pl_reviewed_by' => $this->projectLeader->id, 'pl_reviewed_at' => now(),
+        ]));
 
         return $request->fresh();
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\LibCategory;
 use App\Models\Payroll;
+use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Services\PayrollCalculator;
 use App\Services\PayrollService;
@@ -11,8 +12,10 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * Payroll API. Every change goes through PayrollService; project scoping is
- * enforced by the project.access middleware.
+ * Payroll API. Rows are created / computed / edited per person; submit,
+ * approve / return and verify / reject act on the month's batch. Every
+ * change goes through PayrollService; project scoping is enforced by the
+ * project.access middleware.
  */
 class PayrollController extends Controller
 {
@@ -69,34 +72,36 @@ class PayrollController extends Controller
         return response()->json(['message' => 'Payroll updated.', 'payroll' => $this->row($this->payroll->update($payroll, $data, $request->user()))]);
     }
 
-    public function submit(Request $request, Payroll $payroll)
+    // Batch hand-offs: the whole month at once.
+
+    public function submit(Request $request, PayrollBatch $payrollBatch)
     {
-        return response()->json(['message' => 'Payroll submitted to the Project Leader.', 'payroll' => $this->row($this->payroll->submit($payroll, $request->user()))]);
+        return $this->batchResponse('Payroll submitted to the Project Leader.', $this->payroll->submit($payrollBatch, $request->user()));
     }
 
-    public function endorse(Request $request, Payroll $payroll)
+    public function endorse(Request $request, PayrollBatch $payrollBatch)
     {
-        return response()->json(['message' => 'Payroll approved by the Project Leader.', 'payroll' => $this->row($this->payroll->endorse($payroll, $request->user()))]);
+        return $this->batchResponse('Payroll approved by the Project Leader.', $this->payroll->endorse($payrollBatch, $request->user()));
     }
 
-    public function returnPayroll(Request $request, Payroll $payroll)
-    {
-        $data = $request->validate(['reason' => ['required', 'string', 'max:2000']]);
-
-        return response()->json(['message' => 'Payroll returned.', 'payroll' => $this->row($this->payroll->returnToEncoder($payroll, $data['reason'], $request->user()))]);
-    }
-
-    public function verify(Request $request, Payroll $payroll)
-    {
-        return response()->json(['message' => 'Payroll verified.', 'payroll' => $this->row($this->payroll->verify($payroll, $request->user()))]);
-    }
-
-    public function reject(Request $request, Payroll $payroll)
+    public function returnBatch(Request $request, PayrollBatch $payrollBatch)
     {
         // Role and maker-checker first, then the reason.
         $reason = (string) $request->input('reason', '');
 
-        return response()->json(['message' => 'Payroll rejected and sent back.', 'payroll' => $this->row($this->payroll->reject($payroll, $reason, $request->user()))]);
+        return $this->batchResponse('Payroll returned.', $this->payroll->returnToPreparer($payrollBatch, $reason, $request->user()));
+    }
+
+    public function verify(Request $request, PayrollBatch $payrollBatch)
+    {
+        return $this->batchResponse('Payroll verified.', $this->payroll->verify($payrollBatch, $request->user()));
+    }
+
+    public function reject(Request $request, PayrollBatch $payrollBatch)
+    {
+        $reason = (string) $request->input('reason', '');
+
+        return $this->batchResponse('Payroll rejected and sent back.', $this->payroll->reject($payrollBatch, $reason, $request->user()));
     }
 
     // ---------------------------------------------------------------- views
@@ -106,7 +111,6 @@ class PayrollController extends Controller
         $rows = Payroll::query()
             ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
             ->with(['personnel', 'libCategory', 'deductions', 'computedBy', 'plReviewedBy', 'verifiedBy'])
-            ->withCount('documents')
             ->orderBy('id')
             ->get();
 
@@ -115,9 +119,12 @@ class PayrollController extends Controller
             ->map(fn ($items, $type) => ['type' => $type, 'amount' => round((float) $items->sum('amount'), 2)])
             ->values();
 
+        $batch = $this->payroll->batchFor($project, $year, $month);
+
         return [
             'month' => sprintf('%04d-%02d', $year, $month),
             'month_label' => PayrollService::monthLabel($year, $month),
+            'batch' => $batch ? $this->batch($batch) : null,
             'rows' => $rows->map(fn (Payroll $row) => $this->row($row))->values(),
             'deductionBreakdown' => $breakdown,
             'totals' => [
@@ -130,6 +137,33 @@ class PayrollController extends Controller
             'rated_members' => $this->payroll->ratedMembers($project)->count(),
             'ps_line_items' => $project->libCategories()->where('category_type', 'PS')->orderBy('id')->get()
                 ->map(fn (LibCategory $item) => ['id' => $item->id, 'name' => $item->line_item_name])->values(),
+        ];
+    }
+
+    private function batchResponse(string $message, PayrollBatch $batch)
+    {
+        return response()->json(['message' => $message] + $this->run($batch->project, $batch->pay_year, $batch->pay_month));
+    }
+
+    private function batch(PayrollBatch $batch): array
+    {
+        $batch->loadMissing(['preparedBy', 'submittedBy', 'plReviewedBy', 'verifiedBy']);
+        $person = fn ($user) => $user ? ['id' => $user->id, 'name' => $user->name] : null;
+
+        return [
+            'id' => $batch->id,
+            'workflow_status' => $batch->workflow_status,
+            'workflow_label' => PayrollService::LABELS[$batch->workflow_status] ?? $batch->workflow_status,
+            'editable' => $batch->isEditable(),
+            'return_reason' => $batch->return_reason,
+            'documents_count' => $batch->documents()->count(),
+            'prepared_by' => $person($batch->preparedBy),
+            'submitted_by' => $person($batch->submittedBy),
+            'pl_reviewed_by' => $person($batch->plReviewedBy),
+            'verified_by' => $person($batch->verifiedBy),
+            'submitted_at' => $batch->submitted_at?->toIso8601String(),
+            'pl_reviewed_at' => $batch->pl_reviewed_at?->toIso8601String(),
+            'verified_at' => $batch->verified_at?->toIso8601String(),
         ];
     }
 
@@ -157,7 +191,7 @@ class PayrollController extends Controller
             'workflow_status' => $payroll->workflow_status,
             'workflow_label' => PayrollService::LABELS[$payroll->workflow_status] ?? $payroll->workflow_status,
             'return_reason' => $payroll->return_reason,
-            'documents_count' => (int) ($payroll->documents_count ?? $payroll->documents()->count()),
+            'payroll_batch_id' => $payroll->payroll_batch_id,
             'computed_by' => $person($payroll->computedBy),
             'pl_reviewed_by' => $person($payroll->plReviewedBy),
             'verified_by' => $person($payroll->verifiedBy),

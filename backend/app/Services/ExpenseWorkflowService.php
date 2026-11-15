@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Expense;
 use App\Models\Project;
+use App\Models\PurchaseRequest;
 use App\Models\User;
 use App\Notifications\ExpenseWorkflowNotification;
 use App\Services\Concerns\RunsWorkflow;
@@ -41,22 +42,40 @@ class ExpenseWorkflowService
 
     // ---------------------------------------------------------------- create / edit
 
+    public function __construct(private PurchaseRequestService $purchaseRequests)
+    {
+    }
+
+    /**
+     * Record a draft. With purchase_request_id, the expense is linked to that
+     * approved purchase request (same project and line item), which becomes
+     * fulfilled: one audit entry for the expense and one for the request.
+     */
     public function create(Project $project, array $data, User $actor): Expense
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can record expenses.');
+        $linkId = $data['purchase_request_id'] ?? null;
 
-        return AuditLogger::transaction(function () use ($project, $data, $actor) {
+        [$expense, $request] = AuditLogger::transaction(function () use ($project, $data, $actor, $linkId) {
             $expense = Expense::create(array_merge($this->only($data), [
                 'project_id' => $project->id,
+                'purchase_request_id' => $linkId,
                 'recorded_by' => $actor->id,
                 'workflow_status' => 'draft',
                 'status' => Expense::STATUS_FOR_WORKFLOW['draft'],
             ]));
 
             AuditLogger::write('created', $expense, [], $this->snapshot($expense), $actor);
+            $request = $linkId ? $this->purchaseRequests->fulfil(PurchaseRequest::findOrFail($linkId), $expense, $actor) : null;
 
-            return $expense->fresh();
+            return [$expense->fresh(), $request];
         });
+
+        if ($request) {
+            $this->purchaseRequests->notifyFulfilled($request, $expense, $actor);
+        }
+
+        return $expense;
     }
 
     public function update(Expense $expense, array $data, User $actor): Expense
@@ -64,15 +83,34 @@ class ExpenseWorkflowService
         $this->requireRole($expense->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can edit expenses.');
         $this->requireState($expense, ['draft', 'returned'], 'edited');
 
-        return AuditLogger::transaction(function () use ($expense, $data, $actor) {
+        [$updated, $request] = AuditLogger::transaction(function () use ($expense, $data, $actor) {
             $locked = $this->lock($expense);
             $this->requireState($locked, ['draft', 'returned'], 'edited');
-            $old = $this->snapshot($locked);
-            $locked->update($this->only($data));
-            AuditLogger::write('updated', $locked, $old, $this->snapshot($locked->fresh()), $actor);
+            $linkId = $data['purchase_request_id'] ?? null;
+            $current = $locked->purchase_request_id;
 
-            return $locked->fresh();
+            if ($linkId && $current && (int) $linkId !== (int) $current) {
+                throw ValidationException::withMessages(['purchase_request_id' => ['This expense is already linked to a purchase request.']]);
+            }
+            $newLink = $linkId && ! $current ? (int) $linkId : null;
+            $lineItem = (int) ($data['lib_category_id'] ?? $locked->lib_category_id);
+            if ($current && $lineItem !== (int) $locked->lib_category_id) {
+                throw ValidationException::withMessages(['lib_category_id' => ["A linked expense stays on its purchase request's line item."]]);
+            }
+
+            $old = $this->snapshot($locked);
+            $locked->update($this->only($data) + ($newLink ? ['purchase_request_id' => $newLink] : []));
+            AuditLogger::write('updated', $locked, $old, $this->snapshot($locked->fresh()), $actor);
+            $request = $newLink ? $this->purchaseRequests->fulfil(PurchaseRequest::findOrFail($newLink), $locked->fresh(), $actor) : null;
+
+            return [$locked->fresh(), $request];
         });
+
+        if ($request) {
+            $this->purchaseRequests->notifyFulfilled($request, $updated, $actor);
+        }
+
+        return $updated;
     }
 
     public function delete(Expense $expense, User $actor): void
@@ -89,6 +127,11 @@ class ExpenseWorkflowService
             $old = $this->snapshot($locked);
             $locked->delete(); // soft delete: the row and its history stay
             AuditLogger::write('deleted', $locked, $old, [], $actor);
+
+            // A linked purchase request is open (approved, unfulfilled) again.
+            if ($locked->purchase_request_id && $request = PurchaseRequest::find($locked->purchase_request_id)) {
+                $this->purchaseRequests->release($request, $locked, $actor);
+            }
         });
     }
 
@@ -236,7 +279,7 @@ class ExpenseWorkflowService
     private function snapshot(Expense $expense): array
     {
         return $expense->only([
-            'project_id', 'lib_category_id', 'reference_no', 'payee', 'description', 'amount', 'expense_date', 'workflow_status',
+            'project_id', 'lib_category_id', 'purchase_request_id', 'reference_no', 'payee', 'description', 'amount', 'expense_date', 'workflow_status',
         ]);
     }
 

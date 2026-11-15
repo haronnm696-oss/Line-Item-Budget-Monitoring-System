@@ -2,17 +2,16 @@
 
 namespace App\Models;
 
-use App\Models\Contracts\HasDocuments;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Validation\ValidationException;
 
 /**
- * One person's pay on a project for one month. Workflow like expenses:
- * draft -> submitted -> endorsed -> verified, or returned. Payroll is not
- * part of LIB spent / utilization.
+ * One person's pay on a project for one month, in that month's
+ * PayrollBatch. The batch carries the workflow (draft -> submitted ->
+ * endorsed -> verified, or returned); the row's workflow columns follow the
+ * batch. Payroll is not part of LIB spent / utilization.
  */
-class Payroll extends Model implements HasDocuments
+class Payroll extends Model
 {
     /** workflow_status -> the existing status enum (draft / approved / released). */
     public const STATUS_FOR_WORKFLOW = [
@@ -51,7 +50,7 @@ class Payroll extends Model implements HasDocuments
     }
 
     protected $fillable = [
-        'project_id', 'lib_category_id', 'personnel_id', 'computed_by',
+        'project_id', 'payroll_batch_id', 'lib_category_id', 'personnel_id', 'computed_by',
         'pay_month', 'pay_year', 'basic_rate', 'allowance', 'gross_pay',
         'total_deductions', 'net_pay', 'status',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at',
@@ -104,9 +103,9 @@ class Payroll extends Model implements HasDocuments
         return $this->hasMany(PayrollDeduction::class);
     }
 
-    public function documents(): MorphMany
+    public function batch()
     {
-        return $this->morphMany(Document::class, 'documentable');
+        return $this->belongsTo(PayrollBatch::class, 'payroll_batch_id');
     }
 
     /** "2026-11" */
@@ -121,19 +120,5 @@ class Payroll extends Model implements HasDocuments
         $this->total_deductions = $this->deductions()->sum('amount');
         $this->net_pay = $this->gross_pay - $this->total_deductions;
         $this->save();
-    }
-
-    public function documentRules(): array
-    {
-        return [
-            'folder' => 'payroll',
-            'types' => ['payroll_file', 'other'],
-            'uploader_roles' => ['research-assistant', 'finance-admin'],
-            'uploader_message' => 'Only a Research Assistant or Finance/Admin staff of this project can attach payroll files.',
-            'open' => in_array($this->workflow_status, ['draft', 'returned'], true),
-            'closed_message' => 'Payroll files can be attached only while the payroll is a draft or returned.',
-            'locked' => $this->workflow_status === 'verified',
-            'locked_message' => 'Files of a verified payroll cannot be deleted.',
-        ];
     }
 }

@@ -6,7 +6,7 @@ use App\Models\ApprovalRequest;
 use App\Models\Contracts\HasDocuments;
 use App\Models\Document;
 use App\Models\Expense;
-use App\Models\Payroll;
+use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\User;
@@ -19,8 +19,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
- * Documents attached to a record (expense, payroll entry, purchase request,
- * budget request). Project scoping (project.access) limits every route to
+ * Documents attached to a record (expense, monthly payroll batch, purchase
+ * request, budget request). Project scoping (project.access) limits every route to
  * the Program Leader and members of the record's project; each record type
  * sets who may upload, when, and which types (HasDocuments::documentRules).
  * Upload and delete each write exactly one audit entry.
@@ -30,8 +30,8 @@ class DocumentController extends Controller
     // One typed pair per record so route-model binding resolves the record.
     public function indexForExpense(Expense $expense) { return $this->index($expense); }
     public function storeForExpense(Request $request, Expense $expense) { return $this->store($request, $expense); }
-    public function indexForPayroll(Payroll $payroll) { return $this->index($payroll); }
-    public function storeForPayroll(Request $request, Payroll $payroll) { return $this->store($request, $payroll); }
+    public function indexForPayrollBatch(PayrollBatch $payrollBatch) { return $this->index($payrollBatch); }
+    public function storeForPayrollBatch(Request $request, PayrollBatch $payrollBatch) { return $this->store($request, $payrollBatch); }
     public function indexForPurchaseRequest(PurchaseRequest $purchaseRequest) { return $this->index($purchaseRequest); }
     public function storeForPurchaseRequest(Request $request, PurchaseRequest $purchaseRequest) { return $this->store($request, $purchaseRequest); }
     public function indexForApproval(ApprovalRequest $approval) { return $this->index($approval); }

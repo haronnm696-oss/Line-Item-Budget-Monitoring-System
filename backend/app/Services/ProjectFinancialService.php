@@ -142,10 +142,18 @@ class ProjectFinancialService
     public const PENDING_STAGES = ['submitted', 'endorsed'];
 
     /**
-     * Balancing query per line item: allocated, spent (verified expenses),
-     * pending (submitted + endorsed expenses and purchase requests, not yet
-     * verified) and available = allocated - spent - pending. Payroll is not
-     * included.
+     * Balancing query per line item: allocated, spent, pending and
+     * available = allocated - spent - pending. Payroll is not included.
+     *
+     *   spent    verified expenses
+     *   pending  expenses submitted or approved by the Project Leader, plus
+     *            any not-yet-verified expense linked to a purchase request
+     *            (it took over that request's money), plus purchase
+     *            requests that are approved and still open (not fulfilled,
+     *            not cancelled)
+     *
+     * A fulfilled request stops counting and its linked expense counts
+     * instead, so the same money is never counted twice.
      *
      * @return array{line_items: array<int, array<string, mixed>>, totals: array<string, float>}
      */
@@ -160,8 +168,11 @@ class ProjectFinancialService
         };
 
         $spent = $sums(self::onlySpent(Expense::query()), 'amount');
-        $pendingExpenses = $sums(Expense::query()->whereIn('workflow_status', self::PENDING_STAGES), 'amount');
-        $pendingRequests = $sums(PurchaseRequest::query()->whereIn('workflow_status', self::PENDING_STAGES), 'estimated_amount');
+        $pendingExpenses = $sums(Expense::query()->where(function ($q) {
+            $q->whereIn('workflow_status', self::PENDING_STAGES)
+                ->orWhere(fn ($linked) => $linked->whereNotNull('purchase_request_id')->whereIn('workflow_status', ['draft', 'returned']));
+        }), 'amount');
+        $pendingRequests = $sums(PurchaseRequest::query()->where('workflow_status', PurchaseRequest::OPEN_APPROVED), 'estimated_amount');
 
         $rows = $project->libCategories()
             ->when($lineItemId, fn ($q) => $q->whereKey($lineItemId))

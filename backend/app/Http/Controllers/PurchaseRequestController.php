@@ -73,6 +73,15 @@ class PurchaseRequestController extends Controller
         return response()->json(['message' => 'Purchase request returned.', 'purchase_request' => $this->row($this->requests->returnToRequester($purchaseRequest, $data['reason'], $request->user()))]);
     }
 
+    /** POST /api/purchase-requests/{id}/cancel { reason } — Project Leader or requester. */
+    public function cancel(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        // Who may cancel is checked before the reason.
+        $reason = (string) $request->input('reason', '');
+
+        return response()->json(['message' => 'Purchase request cancelled.', 'purchase_request' => $this->row($this->requests->cancel($purchaseRequest, $reason, $request->user()))]);
+    }
+
     private function validated(Request $request, Project $project, bool $partial = false): array
     {
         $required = $partial ? 'sometimes' : 'required';
@@ -87,7 +96,7 @@ class PurchaseRequestController extends Controller
 
     private function row(PurchaseRequest $row): array
     {
-        $row->loadMissing(['libCategory', 'requestedBy', 'plReviewedBy']);
+        $row->loadMissing(['libCategory', 'requestedBy', 'plReviewedBy', 'fulfilledBy', 'cancelledBy', 'expense']);
         $person = fn ($user) => $user ? ['id' => $user->id, 'name' => $user->name] : null;
 
         return [
@@ -106,6 +115,12 @@ class PurchaseRequestController extends Controller
             'pl_reviewed_by' => $person($row->plReviewedBy),
             'submitted_at' => $row->submitted_at?->toIso8601String(),
             'pl_reviewed_at' => $row->pl_reviewed_at?->toIso8601String(),
+            'expense_id' => $row->expense?->id,
+            'fulfilled_by' => $person($row->fulfilledBy),
+            'fulfilled_at' => $row->fulfilled_at?->toIso8601String(),
+            'cancelled_by' => $person($row->cancelledBy),
+            'cancelled_at' => $row->cancelled_at?->toIso8601String(),
+            'cancel_reason' => $row->cancel_reason,
             'created_at' => $row->created_at?->toIso8601String(),
         ];
     }
