@@ -689,7 +689,7 @@ class PayrollTest extends TestCase
         $this->assertSame($audit + 1, AuditTrail::count()); // only the upload
 
         $this->post("/api/payroll-batches/{$batch->id}/documents", [
-            'file' => UploadedFile::fake()->create('payroll.pdf', 20, 'application/pdf'), 'document_type' => 'payroll_file',
+            'file' => $this->uniqueUpload('payroll.pdf'), 'document_type' => 'payroll_file',
         ], ['Accept' => 'application/json'])->assertCreated();
         $this->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk()->assertJsonPath('batch.workflow_status', 'submitted');
     }

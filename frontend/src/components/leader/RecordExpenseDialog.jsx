@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import FileField from '../FileField';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
 import { errorText, fetchDocuments, fieldErrors } from '../../api/leader';
@@ -69,6 +70,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   // Progress, so a retry continues where it stopped: { id, patched, removed: [], uploaded }.
   const [saved, setSaved] = useState(editing ? { id: expense.id, patched: false, removed: [], uploaded: false } : null);
   const [documents, setDocuments] = useState(null); // edit: the expense's current documents
@@ -342,18 +344,20 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
           )}
 
           <div className="program-field full">
-            <label htmlFor="ld-exp-file">
-              {editing ? 'Add or replace the receipt' : 'Receipt'}{' '}
-              {editing
-                ? <span className="ld-muted">optional when a receipt is kept</span>
-                : <span className="ld-required">{assistant ? 'required to submit' : 'required'}</span>}
-            </label>
-            <input
+            <FileField
               id="ld-exp-file"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
+              label={<>
+                {editing ? 'Add or replace the receipt' : 'Receipt'}{' '}
+                {editing
+                  ? <span className="ld-muted">optional when a receipt is kept</span>
+                  : <span className="ld-required">{assistant ? 'required to submit' : 'required'}</span>}
+              </>}
               disabled={busy || saved?.uploaded}
+              onPreparing={setPreparing}
+              onChange={(prepared, problem) => {
+                setReceipt(prepared);
+                setErrors((current) => ({ ...current, file: problem ?? undefined }));
+              }}
             />
             {saved?.uploaded && <div className="ld-hint">Receipt attached.</div>}
             {err('file')}
@@ -369,11 +373,11 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
           )}
           {assistant && discardable && <button type="button" className="program-btn" onClick={close} disabled={busy}>Keep draft and close</button>}
           {assistant && (
-            <button type="button" className="program-btn" onClick={() => run(false)} disabled={busy || (editing && documents === null)}>
+            <button type="button" className="program-btn" onClick={() => run(false)} disabled={busy || preparing || (editing && documents === null)}>
               {editing ? 'Save changes' : (saved ? 'Save draft' : 'Save as draft')}
             </button>
           )}
-          <button type="submit" className="program-btn primary" disabled={busy || (editing && documents === null)}>
+          <button type="submit" className="program-btn primary" disabled={busy || preparing || (editing && documents === null)}>
             {busy ? 'Saving…'
               : retrying ? 'Try again'
               : editing ? (expense.workflow_status === 'draft' ? 'Save and submit' : 'Resubmit')

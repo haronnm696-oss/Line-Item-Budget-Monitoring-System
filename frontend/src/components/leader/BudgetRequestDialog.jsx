@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import FileField from '../FileField';
 import { ENDPOINTS } from '../../api/endpoints';
 import { errorText, fieldErrors, submitBudgetRequest } from '../../api/leader';
 import { useApiData } from '../../lib/useApiData';
@@ -32,6 +33,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, requests 
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   const pendingTranches = new Set(
     requests.filter((r) => r.type === 'fund_release' && r.status === 'pending').map((r) => String(r.project_tranche_id))
@@ -204,14 +206,16 @@ export default function BudgetRequestDialog({ projectId, initial = {}, requests 
               </select>
             </div>
             <div className="program-field">
-              <label htmlFor="ld-liq-files">Supporting documents (PDF, JPG, PNG)</label>
-              <input
+              <FileField
                 id="ld-liq-files"
-                type="file"
+                label="Supporting documents"
                 multiple
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                 disabled={busy}
+                onPreparing={setPreparing}
+                onChange={(prepared, problem) => {
+                  setFiles(prepared);
+                  setErrors((current) => ({ ...current, files: problem ?? undefined }));
+                }}
               />
               {files.length > 0 && <div className="ld-hint">{files.length} file{files.length === 1 ? '' : 's'} chosen</div>}
               {err('files')}
@@ -236,7 +240,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, requests 
 
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="program-btn primary" disabled={busy || overAvailable}>
+          <button type="submit" className="program-btn primary" disabled={busy || preparing || overAvailable}>
             {busy ? 'Sending…' : 'Send to Program Leader'}
           </button>
         </div>

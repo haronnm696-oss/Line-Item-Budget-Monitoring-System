@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import FileField from '../FileField';
 import { uploadDocument } from '../../api/assistant';
 import { errorText } from '../../api/leader';
 import { peso } from '../money';
@@ -21,6 +22,7 @@ export default function UploadDialog({ record, types, title = 'Upload document',
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   async function submit(event) {
     event.preventDefault();
@@ -69,14 +71,19 @@ export default function UploadDialog({ record, types, title = 'Upload document',
           </div>
         )}
         <div className="program-field">
-          <label htmlFor="ra-upload-file">File <span className="ld-muted">PDF, JPG or PNG, up to 10 MB</span></label>
-          <input id="ra-upload-file" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(''); }} disabled={busy} />
+          <FileField
+            id="ra-upload-file"
+            label="File"
+            disabled={busy}
+            onPreparing={setPreparing}
+            onChange={(prepared, problem) => { setFile(prepared); setError(problem ?? ''); }}
+          />
         </div>
         {error && <div className="field-err" role="alert">{error}</div>}
 
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button>
+          <button type="submit" className="program-btn primary" disabled={busy || preparing}>{busy ? 'Uploading…' : preparing ? 'Preparing…' : 'Upload'}</button>
         </div>
       </form>
     </div>

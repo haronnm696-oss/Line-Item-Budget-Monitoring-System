@@ -16,12 +16,13 @@ class Document extends Model
 
     protected $fillable = [
         'documentable_type', 'documentable_id', 'uploaded_by', 'document_type',
-        'file_name', 'file_path', 'disk', 'size', 'mime', 'uploaded_at',
+        'file_name', 'file_path', 'disk', 'size', 'mime', 'uploaded_at', 'file_missing_at',
     ];
 
     protected $casts = [
         'size' => 'integer',
         'uploaded_at' => 'datetime',
+        'file_missing_at' => 'datetime',
     ];
 
     public function documentable(): MorphTo

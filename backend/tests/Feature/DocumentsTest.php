@@ -67,16 +67,16 @@ class DocumentsTest extends TestCase
         $upload(['file' => UploadedFile::fake()->create('notes.txt', 5, 'text/plain'), 'document_type' => 'receipt'])
             ->assertStatus(422)
             ->assertJsonPath('errors.file.0', 'Upload a PDF, JPG or PNG file.');
-        $upload(['file' => UploadedFile::fake()->create('big.pdf', 10241, 'application/pdf'), 'document_type' => 'receipt'])
+        $upload(['file' => UploadedFile::fake()->create('big.pdf', 5121, 'application/pdf'), 'document_type' => 'receipt'])
             ->assertStatus(422)
-            ->assertJsonPath('errors.file.0', 'The file must not be larger than 10 MB.');
+            ->assertJsonPath('errors.file.0', 'The file is too large. The limit is 5 MB per file.');
         $upload(['file' => UploadedFile::fake()->create('ok.pdf', 10, 'application/pdf'), 'document_type' => 'selfie'])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['document_type']);
 
-        $upload(['file' => UploadedFile::fake()->create('receipt.png', 50, 'image/png'), 'document_type' => 'receipt'])->assertCreated();
-        $upload(['file' => UploadedFile::fake()->create('invoice.jpg', 50, 'image/jpeg'), 'document_type' => 'invoice'])->assertCreated();
-        $upload(['file' => UploadedFile::fake()->create('max.pdf', 10240, 'application/pdf'), 'document_type' => 'quotation'])->assertCreated();
+        $upload(['file' => $this->uniqueUpload('receipt.png', 50, 'image/png'), 'document_type' => 'receipt'])->assertCreated();
+        $upload(['file' => $this->uniqueUpload('invoice.jpg', 50, 'image/jpeg'), 'document_type' => 'invoice'])->assertCreated();
+        $upload(['file' => $this->uniqueUpload('max.pdf', 5120), 'document_type' => 'quotation'])->assertCreated(); // exactly 5 MB
 
         $this->assertSame(3, $expense->documents()->count());
     }
@@ -120,7 +120,9 @@ class DocumentsTest extends TestCase
         $this->actingAs($this->projectLeader)
             ->getJson("/api/documents/{$document->id}/download")
             ->assertNotFound()
-            ->assertJsonPath('message', 'File unavailable.');
+            ->assertJsonPath('message', 'File not available.');
+        $this->assertNotNull($document->fresh()->file_missing_at);
+        $this->getJson("/api/expenses/{$expense->id}/documents")->assertJsonPath('documents.0.available', false);
     }
 
     public function test_only_the_uploader_deletes_and_never_after_verification(): void

@@ -3816,3 +3816,6 @@ select.signin-input:disabled{
   .fin-queue-card{flex-direction:column}
   .fin-queue-side{align-items:flex-start}
 }
+.ld-file-missing{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:12.5px;font-weight:650;color:var(--pg-watch)}
+.file-size-line{margin-top:4px;overflow-wrap:anywhere}
+.file-size-line b{font-weight:700}

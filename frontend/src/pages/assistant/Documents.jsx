@@ -99,7 +99,8 @@ export default function Documents() {
             <section className="program-card ld-list-card">
               <ul className="ld-doc-list">
                 {documents.map((doc) => {
-                  const canPreview = doc.mime === 'application/pdf' || String(doc.mime).startsWith('image/');
+                  const missing = doc.available === false;
+                  const canPreview = !missing && (doc.mime === 'application/pdf' || String(doc.mime).startsWith('image/'));
                   const showing = preview?.id === doc.id;
                   return (
                     <li key={doc.id} className={`ld-doc${showing ? ' ra-doc-on' : ''}`}>
@@ -122,7 +123,9 @@ export default function Documents() {
                             {showing ? 'Hide' : 'Preview'}
                           </button>
                         )}
-                        <a className="program-btn sm" href={apiUrl(doc.download_url)}>Download</a>
+                        {missing
+                          ? <span className="ld-file-missing" role="note"><span aria-hidden="true">⊘</span> File not available</span>
+                          : <a className="program-btn sm" href={apiUrl(doc.download_url)}>Download</a>}
                       </div>
                     </li>
                   );

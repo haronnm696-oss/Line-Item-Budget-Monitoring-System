@@ -89,4 +89,27 @@ if [ "${RUN_DEMO_ASSIGN:-0}" = "1" ]; then
         || echo "WARNING: DemoProjectAssignmentsSeeder failed; the app is starting anyway."
 fi
 
+# Opt-in: set RUN_DOCUMENT_IMPORT=1 on Render (no shell on the free plan) to
+# copy document files from their old disk into the database on boot. The
+# command is idempotent; remove the variable once the log shows "done".
+# A failure is reported but never stops the app from starting.
+if [ "${RUN_DOCUMENT_IMPORT:-}" = "1" ]; then
+    echo "[document-import] start"
+    import_log=/tmp/document-import.log
+    if php artisan documents:import-to-database --no-interaction --no-ansi > "${import_log}" 2>&1; then
+        import_status=0
+    else
+        import_status=$?
+    fi
+    cat "${import_log}"
+    if [ "${import_status}" -eq 0 ]; then
+        imported=$(sed -n 's/^Imported: \([0-9][0-9]*\).*/\1/p' "${import_log}" | tail -n 1)
+        skipped=$(sed -n 's/^Already in the database: \([0-9][0-9]*\).*/\1/p' "${import_log}" | tail -n 1)
+        missing=$(sed -n 's/^File missing[^:]*: \([0-9][0-9]*\).*/\1/p' "${import_log}" | tail -n 1)
+        echo "[document-import] done imported=${imported:-?} skipped=${skipped:-?} missing=${missing:-?}"
+    else
+        echo "[document-import] FAILED exit=${import_status}; the app is starting anyway."
+    fi
+fi
+
 exec apache2-foreground

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import FileField from '../FileField';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
 import { errorText, fetchDocuments, fieldErrors } from '../../api/leader';
@@ -46,6 +47,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [saved, setSaved] = useState(editing ? { id: request.id, patched: false, removed: [], uploaded: false } : null);
   const [documents, setDocuments] = useState(null);
   const [toRemove, setToRemove] = useState([]);
@@ -243,10 +245,16 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
             </select>
           </div>
           <div className="program-field">
-            <label htmlFor="ra-pr-file">
-              Quotation or invoice {editing && keptSupporting.length > 0 ? <span className="ld-muted">optional, one is kept</span> : <span className="ld-required">required to submit</span>}
-            </label>
-            <input id="ra-pr-file" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setFile(event.target.files?.[0] ?? null)} disabled={busy || saved?.uploaded} />
+            <FileField
+              id="ra-pr-file"
+              label={<>Quotation or invoice {editing && keptSupporting.length > 0 ? <span className="ld-muted">optional, one is kept</span> : <span className="ld-required">required to submit</span>}</>}
+              disabled={busy || saved?.uploaded}
+              onPreparing={setPreparing}
+              onChange={(prepared, problem) => {
+                setFile(prepared);
+                setErrors((current) => ({ ...current, file: problem ?? undefined }));
+              }}
+            />
             {saved?.uploaded && <div className="ld-hint">Document attached.</div>}
             {err('file')}
             {err('documents')}
@@ -259,10 +267,10 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
           ) : (
             <button type="button" className="program-btn" onClick={close} disabled={busy}>Cancel</button>
           )}
-          <button type="button" className="program-btn" onClick={() => run(false)} disabled={busy || (editing && documents === null)}>
+          <button type="button" className="program-btn" onClick={() => run(false)} disabled={busy || preparing || (editing && documents === null)}>
             {editing ? 'Save changes' : saved ? 'Save draft' : 'Save as draft'}
           </button>
-          <button type="submit" className="program-btn primary" disabled={busy || (editing && documents === null)}>
+          <button type="submit" className="program-btn primary" disabled={busy || preparing || (editing && documents === null)}>
             {busy ? 'Saving…' : retrying ? 'Try again' : returned ? 'Resubmit' : 'Save, attach and submit'}
           </button>
         </div>

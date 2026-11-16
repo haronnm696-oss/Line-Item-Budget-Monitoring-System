@@ -19,6 +19,8 @@ function sizeLabel(bytes) {
 /**
  * Documents of one record with previews (images inline, PDFs in a frame)
  * and download links. `type` is expense | payroll | purchase_request | approval.
+ * A document whose file is missing (available: false) shows "File not
+ * available" instead of a broken preview; its row is kept.
  */
 export default function DocumentList({ type, id }) {
   const key = `${type}-${id}`;
@@ -41,7 +43,8 @@ export default function DocumentList({ type, id }) {
     <div className="ld-docs">
       <ul className="ld-doc-list">
         {result.documents.map((doc) => {
-          const canPreview = doc.mime === 'application/pdf' || String(doc.mime).startsWith('image/');
+          const missing = doc.available === false;
+          const canPreview = !missing && (doc.mime === 'application/pdf' || String(doc.mime).startsWith('image/'));
           const open = preview?.id === doc.id;
           return (
             <li key={doc.id} className="ld-doc">
@@ -58,7 +61,9 @@ export default function DocumentList({ type, id }) {
                     {open ? 'Hide' : 'Preview'}
                   </button>
                 )}
-                <a className="program-btn sm" href={apiUrl(doc.download_url)}>Download</a>
+                {missing
+                  ? <span className="ld-file-missing" role="note"><span aria-hidden="true">⊘</span> File not available</span>
+                  : <a className="program-btn sm" href={apiUrl(doc.download_url)}>Download</a>}
               </div>
             </li>
           );

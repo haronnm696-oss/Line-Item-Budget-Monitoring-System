@@ -43,7 +43,10 @@
  *   POST   /api/expenses/:id/reject         -> { reason } FIN; sends it back as returned (PATCH also accepted)
  *   403 = wrong role or maker = checker; 422 = not allowed in the current stage.
  *
- * Documents (PDF / JPG / PNG, up to 10 MB):
+ * Documents (PDF / JPG / PNG, up to 5 MB; an exact duplicate on the same record is refused).
+ * Bytes are stored per DOCUMENTS_DISK (default: the database) and only ever
+ * streamed by the download route; lists carry `available: false` when the
+ * file is missing ("File not available").
  *   GET    /api/expenses/:id/documents
  *   POST   /api/expenses/:id/documents      -> multipart { file, document_type: receipt|invoice|quotation|payroll_file|other }
  *   GET    /api/documents/:id/download      -> the file (project members only)

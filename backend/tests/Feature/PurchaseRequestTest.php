@@ -282,7 +282,7 @@ class PurchaseRequestTest extends TestCase
     private function upload(int $id, string $type)
     {
         return $this->actingAs($this->assistant)->post("/api/purchase-requests/{$id}/documents", [
-            'file' => UploadedFile::fake()->create('quote.pdf', 30, 'application/pdf'),
+            'file' => $this->uniqueUpload('quote.pdf', 30),
             'document_type' => $type,
         ], ['Accept' => 'application/json']);
     }

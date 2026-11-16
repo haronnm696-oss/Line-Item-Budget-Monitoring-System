@@ -12,6 +12,8 @@ use App\Models\ProjectUser;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\AuditLogger;
+use Illuminate\Http\Testing\File;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 
 /**
@@ -159,5 +161,17 @@ trait BuildsExpenseWorkflow
             'mime' => 'application/pdf',
             'uploaded_at' => now(),
         ]);
+    }
+
+    /**
+     * A fake upload with its own bytes. UploadedFile::fake()->create() only
+     * reports a size (its contents are empty), so two of them are identical
+     * and the second is refused as a duplicate on the same record.
+     */
+    protected function uniqueUpload(string $name, int $kilobytes = 20, ?string $mime = null): File
+    {
+        return UploadedFile::fake()->createWithContent($name, $name . ':' . uniqid('', true))
+            ->size($kilobytes)
+            ->mimeType($mime ?? 'application/pdf');
     }
 }

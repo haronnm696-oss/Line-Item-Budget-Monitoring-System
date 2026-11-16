@@ -130,8 +130,8 @@ class BudgetRequestTest extends TestCase
             'amount' => 180000,
             'justification' => 'Liquidation of the first tranche.',
             'files' => [
-                UploadedFile::fake()->create('liquidation.pdf', 200, 'application/pdf'),
-                UploadedFile::fake()->create('ORs.jpg', 100, 'image/jpeg'),
+                $this->uniqueUpload('liquidation.pdf', 200),
+                $this->uniqueUpload('ORs.jpg', 100, 'image/jpeg'),
             ],
         ], ['Accept' => 'application/json'])
             ->assertCreated()
