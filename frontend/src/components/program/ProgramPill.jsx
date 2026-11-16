@@ -19,6 +19,19 @@ const PILL = {
   'Budget change': ['amber', '₱'],
   Planning: ['neutral', '•'],
   Terminated: ['risk', '✕'],
+  Payroll: ['amber', '₱'],
+  // Project Leader pages: record types and workflow stages.
+  Expense: ['neutral', '▤'],
+  'Purchase request': ['neutral', '◇'],
+  Draft: ['neutral', '•'],
+  Submitted: ['watch', '⚠'],
+  Returned: ['risk', '↩'],
+  'Approved by Project Leader': ['healthy', '✓'],
+  Verified: ['healthy', '✓'],
+  Fulfilled: ['healthy', '✓'],
+  Cancelled: ['neutral', '⊘'],
+  'Not yet requested': ['neutral', '•'],
+  'Over budget': ['risk', '!'],
 };
 
 export function pillTone(value) {

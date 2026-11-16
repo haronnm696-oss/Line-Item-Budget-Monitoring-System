@@ -59,8 +59,27 @@ class NotificationController extends Controller
             'title' => $data['title'] ?? 'Notification',
             'message' => $data['message'] ?? '',
             'link' => $data['link'] ?? null,
+            // The record it is about, so the bell can open it ({type, id} or null).
+            'project_id' => isset($data['project_id']) ? (int) $data['project_id'] : null,
+            'record' => $this->record($data),
             'read' => $notification->read_at !== null,
             'created_at' => $notification->created_at?->toIso8601String(),
         ];
+    }
+
+    private function record(array $data): ?array
+    {
+        foreach ([
+            'expense_id' => 'expense',
+            'payroll_batch_id' => 'payroll',
+            'purchase_request_id' => 'purchase_request',
+            'approval_id' => 'approval',
+        ] as $field => $type) {
+            if (! empty($data[$field])) {
+                return ['type' => $type, 'id' => (int) $data[$field]];
+            }
+        }
+
+        return null;
     }
 }

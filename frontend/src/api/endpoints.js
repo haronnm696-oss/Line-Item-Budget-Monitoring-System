@@ -101,6 +101,21 @@
  *   POST /api/projects/:id/team              -> { user_id, role_id }
  *   GET  /api/roles                          -> role catalogue + capability matrix
  *
+ * Project Leader pages (project-leader of the project; 403 otherwise):
+ *   GET /api/projects/:id/leader-overview   -> { project, kpis, review, alerts, monthly_expenses, category_summary, transactions, requests }
+ *   GET /api/projects/:id/review-queue?tab=waiting|returned|approved&type=expense|payroll|purchase_request
+ *                                           -> { counts: { waiting, returned, approved }, items }
+ *   GET /api/projects/:id/review-queue/:type/:id -> { item } (any stage)
+ *   GET  /api/projects/:id/leader-badges     -> { submissions (= To review), requests (decisions not seen) }
+ *   POST /api/projects/:id/budget-requests/seen -> same; marks the decisions seen (My requests opened)
+ *   A Project Leader may also record expenses (POST /projects/:id/expenses) and edit, attach
+ *   receipts to and submit their own; their submit skips the approval step (-> endorsed,
+ *   "Waiting for Finance/Admin verification").
+ *   Approve / return: the expense, payroll-batch and purchase-request routes above.
+ *   GET /api/projects/:id/transactions?from=&to=&line_item=&category=PS|MOOE&page=
+ *                                           -> verified expenses, 25 per page (any project member)
+ *   GET /api/documents/:id/download?inline=1 -> images / PDF shown inline (previews)
+ *
  * All list endpoints accept `page` / `per_page` and return Laravel's default
  * paginator shape ({ data, meta, links }).
  */
@@ -165,6 +180,13 @@ export const ENDPOINTS = {
   budgetRequests: (projectId) => `/api/projects/${projectId}/budget-requests`,
   approvalDocuments: (id) => `/api/approvals/${id}/documents`,
   balancing: (projectId) => `/api/projects/${projectId}/balancing`,
+  // Project Leader pages (read-only; decisions use the workflow routes).
+  leaderOverview: (projectId) => `/api/projects/${projectId}/leader-overview`,
+  leaderBadges: (projectId) => `/api/projects/${projectId}/leader-badges`,
+  budgetRequestsSeen: (projectId) => `/api/projects/${projectId}/budget-requests/seen`,
+  reviewQueue: (projectId) => `/api/projects/${projectId}/review-queue`,
+  reviewItem: (projectId, type, id) => `/api/projects/${projectId}/review-queue/${type}/${id}`,
+  transactions: (projectId) => `/api/projects/${projectId}/transactions`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,

@@ -61,10 +61,19 @@ class DocumentController extends Controller
         return response()->json(['message' => 'Document uploaded.', 'document' => self::row($document->load('uploader'))], 201);
     }
 
-    public function download(Document $document)
+    /** GET /api/documents/{id}/download[?inline=1] — inline only for images and PDFs (previews). */
+    public function download(Request $request, Document $document)
     {
         $storage = Storage::disk($document->disk);
         abort_unless($storage->exists($document->file_path), 404, 'File unavailable.');
+
+        $previewable = in_array($document->mime, ['application/pdf', 'image/jpeg', 'image/png'], true);
+        if ($request->boolean('inline') && $previewable) {
+            return $storage->response($document->file_path, $document->file_name, [
+                'Content-Type' => $document->mime,
+                'X-Content-Type-Options' => 'nosniff',
+            ], 'inline');
+        }
 
         return $storage->download($document->file_path, $document->file_name);
     }
@@ -115,8 +124,18 @@ class DocumentController extends Controller
         }
 
         $project = $record->getAttribute('project_id') ? Project::find($record->getAttribute('project_id')) : null;
+        if ($project === null) {
+            return false;
+        }
+        $role = $actor->roleOn($project);
 
-        return $project !== null && in_array($actor->roleOn($project), $rules['uploader_roles'], true);
+        // Roles that may attach only to a record they made (e.g. a Project
+        // Leader's own expense).
+        if (in_array($role, $rules['recorder_roles'] ?? [], true)) {
+            return (int) ($rules['recorder_id'] ?? 0) === (int) $actor->id;
+        }
+
+        return in_array($role, $rules['uploader_roles'], true);
     }
 
     /**

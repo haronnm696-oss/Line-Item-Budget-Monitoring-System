@@ -25,6 +25,13 @@ use Illuminate\Validation\ValidationException;
  * status = verified is still the only thing that counts as spent.
  * Each step writes exactly one audit entry; hand-offs notify the next person
  * after the change is committed.
+ *
+ * A Project Leader may also record expenses on their own project (and edit,
+ * delete, attach receipts to and submit only the ones they recorded). Their
+ * submit skips the Project Leader approval step: draft -> endorsed
+ * ("Waiting for Finance/Admin verification", pl_reviewed_by stays empty),
+ * with the same receipt rule, one audit entry ("submitted") and a
+ * notification to Finance/Admin. The recorder never verifies.
  */
 class ExpenseWorkflowService
 {
@@ -38,7 +45,21 @@ class ExpenseWorkflowService
         'verified' => 'Verified',
     ];
 
+    /** Label of an endorsed expense that a Project Leader recorded (no approval step). */
+    public const WAITING_VERIFICATION = 'Waiting for Finance/Admin verification';
+
     private const ENCODERS = ['research-assistant', 'finance-admin'];
+    private const LEADER = 'project-leader';
+
+    /** The stage label of one expense. */
+    public static function label(Expense $expense): string
+    {
+        if ($expense->workflow_status === 'endorsed' && $expense->pl_reviewed_by === null) {
+            return self::WAITING_VERIFICATION;
+        }
+
+        return self::LABELS[$expense->workflow_status] ?? (string) $expense->workflow_status;
+    }
 
     // ---------------------------------------------------------------- create / edit
 
@@ -53,7 +74,7 @@ class ExpenseWorkflowService
      */
     public function create(Project $project, array $data, User $actor): Expense
     {
-        $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can record expenses.');
+        $this->requireRole($project, $actor, array_merge(self::ENCODERS, [self::LEADER]), 'Only a Research Assistant, Finance/Admin staff or the Project Leader of this project can record expenses.');
         $linkId = $data['purchase_request_id'] ?? null;
 
         [$expense, $request] = AuditLogger::transaction(function () use ($project, $data, $actor, $linkId) {
@@ -80,7 +101,7 @@ class ExpenseWorkflowService
 
     public function update(Expense $expense, array $data, User $actor): Expense
     {
-        $this->requireRole($expense->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can edit expenses.');
+        $this->requireEncoder($expense, $actor, 'edit');
         $this->requireState($expense, ['draft', 'returned'], 'edited');
 
         [$updated, $request] = AuditLogger::transaction(function () use ($expense, $data, $actor) {
@@ -115,7 +136,7 @@ class ExpenseWorkflowService
 
     public function delete(Expense $expense, User $actor): void
     {
-        $this->requireRole($expense->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can delete expenses.');
+        $this->requireEncoder($expense, $actor, 'delete');
         if ((int) $expense->recorded_by !== (int) $actor->id) {
             abort(403, 'You can only delete expenses you recorded.');
         }
@@ -139,7 +160,7 @@ class ExpenseWorkflowService
 
     public function submit(Expense $expense, User $actor): Expense
     {
-        $this->requireRole($expense->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can submit expenses.');
+        $byLeader = $this->requireEncoder($expense, $actor, 'submit');
         $this->requireState($expense, ['draft', 'returned'], 'submitted');
 
         if (! $expense->receipts()->exists()) {
@@ -148,16 +169,41 @@ class ExpenseWorkflowService
             ]);
         }
 
-        $expense = $this->move($expense, 'submitted', $actor, 'submitted', ['draft', 'returned'], [
+        // A Project Leader's own expense skips their approval step.
+        $expense = $this->move($expense, $byLeader ? 'endorsed' : 'submitted', $actor, 'submitted', ['draft', 'returned'], [
             'submitted_at' => now(),
             'return_reason' => null,
             'pl_reviewed_by' => null,
             'pl_reviewed_at' => null,
         ]);
 
-        $this->notify($this->projectMembers($expense->project_id, 'project-leader'), $expense, 'submitted', $actor);
+        if ($byLeader) {
+            $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense, 'leader_submitted', $actor);
+        } else {
+            $this->notify($this->projectMembers($expense->project_id, 'project-leader'), $expense, 'submitted', $actor);
+        }
 
         return $expense;
+    }
+
+    /**
+     * Research Assistant / Finance/Admin of the project, or the Project
+     * Leader for an expense they recorded. Returns true for the Project
+     * Leader path.
+     */
+    private function requireEncoder(Expense $expense, User $actor, string $verb): bool
+    {
+        $role = $expense->project ? $actor->roleOn($expense->project) : null;
+        if ($role === self::LEADER) {
+            if ((int) $expense->recorded_by !== (int) $actor->id) {
+                abort(403, "A Project Leader can only {$verb} expenses they recorded.");
+            }
+
+            return true;
+        }
+        $this->requireRole($expense->project, $actor, self::ENCODERS, "Only a Research Assistant or Finance/Admin staff of this project can {$verb} expenses.");
+
+        return false;
     }
 
     public function endorse(Expense $expense, User $actor): Expense

@@ -101,7 +101,10 @@ class Expense extends Model implements HasDocuments
             'folder' => 'expenses',
             'types' => Document::TYPES,
             'uploader_roles' => ['research-assistant', 'finance-admin'],
-            'uploader_message' => 'Only a Research Assistant or Finance/Admin staff of this project can attach documents.',
+            // A Project Leader may attach to an expense they recorded.
+            'recorder_roles' => ['project-leader'],
+            'recorder_id' => $this->recorded_by,
+            'uploader_message' => 'Only a Research Assistant, Finance/Admin staff or the Project Leader who recorded this expense can attach documents.',
             'open' => in_array($this->workflow_status, ['draft', 'returned'], true),
             'closed_message' => 'Documents can be attached only while the expense is a draft or returned.',
             'locked' => $this->workflow_status === 'verified',

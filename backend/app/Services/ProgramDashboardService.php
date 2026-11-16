@@ -99,7 +99,7 @@ class ProgramDashboardService
      *
      * @return array<int, array{month: string, label: string, amount: float|null, is_future: bool}>
      */
-    protected function monthlyExpenses(Collection $projects, Carbon $today): array
+    public function monthlyExpenses(Collection $projects, Carbon $today): array
     {
         $year = (int) $today->year;
         $totals = array_fill(1, 12, 0.0);
@@ -139,7 +139,7 @@ class ProgramDashboardService
      *
      * @return array<string, mixed>
      */
-    protected function categorySummary(Collection $projects, float $approvedBudget): array
+    public function categorySummary(Collection $projects, float $approvedBudget): array
     {
         $allocated = ['PS' => 0.0, 'MOOE' => 0.0];
         foreach ($projects as $project) {

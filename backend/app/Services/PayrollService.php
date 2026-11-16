@@ -388,6 +388,10 @@ class PayrollService
                 return $paid ? 'Waiting for Program Leader (includes your pay)' : "Waiting for Program Leader (includes the Project Leader's pay)";
             }
 
+            if ($paid && $viewer && $batch->project && $viewer->roleOn($batch->project) === 'project-leader') {
+                return 'Waiting for another Project Leader (includes your pay)';
+            }
+
             return 'Waiting for the Project Leader';
         }
 
@@ -418,7 +422,22 @@ class PayrollService
             $this->checkVerifier($batch, $user, 'verify');
 
             return true;
-        } catch (\Symfony\Component\HttpKernel\Exception\HttpException) {
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return false;
+        }
+    }
+
+    /** Whether this user may approve / return the batch now (Project Leader path). */
+    public function canApprove(PayrollBatch $batch, User $user): bool
+    {
+        if ($batch->workflow_status !== 'submitted') {
+            return false;
+        }
+        try {
+            $this->checkLeader($batch, $user, 'approve');
+
+            return true;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
             return false;
         }
     }

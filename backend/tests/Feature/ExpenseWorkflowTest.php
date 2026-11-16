@@ -160,8 +160,9 @@ class ExpenseWorkflowTest extends TestCase
 
     public function test_each_step_is_limited_to_its_role_on_the_project(): void
     {
-        // Only RA / FIN record expenses.
-        foreach ([$this->projectLeader, $this->researcher, $this->programLeader] as $user) {
+        // RA / FIN record expenses; so may the Project Leader (their own,
+        // see ProjectLeaderPagesTest). Researchers and the Program Leader may not.
+        foreach ([$this->researcher, $this->programLeader] as $user) {
             $this->actingAs($user)
                 ->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload())
                 ->assertForbidden();
@@ -185,7 +186,7 @@ class ExpenseWorkflowTest extends TestCase
             $this->actingAs($user)->postJson("/api/expenses/{$endorsed->id}/reject", ['reason' => 'No.'])->assertForbidden();
         }
 
-        // Only RA / FIN submit.
+        // A Project Leader cannot submit someone else's draft.
         $draft = $this->expenseIn('draft');
         $this->actingAs($this->projectLeader)->postJson("/api/expenses/{$draft->id}/submit")->assertForbidden();
 

@@ -23,6 +23,10 @@ import Expenses from './pages/Expenses';
 import Payroll from './pages/Payroll';
 import Reports from './pages/Reports';
 import AuditTrail from './pages/AuditTrail';
+import LineItemBudget from './pages/leader/LineItemBudget';
+import Transactions from './pages/leader/Transactions';
+import Submissions from './pages/leader/Submissions';
+import MyRequests from './pages/leader/MyRequests';
 import ProgramApprovals from './pages/program/ProgramApprovals';
 import ProgramProjects from './pages/program/ProgramProjects';
 import ProgramProjectDetail from './pages/program/ProgramProjectDetail';
@@ -52,6 +56,10 @@ const ROLE_PAGES = [
   ['/payroll', <Payroll />],
   ['/reports', <Reports />],
   ['/audit', <AuditTrail />],
+  ['/budget', <LineItemBudget />],
+  ['/transactions', <Transactions />],
+  ['/submissions', <Submissions />],
+  ['/my-requests', <MyRequests />],
 ];
 
 export default function App() {

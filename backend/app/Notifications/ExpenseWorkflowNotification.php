@@ -33,6 +33,7 @@ class ExpenseWorkflowNotification extends Notification
         $message = match ($this->event) {
             'submitted' => "{$actor} submitted an expense for your approval: {$what} ({$amount}).",
             'endorsed' => "{$actor} (Project Leader) approved an expense; it is ready for verification: {$what} ({$amount}).",
+            'leader_submitted' => "{$actor} (Project Leader) recorded and submitted an expense; it is ready for verification: {$what} ({$amount}).",
             'returned' => "{$actor} returned your expense: {$what}.{$reason}",
             'rejected' => "{$actor} rejected your expense and sent it back: {$what}.{$reason}",
             'verified' => "{$actor} verified your expense: {$what} ({$amount}).",
@@ -41,7 +42,7 @@ class ExpenseWorkflowNotification extends Notification
 
         $title = match ($this->event) {
             'submitted' => 'Expense waiting for your approval',
-            'endorsed' => 'Expense ready for verification',
+            'endorsed', 'leader_submitted' => 'Expense ready for verification',
             'returned' => 'Expense returned to you',
             'rejected' => 'Expense rejected',
             'verified' => 'Expense verified',

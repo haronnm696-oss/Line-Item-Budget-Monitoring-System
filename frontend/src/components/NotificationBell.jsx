@@ -101,7 +101,7 @@ export default function NotificationBell() {
       }
     }
     setOpen(false);
-    navigate(notificationTarget(role, item.link));
+    navigate(notificationTarget(role, item.link, item.record, item.project_id));
   }
 
   async function markAllRead() {

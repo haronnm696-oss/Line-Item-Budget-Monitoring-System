@@ -14,7 +14,7 @@ function pctOf(spent, allocated) {
  * Allocated (line items) and spent (verified expenses) by category.
  * `summary` is the Overview payload's category_summary.
  */
-export default function PsMooeCard({ summary }) {
+export default function PsMooeCard({ summary, action = null }) {
   const blocks = BLOCKS.map((block) => {
     const row = summary?.[block.key] ?? {};
     const allocated = Number(row.allocated) || 0;
@@ -41,6 +41,7 @@ export default function PsMooeCard({ summary }) {
           <div className="program-card-title">PS vs MOOE</div>
           <div className="program-card-sub">Allocated and spent by category</div>
         </div>
+        {action}
       </div>
 
       <div className="pl-cat-list">

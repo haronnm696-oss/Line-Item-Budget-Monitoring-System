@@ -139,7 +139,7 @@ class ExpenseController extends Controller
             'expense_date' => $expense->expense_date?->toDateString(),
             'status' => $expense->status,
             'workflow_status' => $expense->workflow_status,
-            'workflow_label' => ExpenseWorkflowService::LABELS[$expense->workflow_status] ?? $expense->workflow_status,
+            'workflow_label' => ExpenseWorkflowService::label($expense),
             'return_reason' => $expense->return_reason,
             'receipts_count' => (int) $receipts,
             'recorded_by' => $expense->recordedBy ? ['id' => $expense->recordedBy->id, 'name' => $expense->recordedBy->name] : null,

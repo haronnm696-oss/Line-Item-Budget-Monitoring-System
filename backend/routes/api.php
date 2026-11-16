@@ -19,6 +19,7 @@ use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ProgramProjectController;
 use App\Http\Controllers\ProgramUserController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectLeaderController;
 use App\Http\Controllers\PurchaseRequestController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserApprovalController;
@@ -109,6 +110,15 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
 
     // Balancing query per line item.
     Route::get('/projects/{project}/balancing', [BalancingController::class, 'show']);
+
+    // Project Leader pages (read-only; decisions use the workflow routes above).
+    Route::get('/projects/{project}/leader-overview', [ProjectLeaderController::class, 'overview']);
+    Route::get('/projects/{project}/leader-badges', [ProjectLeaderController::class, 'badges']);
+    Route::post('/projects/{project}/budget-requests/seen', [ProjectLeaderController::class, 'requestsSeen']);
+    Route::get('/projects/{project}/review-queue', [ProjectLeaderController::class, 'queue']);
+    Route::get('/projects/{project}/review-queue/{type}/{id}', [ProjectLeaderController::class, 'show'])->where('id', '[0-9]+');
+    // Verified (spent) expenses, 25 per page; any member of the project.
+    Route::get('/projects/{project}/transactions', [ProjectLeaderController::class, 'transactions']);
 
     // Documents attached to a record (project members only).
     Route::get('/expenses/{expense}/documents', [DocumentController::class, 'indexForExpense']);
