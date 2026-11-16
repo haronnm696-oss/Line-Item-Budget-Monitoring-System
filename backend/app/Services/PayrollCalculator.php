@@ -77,7 +77,11 @@ class PayrollCalculator
     private function ruleIsSet(array $rule): bool
     {
         return match ($rule['method'] ?? null) {
-            'percent' => isset($rule['rate']) && $rule['rate'] !== null,
+            // A percent needs both the rate and the employee's share; a
+            // missing share is never taken as 100%.
+            'percent' => isset($rule['rate'], $rule['employee_share'])
+                && (float) $rule['rate'] >= 0
+                && (float) $rule['employee_share'] >= 0 && (float) $rule['employee_share'] <= 1,
             'fixed' => isset($rule['amount']) && $rule['amount'] !== null,
             'table' => ! empty($rule['brackets']),
             default => throw new InvalidArgumentException('Unknown payroll method: ' . ($rule['method'] ?? 'none')),

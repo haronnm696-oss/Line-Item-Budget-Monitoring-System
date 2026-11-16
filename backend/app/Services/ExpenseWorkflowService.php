@@ -279,6 +279,15 @@ class ExpenseWorkflowService
         return $expense;
     }
 
+    /**
+     * A receipt was added to a verified expense that had none (the upload
+     * itself wrote the one audit entry): tell the project's Finance/Admin.
+     */
+    public function notifyLateReceipt(Expense $expense, User $actor): void
+    {
+        $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense, 'late_receipt', $actor);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     protected function stageLabels(): array

@@ -46,3 +46,20 @@ test('badge text is capped', () => {
   assert.equal(unreadBadge(7), '7');
   assert.equal(unreadBadge(140), '99+');
 });
+
+test('a Research Assistant opens the exact record on its own page and panel', () => {
+  assert.equal(
+    notificationTarget('RA', LINK, { type: 'expense', id: 17 }, 4),
+    '/expenses?project=4&open=expense-17',
+  );
+  assert.equal(
+    notificationTarget('RA', '/purchase-requests?project=4&request=9', { type: 'purchase_request', id: 9 }, 4),
+    '/purchase-requests?project=4&open=purchase_request-9',
+  );
+  assert.equal(
+    notificationTarget('RA', '/payroll?project=4&month=2026-11', { type: 'payroll', id: 3 }, 4),
+    '/payroll?project=4&month=2026-11&open=payroll-3',
+  );
+  // No record: the link itself (or the role's page).
+  assert.equal(notificationTarget('RA', LINK), LINK);
+});

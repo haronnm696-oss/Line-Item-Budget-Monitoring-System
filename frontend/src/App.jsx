@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import RoleRoute from './routes/RoleRoute';
@@ -34,8 +34,21 @@ import ProgramReports from './pages/program/ProgramReports';
 import ProgramExecutiveReport from './pages/program/ProgramExecutiveReport';
 import ProgramAudit from './pages/program/ProgramAudit';
 import ProgramUsers from './pages/program/ProgramUsers';
+import AssistantExpenses from './pages/assistant/AssistantExpenses';
+import AssistantPayroll from './pages/assistant/AssistantPayroll';
+import PurchaseRequests from './pages/assistant/PurchaseRequests';
+import MySubmissions from './pages/assistant/MySubmissions';
+import Documents from './pages/assistant/Documents';
+import BalancingQuery from './pages/assistant/BalancingQuery';
+import ByRole from './routes/ByRole';
 import HomeRoute from './routes/HomeRoute';
 import NotFound from './pages/NotFound';
+
+/** A short URL that keeps its ?project= (and other filters). */
+function RedirectKeepingQuery({ to }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
 
 // Pages inside the shared role shell. Who may open each one is in
 // routes/access.js (ROUTE_ROLES).
@@ -52,8 +65,14 @@ const ROLE_PAGES = [
   ['/dashboard/finance', <FinanceDashboard />],
   ['/projects', <Projects />],
   ['/projects/:id', <ProjectDetail />],
-  ['/expenses', <Expenses />],
-  ['/payroll', <Payroll />],
+  // Shared paths: the Research Assistant gets their own encoding pages.
+  ['/expenses', <ByRole RA={<AssistantExpenses />} other={<Expenses />} />],
+  ['/payroll', <ByRole RA={<AssistantPayroll />} other={<Payroll />} />],
+  ['/purchase-requests', <PurchaseRequests />],
+  ['/my-submissions', <MySubmissions />],
+  ['/documents', <Documents />],
+  ['/balancing-query', <BalancingQuery />],
+  ['/balancing', <RedirectKeepingQuery to="/balancing-query" />],
   ['/reports', <Reports />],
   ['/audit', <AuditTrail />],
   ['/budget', <LineItemBudget />],

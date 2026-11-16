@@ -99,16 +99,24 @@ class Expense extends Model implements HasDocuments
     {
         return [
             'folder' => 'expenses',
-            'types' => Document::TYPES,
+            // A verified expense without a receipt (a missing receipt) may
+            // still get its receipt; nothing else changes on it.
+            'types' => $this->awaitsLateReceipt() ? [Document::TYPE_RECEIPT] : Document::TYPES,
             'uploader_roles' => ['research-assistant', 'finance-admin'],
             // A Project Leader may attach to an expense they recorded.
             'recorder_roles' => ['project-leader'],
             'recorder_id' => $this->recorded_by,
             'uploader_message' => 'Only a Research Assistant, Finance/Admin staff or the Project Leader who recorded this expense can attach documents.',
-            'open' => in_array($this->workflow_status, ['draft', 'returned'], true),
-            'closed_message' => 'Documents can be attached only while the expense is a draft or returned.',
+            'open' => in_array($this->workflow_status, ['draft', 'returned'], true) || $this->awaitsLateReceipt(),
+            'closed_message' => 'Documents can be attached only while the expense is a draft or returned (or a verified expense still missing its receipt).',
             'locked' => $this->workflow_status === 'verified',
             'locked_message' => 'Documents of a verified expense cannot be deleted.',
         ];
+    }
+
+    /** Verified, but no receipt on file yet (counted under "Missing receipts"). */
+    public function awaitsLateReceipt(): bool
+    {
+        return $this->workflow_status === 'verified' && ! $this->receipts()->exists();
     }
 }

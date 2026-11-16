@@ -95,10 +95,6 @@ export const ROLE_NAV = {
 
 /** Paths that have no page yet; they open the "Coming soon" page. */
 export const COMING_SOON_PATHS = [
-  '/purchase-requests',
-  '/documents',
-  '/my-submissions',
-  '/balancing-query',
   '/verification',
 ];
 

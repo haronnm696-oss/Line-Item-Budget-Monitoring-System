@@ -201,6 +201,10 @@ class PayrollService
         if (! $batch->rows()->exists()) {
             throw ValidationException::withMessages(['rows' => ['There is no payroll in this batch to submit.']]);
         }
+        // Same rule as the Payroll page: the signed payroll file goes with the batch.
+        if (! $batch->documents()->where('document_type', 'payroll_file')->exists()) {
+            throw ValidationException::withMessages(['documents' => ['Upload the payroll file before submitting.']]);
+        }
 
         $paidLeaders = $this->paidLeaders($batch);
         $escalate = $paidLeaders->isNotEmpty() && $this->eligibleLeaders($batch)->isEmpty();

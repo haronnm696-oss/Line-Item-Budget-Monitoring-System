@@ -37,6 +37,7 @@ class ExpenseWorkflowNotification extends Notification
             'returned' => "{$actor} returned your expense: {$what}.{$reason}",
             'rejected' => "{$actor} rejected your expense and sent it back: {$what}.{$reason}",
             'verified' => "{$actor} verified your expense: {$what} ({$amount}).",
+            'late_receipt' => "{$actor} uploaded the missing receipt for a verified expense: {$what} ({$amount}).",
             default => "{$actor} updated an expense: {$what}.",
         };
 
@@ -46,6 +47,7 @@ class ExpenseWorkflowNotification extends Notification
             'returned' => 'Expense returned to you',
             'rejected' => 'Expense rejected',
             'verified' => 'Expense verified',
+            'late_receipt' => 'Missing receipt uploaded',
             default => 'Expense updated',
         };
 

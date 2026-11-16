@@ -116,6 +116,16 @@
  *                                           -> verified expenses, 25 per page (any project member)
  *   GET /api/documents/:id/download?inline=1 -> images / PDF shown inline (previews)
  *
+ * Research Assistant pages (research-assistant of the project; 403 otherwise):
+ *   GET /api/projects/:id/assistant-overview -> { project, kpis: { drafts, waiting, returned, missing_receipts }, submissions, missing_receipts }
+ *   GET /api/projects/:id/assistant-badges   -> { my_submissions } (= Returned to you, same query as the KPI)
+ *   GET /api/projects/:id/my-submissions?tab=drafts|waiting|returned|approved|completed|all&type=
+ *                                           -> { counts, items } (the user's own expenses, purchase requests, payroll batches)
+ *   GET /api/projects/:id/my-submissions/:type/:id -> { item } (any stage; fields, next_step, returned_by, can_*)
+ *   GET /api/projects/:id/documents?document_type=&record=expense|payroll|purchase_request (any project member)
+ *   Payroll batch submit needs a payroll_file document (422 otherwise).
+ *   A verified expense with no receipt accepts one late receipt (POST /api/expenses/:id/documents, receipt only).
+ *
  * All list endpoints accept `page` / `per_page` and return Laravel's default
  * paginator shape ({ data, meta, links }).
  */
@@ -187,6 +197,12 @@ export const ENDPOINTS = {
   reviewQueue: (projectId) => `/api/projects/${projectId}/review-queue`,
   reviewItem: (projectId, type, id) => `/api/projects/${projectId}/review-queue/${type}/${id}`,
   transactions: (projectId) => `/api/projects/${projectId}/transactions`,
+  // Research Assistant pages (read-only; changes use the workflow routes).
+  assistantOverview: (projectId) => `/api/projects/${projectId}/assistant-overview`,
+  assistantBadges: (projectId) => `/api/projects/${projectId}/assistant-badges`,
+  mySubmissions: (projectId) => `/api/projects/${projectId}/my-submissions`,
+  mySubmission: (projectId, type, id) => `/api/projects/${projectId}/my-submissions/${type}/${id}`,
+  projectDocuments: (projectId) => `/api/projects/${projectId}/documents`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,

@@ -26,6 +26,34 @@ function leaderTarget(link, record, projectId) {
 }
 
 /**
+ * The Research Assistant's page and panel for a notification: each record
+ * type opens on its own page with its side panel (?open=type-id); payroll
+ * also keeps the month from the link so the right batch shows.
+ */
+function assistantTarget(link, record, projectId) {
+  const project = projectOf(link, projectId);
+  if (!record || !project) return null;
+  const params = new URLSearchParams({ project: String(project) });
+  if (record.type === 'expense') {
+    params.set('open', `expense-${record.id}`);
+    return `/expenses?${params}`;
+  }
+  if (record.type === 'purchase_request') {
+    params.set('open', `purchase_request-${record.id}`);
+    return `/purchase-requests?${params}`;
+  }
+  if (record.type === 'payroll') {
+    const month = typeof link === 'string' && link.includes('?')
+      ? new URLSearchParams(link.slice(link.indexOf('?') + 1)).get('month')
+      : null;
+    if (month && /^\d{4}-\d{2}$/.test(month)) params.set('month', month);
+    params.set('open', `payroll-${record.id}`);
+    return `/payroll?${params}`;
+  }
+  return null;
+}
+
+/**
  * Where clicking a notification takes this user. For a Project Leader, the
  * record itself when the notification names one (see leaderTarget()).
  * Otherwise the notification's own link when their role may open that page,
@@ -37,6 +65,10 @@ function leaderTarget(link, record, projectId) {
 export function notificationTarget(role, link, record = null, projectId = null) {
   if (role === 'PL') {
     const target = leaderTarget(link, record, projectId);
+    if (target) return target;
+  }
+  if (role === 'RA') {
+    const target = assistantTarget(link, record, projectId);
     if (target) return target;
   }
 

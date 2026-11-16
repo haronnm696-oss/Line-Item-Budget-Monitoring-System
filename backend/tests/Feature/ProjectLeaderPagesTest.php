@@ -371,6 +371,7 @@ class ProjectLeaderPagesTest extends TestCase
             ->assertCreated();
         [$year, $number] = array_map('intval', explode('-', $month));
         $batch = PayrollBatch::where('project_id', $this->project->id)->where('pay_year', $year)->where('pay_month', $number)->firstOrFail();
+        $this->payrollFileFor($batch, $this->assistant);
         $this->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
 
         return $batch->fresh();

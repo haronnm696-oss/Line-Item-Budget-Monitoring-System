@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\ExpenseWorkflowService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -27,6 +28,8 @@ use Illuminate\Validation\Rule;
  */
 class DocumentController extends Controller
 {
+    public const LATE_RECEIPT = 'Late receipt on a verified expense.';
+
     // One typed pair per record so route-model binding resolves the record.
     public function indexForExpense(Expense $expense) { return $this->index($expense); }
     public function storeForExpense(Request $request, Expense $expense) { return $this->store($request, $expense); }
@@ -56,7 +59,14 @@ class DocumentController extends Controller
             'document_type' => ['required', Rule::in($rules['types'])],
         ], self::fileMessages());
 
-        $document = AuditLogger::transaction(fn () => self::attach($record, $data['file'], $data['document_type'], $actor));
+        // A missing receipt added to a verified expense: the same single audit
+        // entry, marked with a reason, and Finance/Admin are told.
+        $late = $record instanceof Expense && $record->awaitsLateReceipt();
+        $reason = $late ? self::LATE_RECEIPT : null;
+        $document = AuditLogger::transaction(fn () => self::attach($record, $data['file'], $data['document_type'], $actor, $reason));
+        if ($late) {
+            app(ExpenseWorkflowService::class)->notifyLateReceipt($record, $actor);
+        }
 
         return response()->json(['message' => 'Document uploaded.', 'document' => self::row($document->load('uploader'))], 201);
     }
@@ -143,7 +153,7 @@ class DocumentController extends Controller
      * an AuditLogger::transaction. If the transaction fails, the stored file
      * is removed.
      */
-    public static function attach(HasDocuments $record, UploadedFile $file, string $type, User $actor): Document
+    public static function attach(HasDocuments $record, UploadedFile $file, string $type, User $actor, ?string $reason = null): Document
     {
         /** @var Model&HasDocuments $record */
         $disk = config('documents.disk');
@@ -163,7 +173,7 @@ class DocumentController extends Controller
                 'uploaded_at' => now(),
             ]);
 
-            AuditLogger::write('created', $document, [], self::auditValues($document, $record), $actor);
+            AuditLogger::write('created', $document, [], self::auditValues($document, $record), $actor, $reason);
         } catch (\Throwable $exception) {
             Storage::disk($disk)->delete($path);
             throw $exception;

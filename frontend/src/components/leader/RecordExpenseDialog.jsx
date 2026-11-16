@@ -9,7 +9,7 @@ import { useApiData } from '../../lib/useApiData';
 import { todayInManila } from '../../lib/datetime';
 import { peso } from '../money';
 
-const EMPTY = { lib_category_id: '', description: '', amount: '', expense_date: '', payee: '', reference_no: '' };
+const EMPTY = { lib_category_id: '', description: '', amount: '', expense_date: '', payee: '', reference_no: '', purchase_request_id: '' };
 const FIELDS = Object.keys(EMPTY);
 
 /** The stored values as form strings. */
@@ -26,6 +26,7 @@ function payload(form, before = null) {
     expense_date: form.expense_date,
     payee: form.payee.trim() || null,
     reference_no: form.reference_no.trim() || null,
+    purchase_request_id: Number(form.purchase_request_id) || null,
   };
   if (!before) return value;
   const old = payload(before);
@@ -40,21 +41,29 @@ async function uploadReceipt(expenseId, file) {
 }
 
 /**
- * Record transaction (Project Leader), or "Edit and resubmit" when
- * `expense` (a returned queue item they recorded) is given.
+ * Record an expense, or "Edit and resubmit" when `expense` (a returned or
+ * draft expense the user recorded, with `edit` values) is given.
  *
- * New: save the expense, attach the receipt, submit.
- * Edit: save the changed fields, remove / add receipts, submit again.
- * Either way the submit skips the Project Leader approval and goes straight
- * to Finance/Admin verification (the server decides this). If a step fails,
- * "Try again" resumes from that step, so nothing is done twice; a new draft
- * left by a failed attempt can be discarded.
+ * Project Leader (default): save, attach the receipt, submit; their submit
+ * skips the approval step (the server decides this). A draft left by a
+ * failed attempt is deleted on close.
+ *
+ * Research Assistant (`assistant`): the same steps, plus "Save as draft"
+ * (no submit) and an optional link to an approved purchase request of the
+ * same line item (linking fulfils it). The submit goes to the Project
+ * Leader. A draft left by a failed attempt is kept (it is listed under
+ * Drafts) unless "Discard draft" is chosen.
+ *
+ * Either way, if a step fails "Try again" resumes from that step, so the
+ * expense is never recorded twice.
  */
-export default function RecordExpenseDialog({ projectId, expense = null, onClose, onDone }) {
+export default function RecordExpenseDialog({ projectId, expense = null, assistant = false, onClose, onDone }) {
   const editing = Boolean(expense);
   const { user } = useAuth();
   const balancing = useApiData(ENDPOINTS.balancing(projectId));
+  const approved = useApiData(assistant ? `${ENDPOINTS.purchaseRequests(projectId)}?workflow_status=endorsed` : null);
   const lineItems = balancing.data?.line_items ?? [];
+  const requests = Array.isArray(approved.data?.purchase_requests) ? approved.data.purchase_requests : [];
   const [form, setForm] = useState(editing ? toForm(expense.edit) : { ...EMPTY, expense_date: todayInManila() });
   const [receipt, setReceipt] = useState(null);
   const [errors, setErrors] = useState({});
@@ -74,24 +83,49 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
     return () => { alive = false; };
   }, [editing, expense?.id]);
 
+  const alreadyLinked = editing && Boolean(expense.edit?.purchase_request_id);
   const chosen = lineItems.find((item) => String(item.id) === form.lib_category_id);
-  const set = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+  const linkedRequest = requests.find((request) => String(request.id) === form.purchase_request_id);
+  // A linked request's estimate (or an already linked expense) is held in
+  // "pending"; it is freed by this expense, so it counts as available here.
+  const heldForThis = alreadyLinked ? Number(expense.edit.amount) || 0 : Number(linkedRequest?.estimated_amount) || 0;
+  const available = chosen ? Number(chosen.available) + heldForThis : null;
+  const requestOptions = requests.filter((request) => !form.lib_category_id || String(request.lib_category_id) === form.lib_category_id);
   const keptReceipts = (documents ?? []).filter((doc) => doc.document_type === 'receipt' && !toRemove.includes(doc.id));
 
-  function validate() {
+  const set = (key) => (event) => {
+    const value = event.target.value;
+    const next = { ...form, [key]: value };
+    // A linked request stays on its own line item.
+    if (key === 'lib_category_id' && linkedRequest && String(linkedRequest.lib_category_id) !== value) next.purchase_request_id = '';
+    setForm(next);
+  };
+
+  function chooseRequest(event) {
+    const id = event.target.value;
+    const request = requests.find((row) => String(row.id) === id);
+    setForm({
+      ...form,
+      purchase_request_id: id,
+      lib_category_id: request ? String(request.lib_category_id) : form.lib_category_id,
+      description: request && !form.description.trim() ? request.description : form.description,
+      amount: request && !form.amount ? String(request.estimated_amount) : form.amount,
+    });
+  }
+
+  function validate(submitting) {
     const next = {};
     if (!form.lib_category_id) next.lib_category_id = 'Choose a line item.';
     if (!form.description.trim()) next.description = 'Describe the expense.';
     if (!(Number(form.amount) > 0)) next.amount = 'Enter an amount greater than zero.';
     if (!form.expense_date) next.expense_date = 'Enter the expense date.';
     const hasReceipt = receipt || saved?.uploaded || (editing && keptReceipts.length > 0);
-    if (!hasReceipt) next.file = editing ? 'Keep a receipt or attach a new one (PDF, JPG or PNG).' : 'Attach the receipt (PDF, JPG or PNG).';
+    if (submitting && !hasReceipt) next.file = editing ? 'Keep a receipt or attach a new one (PDF, JPG or PNG).' : 'Attach the receipt (PDF, JPG or PNG).';
     return next;
   }
 
-  async function submit(event) {
-    event.preventDefault();
-    const next = validate();
+  async function run(submitting) {
+    const next = validate(submitting);
     setErrors(next);
     setFormError('');
     if (Object.keys(next).length > 0 || busy) return;
@@ -120,9 +154,14 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
         step = { ...step, uploaded: true };
         setSaved(step);
       }
-      await apiWrite('post', ENDPOINTS.submitExpense(step.id));
       const what = `“${form.description.trim()}” (${peso(form.amount)})`;
-      onDone?.(`${editing ? 'Resubmitted' : 'Recorded'} ${what}. It is waiting for Finance/Admin verification.`);
+      if (!submitting) {
+        onDone?.(editing ? `Saved your changes to ${what}. Submit it when it is ready.` : `Saved ${what} as a draft. Attach the receipt and submit it when ready.`);
+        return;
+      }
+      await apiWrite('post', ENDPOINTS.submitExpense(step.id));
+      const next = assistant ? 'It is waiting for the Project Leader.' : 'It is waiting for Finance/Admin verification.';
+      onDone?.(`${editing ? 'Resubmitted' : 'Recorded'} ${what}. ${next}`);
     } catch (error) {
       setErrors(fieldErrors(error));
       const message = errorText(error, 'Could not save. Please try again.');
@@ -135,13 +174,8 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
     }
   }
 
-  /** Close. A new draft saved by a failed attempt is deleted so none is left behind; an edited expense stays returned. */
-  async function close() {
-    if (busy) return;
-    if (editing || !saved) {
-      onClose();
-      return;
-    }
+  async function discard() {
+    if (busy || !saved || editing) return;
     setBusy(true);
     try {
       await apiWrite('delete', ENDPOINTS.expense(saved.id));
@@ -152,10 +186,27 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
     }
   }
 
+  /**
+   * Close. Project Leader: a new draft saved by a failed attempt is deleted
+   * so none is left behind. Research Assistant: the draft is kept (Drafts).
+   */
+  async function close() {
+    if (busy) return;
+    if (editing || !saved || assistant) {
+      onClose();
+      return;
+    }
+    await discard();
+  }
+
   const err = (name) => errors[name] && <div className="field-err" role="alert">{errors[name]}</div>;
   // Once the fields are saved on the server, a retry does not change them again.
   const locked = busy || (editing ? Boolean(saved?.patched) : Boolean(saved));
   const discardable = !editing && Boolean(saved);
+  const retrying = editing ? Boolean(saved?.patched) : Boolean(saved);
+  const title = editing
+    ? (expense.workflow_status === 'returned' ? 'Edit and resubmit' : 'Edit draft expense')
+    : (assistant ? 'Record expense' : 'Record transaction');
 
   return (
     <div className="program-modal-overlay" role="presentation" onClick={close}>
@@ -165,20 +216,24 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
         aria-modal="true"
         aria-labelledby="ld-expense-title"
         onClick={(event) => event.stopPropagation()}
-        onSubmit={submit}
+        onSubmit={(event) => { event.preventDefault(); run(true); }}
         noValidate
       >
         <div className="program-modal-head">
           <div>
-            <div className="program-modal-title" id="ld-expense-title">{editing ? 'Edit and resubmit' : 'Record transaction'}</div>
-            <div className="program-card-sub">Your expense goes straight to Finance/Admin for verification</div>
+            <div className="program-modal-title" id="ld-expense-title">{title}</div>
+            <div className="program-card-sub">
+              {assistant
+                ? 'Goes to the Project Leader for approval, then Finance/Admin for verification'
+                : 'Your expense goes straight to Finance/Admin for verification'}
+            </div>
           </div>
-          <button type="button" className="program-icon-btn" onClick={close} aria-label={discardable ? 'Discard draft and close' : 'Close'} disabled={busy}>×</button>
+          <button type="button" className="program-icon-btn" onClick={close} aria-label={discardable && !assistant ? 'Discard draft and close' : 'Close'} disabled={busy}>×</button>
         </div>
 
         {editing && expense.return_reason && (
           <div className="program-banner error ld-return-banner" role="note">
-            <b>Returned:</b> “{expense.return_reason}”
+            <b>Returned{expense.returned_by?.name ? ` by ${expense.returned_by.name}` : ''}:</b> “{expense.return_reason}”
           </div>
         )}
         {balancing.status === 'error' && (
@@ -189,16 +244,38 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
         {formError && <div className="program-banner error" role="alert">{formError}</div>}
 
         <div className="program-form-grid">
+          {assistant && (
+            <div className="program-field full">
+              <label htmlFor="ld-exp-pr">Link to approved purchase request <span className="ld-muted">optional</span></label>
+              {alreadyLinked ? (
+                <p className="ld-muted" id="ld-exp-pr">Linked to PR-{expense.edit.purchase_request_id}. The line item stays the same.</p>
+              ) : (
+                <select id="ld-exp-pr" className="program-select" value={form.purchase_request_id} onChange={chooseRequest} disabled={locked || approved.status !== 'ready'}>
+                  <option value="">
+                    {approved.status === 'error' ? 'Could not load the purchase requests' : approved.status !== 'ready' ? 'Loading…' : requestOptions.length === 0 ? 'No approved request on this line item' : 'Not linked'}
+                  </option>
+                  {requestOptions.map((request) => (
+                    <option key={request.id} value={request.id}>
+                      PR-{request.id} · {request.description} — {peso(request.estimated_amount)} ({request.line_item})
+                    </option>
+                  ))}
+                </select>
+              )}
+              {linkedRequest && <div className="ld-hint">Saving links this expense; the request becomes fulfilled.</div>}
+              {err('purchase_request_id')}
+            </div>
+          )}
           <div className="program-field full">
             <label htmlFor="ld-exp-line">Line item</label>
-            <select id="ld-exp-line" className="program-select" value={form.lib_category_id} onChange={set('lib_category_id')} disabled={locked || balancing.status !== 'ready'}>
+            <select id="ld-exp-line" className="program-select" value={form.lib_category_id} onChange={set('lib_category_id')} disabled={locked || alreadyLinked || balancing.status !== 'ready'}>
               <option value="">{balancing.status === 'ready' ? 'Choose a line item' : 'Loading…'}</option>
               {lineItems.map((item) => (
                 <option key={item.id} value={item.id}>{item.type} · {item.name} — {peso(item.available)} available</option>
               ))}
             </select>
-            {chosen && Number(form.amount) > Number(chosen.available) && (
-              <div className="ld-hint is-risk">More than the {peso(chosen.available)} available on this line item.</div>
+            {chosen && <div className="ld-hint">{peso(available)} available on this line item{heldForThis > 0 ? ' (including the amount held for the purchase request)' : ''}.</div>}
+            {chosen && Number(form.amount) > available && (
+              <div className="ld-hint is-risk" role="status">⚠ More than the {peso(available)} available on this line item.</div>
             )}
             {err('lib_category_id')}
           </div>
@@ -267,7 +344,9 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
           <div className="program-field full">
             <label htmlFor="ld-exp-file">
               {editing ? 'Add or replace the receipt' : 'Receipt'}{' '}
-              {editing ? <span className="ld-muted">optional when a receipt is kept</span> : <span className="ld-required">required</span>}
+              {editing
+                ? <span className="ld-muted">optional when a receipt is kept</span>
+                : <span className="ld-required">{assistant ? 'required to submit' : 'required'}</span>}
             </label>
             <input
               id="ld-exp-file"
@@ -283,9 +362,22 @@ export default function RecordExpenseDialog({ projectId, expense = null, onClose
         </div>
 
         <div className="program-modal-actions">
-          <button type="button" className="program-btn" onClick={close} disabled={busy}>{discardable ? 'Discard draft' : 'Cancel'}</button>
+          {discardable ? (
+            <button type="button" className="program-btn danger" onClick={discard} disabled={busy}>Discard draft</button>
+          ) : (
+            <button type="button" className="program-btn" onClick={close} disabled={busy}>Cancel</button>
+          )}
+          {assistant && discardable && <button type="button" className="program-btn" onClick={close} disabled={busy}>Keep draft and close</button>}
+          {assistant && (
+            <button type="button" className="program-btn" onClick={() => run(false)} disabled={busy || (editing && documents === null)}>
+              {editing ? 'Save changes' : (saved ? 'Save draft' : 'Save as draft')}
+            </button>
+          )}
           <button type="submit" className="program-btn primary" disabled={busy || (editing && documents === null)}>
-            {busy ? 'Saving…' : (editing ? (saved?.patched ? 'Try again' : 'Resubmit') : (saved ? 'Try again' : 'Record and submit'))}
+            {busy ? 'Saving…'
+              : retrying ? 'Try again'
+              : editing ? (expense.workflow_status === 'draft' ? 'Save and submit' : 'Resubmit')
+              : (assistant ? 'Save, attach and submit' : 'Record and submit')}
           </button>
         </div>
       </form>

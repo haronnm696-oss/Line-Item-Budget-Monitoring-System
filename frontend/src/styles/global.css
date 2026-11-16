@@ -3720,3 +3720,68 @@ select.signin-input:disabled{
   .ld-page .pl-head-actions>*{flex:1 1 auto}
   .ld-controls .spacer{display:none}
 }
+
+/* ------------------------------------------------------------------
+   Research Assistant pages (Overview, Expenses, Purchase requests,
+   Payroll, My submissions, Documents, Balancing query). Same tokens as
+   the Project Leader pages: 44px controls, status = text + icon.
+   ------------------------------------------------------------------ */
+.program-shell a.ra-kpi{color:inherit;text-decoration:none;transition:box-shadow .15s ease,border-color .15s ease}
+.program-shell a.ra-kpi:hover{border-color:#D9C9B0;box-shadow:0 10px 24px -18px rgba(81,20,32,.45)}
+.program-shell a.ra-kpi.pl-kpi-hero:hover{border-color:rgba(190,154,62,.6)}
+.program-shell a.ra-kpi:focus-visible{outline:2px solid var(--pg-brand);outline-offset:2px}
+.program-shell .ra-kpi-alert{border-color:#F1CFCA;background:linear-gradient(180deg,#FFF8F7,#fff 60%)}
+.ra-kpi-alert .pl-kpi-value{color:var(--pg-risk)}
+.ra-kpi-alert .pl-kpi-sub{color:var(--pg-risk);font-weight:600}
+
+.ra-table-wrap{min-width:0}
+.ra-table{table-layout:auto}
+.ra-table td{font-size:13.5px}
+.ra-table td:first-child{white-space:nowrap;font-weight:700}
+.ra-table .ld-link{font-size:13.5px}
+.ra-type{font-size:11.5px;font-weight:500;color:var(--pg-muted);margin-top:2px}
+.ra-desc{overflow-wrap:anywhere}
+.ra-details{font-size:12px;color:var(--pg-muted);margin-top:2px;overflow-wrap:anywhere}
+.ra-table .program-pill{margin-top:0}
+.ra-next{font-size:12.5px;color:var(--pg-muted);margin-top:5px;line-height:1.4}
+.ra-next.is-returned{color:var(--pg-risk);font-weight:650;overflow-wrap:anywhere}
+.ra-table-scroll{overflow-x:auto;min-width:0}
+.ra-table-scroll .program-table{min-width:640px}
+
+.ra-balance-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.ra-payroll-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+.ra-balance{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid var(--pg-card-border);border-radius:12px;min-width:0}
+.ra-balance span{font-size:12.5px;color:var(--pg-muted)}
+.ra-balance b{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow-wrap:anywhere}
+.ra-balance.is-available b{color:var(--pg-healthy)}
+.ra-balance.is-over{border-color:#F1CFCA;background:var(--pg-risk-bg)}
+.ra-balance.is-over b{color:var(--pg-risk)}
+
+.ra-inline-field{min-width:170px}
+.ra-inline-form{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.ra-inline-form .program-field{min-width:240px;margin:0}
+.ra-panel-actions{flex-wrap:wrap}
+.ld-panel .ra-panel-actions{margin-top:auto}
+.program-card .ra-panel-actions{margin-top:14px}
+.program-tab.ra-tab-alert{color:var(--pg-risk)}
+.program-tab.ra-tab-alert::before{content:'⚠ '}
+.ra-docs-layout{align-items:start}
+.ra-preview-card{position:sticky;top:16px}
+.ra-preview-card .ld-preview iframe{height:70vh}
+.ld-doc.ra-doc-on{background:#FBF3DF;margin:0 -12px;padding-left:12px;padding-right:12px;border-radius:8px}
+.ld-doc-main span a{color:var(--pg-brand);font-weight:650}
+.ra-own-docs{margin-top:14px;padding-top:12px;border-top:1px solid var(--pg2-line)}
+
+@media (max-width: 900px){
+  .ra-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ra-payroll-totals{grid-template-columns:1fr}
+  .ra-preview-card{position:static}
+  /* The submissions table becomes one card per record. */
+  .ra-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .ra-table,.ra-table tbody,.ra-table tr,.ra-table td{display:block;width:100%}
+  .ra-table tr{padding:12px 0;border-top:1px solid var(--pg2-line)}
+  .ra-table tr:first-child{border-top:none}
+  .ra-table td{border:none;padding:3px 0;text-align:left}
+  .ra-table td.num{text-align:left}
+  .ra-inline-form .program-field{min-width:0;flex:1 1 100%}
+}

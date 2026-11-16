@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Expense;
 use App\Models\FundingAgency;
 use App\Models\LibCategory;
+use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\ProjectUser;
 use App\Models\Role;
@@ -140,6 +141,21 @@ trait BuildsExpenseWorkflow
             'file_path' => $path ?? 'documents/expenses/' . $expense->id . '/receipt.pdf',
             'disk' => 'local',
             'size' => 1024,
+            'mime' => 'application/pdf',
+            'uploaded_at' => now(),
+        ]);
+    }
+
+    /** A payroll file on the batch (needed before it can be submitted), built without the API. */
+    protected function payrollFileFor(PayrollBatch $batch, User $uploader): Document
+    {
+        return $batch->documents()->create([
+            'uploaded_by' => $uploader->id,
+            'document_type' => 'payroll_file',
+            'file_name' => 'payroll.pdf',
+            'file_path' => 'documents/payroll-batches/' . $batch->id . '/payroll.pdf',
+            'disk' => 'local',
+            'size' => 2048,
             'mime' => 'application/pdf',
             'uploaded_at' => now(),
         ]);

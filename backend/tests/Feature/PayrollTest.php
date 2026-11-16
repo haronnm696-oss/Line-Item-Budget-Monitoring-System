@@ -29,15 +29,18 @@ class PayrollTest extends TestCase
     use RefreshDatabase;
     use BuildsExpenseWorkflow;
 
-    /** Rules used by the tests (the shipped config leaves every rate unset). */
+    /**
+     * TEST VALUES ONLY, not official rates (the same block as the local
+     * .env until the MSU accounting office provides the real ones). The
+     * shipped config reads every value from the environment.
+     */
     private const RULES = [
-        ['type' => 'GSIS', 'method' => 'percent', 'base' => 'basic', 'rate' => 9, 'pre_tax' => true],
-        ['type' => 'PhilHealth', 'method' => 'percent', 'base' => 'basic', 'rate' => 5, 'employee_share' => 0.5, 'base_min' => 10000, 'base_max' => 100000, 'pre_tax' => true],
-        ['type' => 'Pag-IBIG', 'method' => 'percent', 'base' => 'basic', 'rate' => 2, 'base_max' => 10000, 'pre_tax' => true],
+        ['type' => 'GSIS', 'method' => 'percent', 'base' => 'basic', 'rate' => 7.25, 'employee_share' => 1, 'pre_tax' => true],
+        ['type' => 'PhilHealth', 'method' => 'percent', 'base' => 'basic', 'rate' => 3.4, 'employee_share' => 0.5, 'pre_tax' => true],
+        ['type' => 'Pag-IBIG', 'method' => 'percent', 'base' => 'basic', 'rate' => 1.5, 'employee_share' => 1, 'pre_tax' => true],
         ['type' => 'Withholding Tax', 'method' => 'table', 'base' => 'taxable', 'brackets' => [
             ['over' => 0, 'base_tax' => 0, 'rate' => 0],
-            ['over' => 20833, 'base_tax' => 0, 'rate' => 15],
-            ['over' => 33333, 'base_tax' => 1875, 'rate' => 20],
+            ['over' => 30000, 'base_tax' => 0, 'rate' => 12.5],
         ], 'pre_tax' => false],
     ];
 
@@ -60,35 +63,41 @@ class PayrollTest extends TestCase
 
     public function test_the_calculator_applies_each_rule_kind(): void
     {
-        // basic 30,000 + allowance 2,000 = gross 32,000
-        // GSIS 9% of 30,000 = 2,700; PhilHealth 5% x 0.5 of 30,000 = 750;
-        // Pag-IBIG 2% of min(30,000, 10,000) = 200; taxable = 32,000 - 3,650
-        // = 28,350 -> 15% of (28,350 - 20,833) = 1,127.55.
-        $result = (new PayrollCalculator(self::RULES))->compute(30000, 2000);
+        // basic 40,000 + allowance 2,000 = gross 42,000
+        // GSIS 7.25% of 40,000 = 2,900; PhilHealth 3.4% x 0.5 of 40,000 = 680;
+        // Pag-IBIG 1.5% of 40,000 = 600; taxable = 42,000 - 4,180 = 37,820
+        // -> 12.5% of (37,820 - 30,000) = 977.50.
+        $result = (new PayrollCalculator(self::RULES))->compute(40000, 2000);
 
-        $this->assertSame(32000.0, $result['gross']);
+        $this->assertSame(42000.0, $result['gross']);
         $this->assertSame([
-            ['type' => 'GSIS', 'amount' => 2700.0],
-            ['type' => 'PhilHealth', 'amount' => 750.0],
-            ['type' => 'Pag-IBIG', 'amount' => 200.0],
-            ['type' => 'Withholding Tax', 'amount' => 1127.55],
+            ['type' => 'GSIS', 'amount' => 2900.0],
+            ['type' => 'PhilHealth', 'amount' => 680.0],
+            ['type' => 'Pag-IBIG', 'amount' => 600.0],
+            ['type' => 'Withholding Tax', 'amount' => 977.5],
         ], $result['deductions']);
-        $this->assertSame(4777.55, $result['total_deductions']);
-        $this->assertSame(27222.45, $result['net']);
+        $this->assertSame(5157.5, $result['total_deductions']);
+        $this->assertSame(36842.5, $result['net']);
         $this->assertSame([], $result['unset']);
+
+        // Below the 30,000 bracket: no tax. 25,000 -> 1,812.50 + 425 + 375.
+        $low = (new PayrollCalculator(self::RULES))->compute(25000);
+        $this->assertSame([1812.5, 425.0, 375.0, 0.0], array_column($low['deductions'], 'amount'));
+        $this->assertSame(22387.5, $low['net']);
 
         // Salary floor and a fixed rule with a cap.
         $floor = (new PayrollCalculator([
-            ['type' => 'PhilHealth', 'method' => 'percent', 'base' => 'basic', 'rate' => 5, 'employee_share' => 0.5, 'base_min' => 10000],
+            ['type' => 'PhilHealth', 'method' => 'percent', 'base' => 'basic', 'rate' => 3.4, 'employee_share' => 0.5, 'base_min' => 10000],
             ['type' => 'Union dues', 'method' => 'fixed', 'amount' => 900, 'max' => 500],
         ]))->compute(8000);
-        $this->assertSame([250.0, 500.0], array_column($floor['deductions'], 'amount'));
+        $this->assertSame([170.0, 500.0], array_column($floor['deductions'], 'amount')); // 3.4% x 0.5 of the 10,000 floor
     }
 
     public function test_unset_rules_deduct_nothing_and_are_reported(): void
     {
         // The shipped config, where every rate is still unset.
-        config(['payroll.deductions' => (require config_path('payroll.php'))['deductions']]);
+        // Every variable empty (the local .env may hold test values).
+        config(['payroll.deductions' => $this->withEnv([], fn () => (require config_path('payroll.php'))['deductions'])]);
 
         $result = app(PayrollCalculator::class)->compute(25000, 1000);
         $this->assertSame(0.0, $result['total_deductions']);
@@ -99,6 +108,72 @@ class PayrollTest extends TestCase
             ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
             ->assertOk()
             ->assertJsonPath('unset_rules', ['GSIS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax']);
+    }
+
+    public function test_the_config_reads_every_value_from_the_environment(): void
+    {
+        // TEST VALUES ONLY (not official rates); floors / ceilings test the bounds.
+        $vars = [
+            'PAYROLL_GSIS_RATE' => '7.25', 'PAYROLL_GSIS_EMPLOYEE_SHARE' => '1',
+            'PAYROLL_PHILHEALTH_RATE' => '3.4', 'PAYROLL_PHILHEALTH_EMPLOYEE_SHARE' => '0.5',
+            'PAYROLL_PHILHEALTH_BASE_MIN' => '10000', 'PAYROLL_PHILHEALTH_BASE_MAX' => '20000',
+            'PAYROLL_PAGIBIG_RATE' => '1.5', 'PAYROLL_PAGIBIG_EMPLOYEE_SHARE' => '1',
+            'PAYROLL_PAGIBIG_BASE_MIN' => '', 'PAYROLL_PAGIBIG_BASE_MAX' => '5000',
+            'PAYROLL_WITHHOLDING_TAX_BRACKETS' => '[{"over":0,"base_tax":0,"rate":0},{"over":30000,"base_tax":0,"rate":12.5}]',
+        ];
+        $rules = $this->withEnv($vars, fn () => (require config_path('payroll.php'))['deductions']);
+
+        $this->assertSame([7.25, 1.0, null, null], [$rules[0]['rate'], $rules[0]['employee_share'], $rules[0]['base_min'], $rules[0]['base_max']]);
+        $this->assertSame([3.4, 0.5, 10000.0, 20000.0], [$rules[1]['rate'], $rules[1]['employee_share'], $rules[1]['base_min'], $rules[1]['base_max']]);
+        $this->assertNull($rules[2]['base_min']); // empty = no floor
+        $this->assertCount(2, $rules[3]['brackets']);
+
+        // gross 42,000: GSIS 7.25% of 42,000 = 3,045; PhilHealth 3.4% x 0.5 of
+        // min(42,000, 20,000) = 340; Pag-IBIG 1.5% of min(42,000, 5,000) = 75;
+        // taxable 42,000 - 3,460 = 38,540 -> 12.5% of 8,540 = 1,067.50.
+        $result = (new PayrollCalculator($rules))->compute(42000);
+        $this->assertSame([3045.0, 340.0, 75.0, 1067.5], array_column($result['deductions'], 'amount'));
+        $this->assertSame([], $result['unset']);
+    }
+
+    public function test_missing_or_invalid_environment_values_stay_unset(): void
+    {
+        $rules = $this->withEnv([
+            'PAYROLL_GSIS_RATE' => '7.25',                   // no employee share: not assumed to be 100%
+            'PAYROLL_PHILHEALTH_RATE' => 'five', 'PAYROLL_PHILHEALTH_EMPLOYEE_SHARE' => '0.5', // not a number
+            'PAYROLL_PAGIBIG_RATE' => '1.5', 'PAYROLL_PAGIBIG_EMPLOYEE_SHARE' => '1.5',        // share above 1
+            'PAYROLL_WITHHOLDING_TAX_BRACKETS' => '[{"over":0,"rate":12.5}]',                  // base_tax missing
+        ], fn () => (require config_path('payroll.php'))['deductions']);
+
+        $this->assertNull($rules[0]['employee_share']);
+        $this->assertNull($rules[1]['rate']);
+        $this->assertNull($rules[3]['brackets']);
+        $result = (new PayrollCalculator($rules))->compute(30000);
+        $this->assertSame(0.0, $result['total_deductions']);
+        $this->assertSame(['GSIS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax'], $result['unset']);
+    }
+
+    /** Run $read with these environment variables set, then restore them. */
+    private function withEnv(array $vars, callable $read)
+    {
+        $all = array_fill_keys([
+            'PAYROLL_GSIS_RATE', 'PAYROLL_GSIS_EMPLOYEE_SHARE', 'PAYROLL_GSIS_BASE_MIN', 'PAYROLL_GSIS_BASE_MAX',
+            'PAYROLL_PHILHEALTH_RATE', 'PAYROLL_PHILHEALTH_EMPLOYEE_SHARE', 'PAYROLL_PHILHEALTH_BASE_MIN', 'PAYROLL_PHILHEALTH_BASE_MAX',
+            'PAYROLL_PAGIBIG_RATE', 'PAYROLL_PAGIBIG_EMPLOYEE_SHARE', 'PAYROLL_PAGIBIG_BASE_MIN', 'PAYROLL_PAGIBIG_BASE_MAX',
+            'PAYROLL_WITHHOLDING_TAX_BRACKETS',
+        ], '');
+        $set = function (array $values) {
+            foreach ($values as $key => $value) {
+                $_ENV[$key] = $_SERVER[$key] = $value;
+                putenv("{$key}={$value}");
+            }
+        };
+        $set(array_merge($all, $vars));
+        try {
+            return $read();
+        } finally {
+            $set($all);
+        }
     }
 
     // ------------------------------------------------------------ pay rates and create
@@ -129,7 +204,7 @@ class PayrollTest extends TestCase
 
     public function test_create_for_a_month_computes_one_row_per_rated_active_member(): void
     {
-        $this->rate($this->researcher, 30000, 2000);
+        $this->rate($this->researcher, 40000, 2000);
         $this->rate($this->assistant, 20000, 0);
         $inactive = AuditLogger::muted(fn () => $this->member('researcher'));
         $this->rate($inactive, 25000);
@@ -148,15 +223,15 @@ class PayrollTest extends TestCase
         $this->assertSame(['created', 'created'], AuditTrail::latest('id')->take(2)->pluck('action')->all());
 
         $row = collect($response->json('rows'))->firstWhere('personnel.id', $this->researcher->id);
-        $this->assertSame(32000, $row['gross']);
-        $this->assertSame(4777.55, $row['deductions']);
-        $this->assertSame(27222.45, $row['net']);
+        $this->assertSame(42000, $row['gross']);
+        $this->assertSame(5157.5, $row['deductions']);
+        $this->assertSame(36842.5, $row['net']);
         $this->assertSame('draft', $row['workflow_status']);
         $this->assertCount(4, $row['deduction_items']);
         $this->assertSame(4, Payroll::findOrFail($row['id'])->deductions()->count());
 
         $breakdown = collect($response->json('deductionBreakdown'))->pluck('amount', 'type');
-        $this->assertSame(2700 + 1800, (int) $breakdown['GSIS']); // 9% of 30,000 and of 20,000
+        $this->assertSame(2900 + 1450, (int) $breakdown['GSIS']); // 7.25% of 40,000 and of 20,000
 
         // A second create for the same month adds nothing.
         $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $this->month, 'lib_category_id' => $this->ps->id])
@@ -211,6 +286,7 @@ class PayrollTest extends TestCase
         $this->assertSame(25000.0, (float) Payroll::where('personnel_id', $this->assistant->id)->value('gross_pay'));
 
         // Not once the batch is submitted.
+        $this->payrollFileFor($this->batch(), $this->assistant);
         $this->postJson("/api/payroll-batches/{$this->batch()->id}/submit")->assertOk();
         $this->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => $this->month])
             ->assertStatus(422)
@@ -580,6 +656,7 @@ class PayrollTest extends TestCase
     {
         $this->onePayroll();
         $batch = $this->batch();
+        $batch->documents()->delete(); // start with no file
         $this->actingAs($this->assistant);
         $upload = fn (string $type) => $this->post("/api/payroll-batches/{$batch->id}/documents", [
             'file' => UploadedFile::fake()->create('payroll.pdf', 20, 'application/pdf'), 'document_type' => $type,
@@ -592,6 +669,29 @@ class PayrollTest extends TestCase
 
         $this->actingAs($this->projectLeader)->getJson("/api/payroll-batches/{$batch->id}/documents")->assertOk()->assertJsonCount(1, 'documents');
         $this->actingAs($this->outsider)->getJson("/api/payroll-batches/{$batch->id}/documents")->assertForbidden();
+    }
+
+    public function test_a_batch_without_a_payroll_file_cannot_be_submitted(): void
+    {
+        $this->onePayroll();
+        $batch = $this->batch();
+        $batch->documents()->delete();
+        $audit = AuditTrail::count();
+
+        // An "other" document is not the payroll file.
+        $this->actingAs($this->assistant)->post("/api/payroll-batches/{$batch->id}/documents", [
+            'file' => UploadedFile::fake()->create('memo.pdf', 20, 'application/pdf'), 'document_type' => 'other',
+        ], ['Accept' => 'application/json'])->assertCreated();
+        $this->postJson("/api/payroll-batches/{$batch->id}/submit")
+            ->assertStatus(422)
+            ->assertJsonPath('errors.documents.0', 'Upload the payroll file before submitting.');
+        $this->assertSame('draft', $batch->fresh()->workflow_status);
+        $this->assertSame($audit + 1, AuditTrail::count()); // only the upload
+
+        $this->post("/api/payroll-batches/{$batch->id}/documents", [
+            'file' => UploadedFile::fake()->create('payroll.pdf', 20, 'application/pdf'), 'document_type' => 'payroll_file',
+        ], ['Accept' => 'application/json'])->assertCreated();
+        $this->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk()->assertJsonPath('batch.workflow_status', 'submitted');
     }
 
     public function test_backfill_maps_the_old_payroll_status(): void
@@ -652,6 +752,10 @@ class PayrollTest extends TestCase
         $this->actingAs($by ?? $this->assistant)
             ->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $this->month, 'lib_category_id' => $this->ps->id])
             ->assertCreated();
+        // The payroll file every submit needs (tests of the rule remove it).
+        if (! $this->batch()->documents()->where('document_type', 'payroll_file')->exists()) {
+            $this->payrollFileFor($this->batch(), $by ?? $this->assistant);
+        }
     }
 
     /** One draft payroll row (researcher, 30,000) prepared by $by. */
