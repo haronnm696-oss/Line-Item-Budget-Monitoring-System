@@ -182,14 +182,14 @@ class ReportController extends Controller
     {
         $query = $project->expenses()
             ->with(['libCategory', 'verifiedBy'])
+            ->withCount('receipts')
             ->orderBy('expense_date');
 
         if ($compliance === 'verified') {
             ProjectFinancialService::onlySpent($query);
         } elseif ($compliance === 'missing_receipts') {
-            $query->where(function ($q) {
-                $q->whereNull('attachment_path')->orWhere('attachment_path', '');
-            });
+            // Verified expenses with no receipt document.
+            ProjectFinancialService::missingReceipt($query);
         }
 
         $rows = [
@@ -212,7 +212,7 @@ class ReportController extends Controller
                 $expense->libCategory?->line_item_name ?? '',
                 $amount,
                 ucfirst($expense->status),
-                filled($expense->attachment_path) ? 'Yes' : 'No',
+                $expense->receipts_count > 0 ? 'Yes' : 'No',
                 $expense->verifiedBy?->name ?? '',
             ];
         }

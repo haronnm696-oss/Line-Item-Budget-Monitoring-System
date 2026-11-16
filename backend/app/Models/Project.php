@@ -57,6 +57,16 @@ class Project extends Model
         return $this->hasMany(Payroll::class);
     }
 
+    public function purchaseRequests()
+    {
+        return $this->hasMany(PurchaseRequest::class);
+    }
+
+    public function payrollBatches()
+    {
+        return $this->hasMany(PayrollBatch::class);
+    }
+
     public function tranches()
     {
         return $this->hasMany(ProjectTranche::class)->orderBy('sequence');

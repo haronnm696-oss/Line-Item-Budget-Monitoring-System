@@ -12,7 +12,7 @@ const TYPES = [
   ['fund-release', 'Fund release'],
   ['realignment', 'Realignment'],
   ['liquidation', 'Liquidation'],
-  ['budget-change', 'Budget change'],
+  ['payroll', 'Payroll'],
 ];
 
 const TABS = [
@@ -31,7 +31,8 @@ const PAGE_SIZE = 20;
 
 const TYPE_PILL = {
   disbursement: 'Fund release',
-  payroll: 'Fund release',
+  // Payroll steps escalated to the Program Leader (self-pay / no eligible verifier).
+  payroll: 'Payroll',
   budget_realignment: 'Realignment',
   liquidation: 'Liquidation',
 };

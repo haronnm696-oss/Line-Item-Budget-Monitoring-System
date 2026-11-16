@@ -57,6 +57,44 @@ class ProgramApprovalsTest extends TestCase
         $this->assertSame('budget_realignment', $realignment->json('approvals.0.type'));
     }
 
+    public function test_the_type_filter_matches_the_labels_and_drives_the_tab_counts(): void
+    {
+        $leader = $this->userWithRole('program-leader');
+        $project = $this->project();
+
+        $disbursement = $this->approval($project, 'disbursement', 'pending');
+        $this->approval($project, 'disbursement', 'approved');
+        $payroll = $this->approval($project, 'payroll', 'pending');
+        $realignment = $this->approval($project, 'budget_realignment', 'pending');
+        $this->approval($project, 'budget_realignment', 'rejected');
+        $liquidation = $this->approval($project, 'liquidation', 'pending');
+
+        $expected = [
+            // type => [pending ids, [pending, approved, rejected] counts]
+            'fund-release' => [[$disbursement->id], [1, 1, 0]],
+            'payroll' => [[$payroll->id], [1, 0, 0]],
+            'realignment' => [[$realignment->id], [1, 0, 1]],
+            'liquidation' => [[$liquidation->id], [1, 0, 0]],
+            'all' => [[$disbursement->id, $payroll->id, $realignment->id, $liquidation->id], [4, 1, 1]],
+        ];
+
+        foreach ($expected as $type => [$ids, [$pending, $approved, $rejected]]) {
+            $response = $this->actingAs($leader)
+                ->getJson("/api/program/approvals?status=pending&type={$type}")
+                ->assertOk()
+                ->assertJsonPath('counts.pending', $pending)
+                ->assertJsonPath('counts.approved', $approved)
+                ->assertJsonPath('counts.rejected', $rejected);
+
+            $this->assertEqualsCanonicalizing($ids, collect($response->json('approvals'))->pluck('id')->all(), "type={$type}");
+        }
+
+        // "Budget change" is gone (it duplicated Realignment).
+        $this->actingAs($leader)
+            ->getJson('/api/program/approvals?type=budget-change')
+            ->assertStatus(422);
+    }
+
     public function test_pending_count_matches_the_overview_kpi_for_the_same_funder(): void
     {
         $leader = $this->userWithRole('program-leader');

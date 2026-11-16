@@ -149,7 +149,7 @@ class ProjectScopingTest extends TestCase
         $this->assertSame('rejected', $approval->fresh()->status);
     }
 
-    public function test_a_write_to_a_missing_endpoint_stores_nothing(): void
+    public function test_a_refused_or_missing_write_stores_nothing(): void
     {
         $assistant = AuditLogger::muted(function () {
             $assistant = $this->person('research-assistant');
@@ -160,16 +160,20 @@ class ProjectScopingTest extends TestCase
 
         $before = [Expense::count(), AuditTrail::count()];
 
-        // The Expenses and Payroll pages used to treat these 404s as success.
-        $status = $this->actingAs($assistant)
+        // The Expenses and Payroll pages used to treat 404s as success. The
+        // expense endpoint now exists: an incomplete payload (no category or
+        // date) is refused with 422 and stores nothing.
+        $this->actingAs($assistant)
             ->postJson("/api/projects/{$this->mine->id}/expenses", ['description' => 'Field forms', 'amount' => 1500])
-            ->status();
-        $this->assertContains($status, [404, 405]);
+            ->assertStatus(422);
+        // Payroll compute exists too: with no payroll for the month it is
+        // refused with 422 and stores nothing.
         $this->actingAs($assistant)
             ->postJson("/api/projects/{$this->mine->id}/payroll/compute", ['month' => '2026-11'])
-            ->assertNotFound();
+            ->assertStatus(422);
 
         $this->assertSame($before, [Expense::count(), AuditTrail::count()]);
+        $this->assertSame(0, \App\Models\Payroll::count());
     }
 
     private function person(string $slug): User

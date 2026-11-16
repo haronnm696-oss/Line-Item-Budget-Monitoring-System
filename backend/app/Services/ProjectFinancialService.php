@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Project;
+use App\Models\PurchaseRequest;
 
 /**
  * Canonical financial calculations for a project.
@@ -51,6 +53,27 @@ class ProjectFinancialService
     }
 
     /**
+     * The single receipt rule: an expense has a receipt when a "receipt"
+     * document is attached to it (documents table). Receipt compliance is
+     * measured on verified (spent) expenses: a verified expense without a
+     * receipt document is a missing receipt.
+     *
+     * @template T of \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
+     * @param T $expenses
+     * @return T
+     */
+    public static function withReceipt($expenses)
+    {
+        return $expenses->whereHas('receipts');
+    }
+
+    /** Verified expenses that have no receipt document. */
+    public static function missingReceipt($expenses)
+    {
+        return self::onlySpent($expenses)->whereDoesntHave('receipts');
+    }
+
+    /**
      * Spend is the sum of verified expense records only.
      */
     public function spent(Project $project): float
@@ -59,17 +82,18 @@ class ProjectFinancialService
     }
 
     /**
-     * @return array{budget: float, spent: float, remaining: float, utilization_pct: float, expenses_count: int, receipts_count: int, receipt_compliance_pct: float|null}
+     * receipts_count / verified_count is the receipt compliance of the
+     * verified (spent) expenses; null when nothing is verified yet.
+     *
+     * @return array{budget: float, spent: float, remaining: float, utilization_pct: float, expenses_count: int, verified_count: int, receipts_count: int, receipt_compliance_pct: float|null}
      */
     public function financials(Project $project): array
     {
         $budget = $this->budget($project);
         $spent = $this->spent($project);
         $expenseCount = (int) $project->expenses()->count();
-        $receiptsCount = (int) $project->expenses()
-            ->whereNotNull('attachment_path')
-            ->where('attachment_path', '<>', '')
-            ->count();
+        $verifiedCount = (int) self::onlySpent($project->expenses())->count();
+        $receiptsCount = (int) self::withReceipt(self::onlySpent($project->expenses()))->count();
 
         return [
             'budget' => $budget,
@@ -77,9 +101,10 @@ class ProjectFinancialService
             'remaining' => round($budget - $spent, 2),
             'utilization_pct' => $this->pct($spent, $budget),
             'expenses_count' => $expenseCount,
+            'verified_count' => $verifiedCount,
             'receipts_count' => $receiptsCount,
-            'receipt_compliance_pct' => $expenseCount > 0
-                ? round(($receiptsCount / $expenseCount) * 100, 1)
+            'receipt_compliance_pct' => $verifiedCount > 0
+                ? round(($receiptsCount / $verifiedCount) * 100, 1)
                 : null,
         ];
     }
@@ -113,6 +138,81 @@ class ProjectFinancialService
             ->all();
     }
 
+    /** Workflow stages that are waiting for a decision (not yet verified). */
+    public const PENDING_STAGES = ['submitted', 'endorsed'];
+
+    /**
+     * Balancing query per line item: allocated, spent, pending and
+     * available = allocated - spent - pending. Payroll is not included.
+     *
+     *   spent    verified expenses
+     *   pending  expenses submitted or approved by the Project Leader, plus
+     *            any not-yet-verified expense linked to a purchase request
+     *            (it took over that request's money), plus purchase
+     *            requests that are approved and still open (not fulfilled,
+     *            not cancelled)
+     *
+     * A fulfilled request stops counting and its linked expense counts
+     * instead, so the same money is never counted twice.
+     *
+     * @return array{line_items: array<int, array<string, mixed>>, totals: array<string, float>}
+     */
+    public function balancing(Project $project, ?int $lineItemId = null): array
+    {
+        $sums = function ($query, string $column) use ($project) {
+            return $query->where('project_id', $project->id)
+                ->selectRaw("lib_category_id, SUM({$column}) as total")
+                ->groupBy('lib_category_id')
+                ->pluck('total', 'lib_category_id')
+                ->map(fn ($v) => round((float) $v, 2));
+        };
+
+        $spent = $sums(self::onlySpent(Expense::query()), 'amount');
+        $pendingExpenses = $sums(Expense::query()->where(function ($q) {
+            $q->whereIn('workflow_status', self::PENDING_STAGES)
+                ->orWhere(fn ($linked) => $linked->whereNotNull('purchase_request_id')->whereIn('workflow_status', ['draft', 'returned']));
+        }), 'amount');
+        $pendingRequests = $sums(PurchaseRequest::query()->where('workflow_status', PurchaseRequest::OPEN_APPROVED), 'estimated_amount');
+
+        $rows = $project->libCategories()
+            ->when($lineItemId, fn ($q) => $q->whereKey($lineItemId))
+            ->orderBy('category_type')->orderBy('id')
+            ->get()
+            ->map(function (LibCategory $item) use ($spent, $pendingExpenses, $pendingRequests) {
+                $allocated = round((float) $item->allocated_amount, 2);
+                $itemSpent = $spent[$item->id] ?? 0.0;
+                $fromExpenses = $pendingExpenses[$item->id] ?? 0.0;
+                $fromRequests = $pendingRequests[$item->id] ?? 0.0;
+                $pending = round($fromExpenses + $fromRequests, 2);
+
+                return [
+                    'id' => $item->id,
+                    'type' => $item->category_type,
+                    'code' => $item->line_item_code,
+                    'name' => $item->line_item_name,
+                    'allocated' => $allocated,
+                    'spent' => $itemSpent,
+                    'pending_expenses' => $fromExpenses,
+                    'pending_purchase_requests' => $fromRequests,
+                    'pending' => $pending,
+                    'available' => round($allocated - $itemSpent - $pending, 2),
+                ];
+            })
+            ->values();
+
+        $total = fn (string $key) => round((float) $rows->sum($key), 2);
+
+        return [
+            'line_items' => $rows->all(),
+            'totals' => [
+                'allocated' => $total('allocated'),
+                'spent' => $total('spent'),
+                'pending' => $total('pending'),
+                'available' => $total('available'),
+            ],
+        ];
+    }
+
     /**
      * PS and MOOE totals built from categoryRows(), so the split always adds
      * up to the line items shown on the project detail and Form B.
@@ -140,9 +240,11 @@ class ProjectFinancialService
     }
 
     /**
-     * Receipt/document compliance for one project. `compliance_pct` is null
-     * when the project has no expense records, so the UI can render "—"
-     * instead of a misleading 0%.
+     * Receipt/document compliance for one project (see withReceipt()).
+     * `compliance_pct` is the share of verified expenses that have a receipt
+     * document; null when nothing is verified yet, so the UI can render "—"
+     * instead of a misleading 0%. `missing_receipt` counts verified expenses
+     * with no receipt document.
      *
      * @return array<string, mixed>
      */
@@ -150,25 +252,29 @@ class ProjectFinancialService
     {
         $expenses = $project->expenses()
             ->with(['libCategory', 'verifiedBy'])
+            ->withCount('receipts')
             ->get();
 
+        $hasReceipt = fn ($e) => $e->receipts_count > 0;
+        $isVerified = fn ($e) => $e->status === self::SPENT_STATUS;
+
         $total = $expenses->count();
-        $withReceipt = $expenses->filter(fn ($e) => filled($e->attachment_path))->count();
-        $verified = $expenses->where('status', 'verified')->count();
+        $withReceipt = $expenses->filter($hasReceipt)->count();
+        $verified = $expenses->filter($isVerified)->count();
         $pending = $expenses->where('status', 'pending')->count();
         $rejected = $expenses->where('status', 'rejected')->count();
         $verifiedWithReceipt = $expenses
-            ->filter(fn ($e) => $e->status === 'verified' && filled($e->attachment_path))
+            ->filter(fn ($e) => $isVerified($e) && $hasReceipt($e))
             ->count();
 
-        $compliancePct = $total > 0
-            ? round(($withReceipt / $total) * 100, 1)
+        $compliancePct = $verified > 0
+            ? round(($verifiedWithReceipt / $verified) * 100, 1)
             : null;
         $verifiedPct = $total > 0
             ? round(($verifiedWithReceipt / $total) * 100, 1)
             : null;
         $missing = $expenses
-            ->filter(fn ($e) => blank($e->attachment_path))
+            ->filter(fn ($e) => $isVerified($e) && ! $hasReceipt($e))
             ->sortByDesc(fn ($e) => $e->expense_date?->timestamp ?? 0)
             ->values();
 

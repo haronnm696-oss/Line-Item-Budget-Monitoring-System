@@ -73,12 +73,12 @@ export default function ProjectHealthMatrix({ projects }) {
                     </td>
                     <td className="r">
                       <b className="num">
-                        {project.expenses_count > 0 && project.receipt_compliance_pct != null
+                        {project.receipt_compliance_pct != null
                           ? formatPct(project.receipt_compliance_pct)
                           : '—'}
                       </b>
                       <span className="pd-muted num">
-                        {project.receipts_count} / {project.expenses_count} expenses
+                        {project.receipts_count} / {project.verified_count ?? 0} verified expenses
                       </span>
                     </td>
                   </tr>

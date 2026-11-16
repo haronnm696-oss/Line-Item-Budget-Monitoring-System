@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { peso } from '../components/money';
 import { formatDate } from '../lib/datetime';
 import client from '../api/client';
@@ -143,8 +143,11 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     ? 'loading'
     : projectsResult.error ? 'error' : projectsResult.list.length ? 'ready' : 'empty';
   const projectList = projectsStatus === 'ready' ? projectsResult.list : [];
+  // ?project=<id> (links from the role Overviews) picks the project too.
+  const requestedId = new URLSearchParams(window.location.search).get('project');
   const listRow = projectList.find((p) => p.code === chosenCode)
     ?? projectList.find((p) => p.code === initialCode)
+    ?? projectList.find((p) => requestedId && String(p.id) === requestedId)
     ?? projectList[0]
     ?? null;
   const selectedCode = listRow?.code ?? '';
@@ -757,6 +760,22 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     </div>
   );
   const payrollNote = 'Not available yet: the server does not provide payroll records for reports.';
+
+  // ?report=<key>&format=pdf|csv (the PDF / CSV buttons on the role
+  // Overviews): run that export once the project's data is loaded, with the
+  // same code as the buttons below.
+  const autoExport = useRef(false);
+  useEffect(() => {
+    if (autoExport.current || !reportsReady) return;
+    const params = new URLSearchParams(window.location.search);
+    const report = REPORT_TYPES.find((r) => r.key === params.get('report'));
+    const format = params.get('format');
+    if (!report || !['pdf', 'csv'].includes(format)) return;
+    autoExport.current = true;
+    if (!reportAvailable(report.key)) return;
+    if (format === 'pdf') handleGenerate(report.key);
+    else exportReportCsv(report);
+  });
 
   return (
     <>

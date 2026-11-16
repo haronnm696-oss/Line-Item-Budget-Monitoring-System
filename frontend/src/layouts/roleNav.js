@@ -67,7 +67,7 @@ export const ROLE_NAV = {
     {
       label: 'Verify',
       items: [
-        { to: '/verification', label: 'Verification queue', icon: 'approvals', badge: 'verification' },
+        { to: '/verification-queue', label: 'Verification queue', icon: 'approvals', badge: 'verification' },
         { to: '/expenses', label: 'Expenses and receipts', icon: 'receipt' },
         { to: '/payroll', label: 'Payroll', icon: 'payroll' },
       ],
@@ -75,7 +75,7 @@ export const ROLE_NAV = {
     {
       label: 'Records',
       items: [
-        { to: '/transactions', label: 'Transaction history', icon: 'audit' },
+        { to: '/transaction-history', label: 'Transaction history', icon: 'audit' },
         { to: '/reports', label: 'Reports', icon: 'reports' },
       ],
     },
@@ -94,24 +94,14 @@ export const ROLE_NAV = {
 };
 
 /** Paths that have no page yet; they open the "Coming soon" page. */
-export const COMING_SOON_PATHS = [
-  '/budget',
-  '/transactions',
-  '/submissions',
-  '/my-requests',
-  '/purchase-requests',
-  '/documents',
-  '/my-submissions',
-  '/balancing-query',
-  '/verification',
-];
+export const COMING_SOON_PATHS = [];
 
 /** Where the bell leads for each role (its review/inbox page). */
 export const BELL_TARGET = {
   PRG: '/program-approvals',
   PL: '/submissions',
   RA: '/my-submissions',
-  FIN: '/verification',
+  FIN: '/verification-queue',
   RES: '/dashboard/researcher',
 };
 

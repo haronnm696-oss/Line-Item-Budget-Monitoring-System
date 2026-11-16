@@ -20,7 +20,15 @@ class ProjectController extends Controller
      */
     public function index(Request $request)
     {
-        return response()->json($this->dashboard->projectSummaries($request->user()->accessibleProjectIds()));
+        $user = $request->user();
+        // The caller's role on each project (null for the Program Leader's unassigned ones).
+        $roles = $user->projectUsers()->with('role')->get()
+            ->mapWithKeys(fn ($pivot) => [(int) $pivot->project_id => $pivot->role?->slug]);
+
+        return response()->json(array_map(
+            fn (array $row) => $row + ['my_role' => $roles[(int) $row['id']] ?? null],
+            $this->dashboard->projectSummaries($user->accessibleProjectIds())
+        ));
     }
 
     /**

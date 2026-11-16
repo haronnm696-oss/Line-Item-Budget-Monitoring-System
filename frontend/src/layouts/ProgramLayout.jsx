@@ -37,7 +37,6 @@ export default function ProgramLayout() {
         breadcrumb="Program: All Projects — MSU–Main Campus"
         badges={{ approvals: pendingCount }}
         badgeLabel={(key, count) => `${count} pending approvals`}
-        bell={{ count: pendingCount, to: '/program-approvals', label: `${pendingCount} pending approvals` }}
         fallbackName="Program Leader"
       />
     </ProgramRefreshContext.Provider>

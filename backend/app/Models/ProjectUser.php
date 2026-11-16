@@ -15,9 +15,13 @@ class ProjectUser extends Pivot
 
     public $incrementing = true;
 
-    protected $fillable = ['project_id', 'user_id', 'role_id', 'assigned_at'];
+    protected $fillable = ['project_id', 'user_id', 'role_id', 'assigned_at', 'monthly_rate', 'allowance'];
 
-    protected $casts = ['assigned_at' => 'datetime'];
+    protected $casts = [
+        'assigned_at' => 'datetime',
+        'monthly_rate' => 'decimal:2',
+        'allowance' => 'decimal:2',
+    ];
 
     public function project()
     {

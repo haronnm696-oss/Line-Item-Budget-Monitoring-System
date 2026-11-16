@@ -30,7 +30,7 @@ export default function ProgramKpis({ kpis }) {
         <b className="pd-kpi-value">
           {kpis?.avg_receipt_compliance == null ? '—' : formatPct(kpis.avg_receipt_compliance)}
         </b>
-        <span className="pd-kpi-sub">Expenses with a digitized receipt on file</span>
+        <span className="pd-kpi-sub">Verified expenses with a receipt document</span>
       </div>
     </div>
   );

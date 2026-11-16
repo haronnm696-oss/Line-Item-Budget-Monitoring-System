@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Services\AuditLogger;
+use App\Support\LegacyAttachmentImporter;
 use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
 use App\Models\Expense;
@@ -36,6 +37,8 @@ class DemoDatasetSeeder extends Seeder
     public function run(): void
     {
         AuditLogger::muted(fn () => $this->seed());
+        // Receipts are documents now; mirror the seeded attachment paths.
+        LegacyAttachmentImporter::run();
     }
 
     private function seed(): void

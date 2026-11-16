@@ -36,7 +36,7 @@ class ProgramDashboardService
             ->values();
 
         $approvals = $this->approvalRows($projects, $today);
-        $expenseCount = (int) $rows->sum('expenses_count');
+        $verifiedCount = (int) $rows->sum('verified_count');
         $receiptCount = (int) $rows->sum('receipts_count');
         $oldestWaiting = (int) ($approvals->max('days_waiting') ?? 0);
         $forecast = $this->forecast($projects, $today);
@@ -60,8 +60,9 @@ class ProgramDashboardService
                     'at_risk' => $rows->where('health', 'At risk')->count(),
                     'closed' => $rows->where('health', 'Closed')->count(),
                 ],
-                'avg_receipt_compliance' => $expenseCount > 0
-                    ? round(($receiptCount / $expenseCount) * 100, 1)
+                // Verified expenses with a receipt document, all projects.
+                'avg_receipt_compliance' => $verifiedCount > 0
+                    ? round(($receiptCount / $verifiedCount) * 100, 1)
                     : null,
                 'pending_approvals' => $approvals->count(),
                 'pending_approvals_total' => $approvals->count(),
@@ -98,7 +99,7 @@ class ProgramDashboardService
      *
      * @return array<int, array{month: string, label: string, amount: float|null, is_future: bool}>
      */
-    protected function monthlyExpenses(Collection $projects, Carbon $today): array
+    public function monthlyExpenses(Collection $projects, Carbon $today): array
     {
         $year = (int) $today->year;
         $totals = array_fill(1, 12, 0.0);
@@ -138,7 +139,7 @@ class ProgramDashboardService
      *
      * @return array<string, mixed>
      */
-    protected function categorySummary(Collection $projects, float $approvedBudget): array
+    public function categorySummary(Collection $projects, float $approvedBudget): array
     {
         $allocated = ['PS' => 0.0, 'MOOE' => 0.0];
         foreach ($projects as $project) {
@@ -410,14 +411,13 @@ class ProgramDashboardService
             // Same project scope as the Overview (soft-deleted projects are
             // excluded there), so the Pending count matches its KPI.
             ->whereHas('project')
+            // The Type filter matches the row labels: Fund release, Realignment,
+            // Liquidation, Payroll (raw type slugs are accepted too).
             ->when($filters['type'] ?? null, function ($query, $type) {
-                if ($type === 'fund-release') {
-                    $query->whereIn('type', ['disbursement', 'payroll']);
-                } elseif (in_array($type, ['realignment', 'budget-change'], true)) {
-                    $query->where('type', 'budget_realignment');
-                } else {
-                    $query->where('type', $type);
-                }
+                $query->where('type', [
+                    'fund-release' => 'disbursement',
+                    'realignment' => 'budget_realignment',
+                ][$type] ?? $type);
             })
             ->when($filters['project'] ?? null, fn ($query, $project) => $query->where('project_id', $project))
             ->when($filters['funder'] ?? null, function ($query, $funder) {
@@ -534,7 +534,7 @@ class ProgramDashboardService
             abort(409, 'This approval request has already been reviewed.');
         }
 
-        AuditLogger::transaction(function () use ($approval, $decision, $remarks, $actor) {
+        $batch = AuditLogger::transaction(function () use ($approval, $decision, $remarks, $actor) {
             $locked = ApprovalRequest::query()
                 ->with(['liquidation'])
                 ->lockForUpdate()
@@ -556,6 +556,13 @@ class ProgramDashboardService
                 'reviewed_at' => now(),
                 'review_notes' => $remarks,
             ]);
+
+            // A payroll step escalated to the Program Leader (self-pay): the
+            // batch moves with its own single audit entry instead of the
+            // generic one below.
+            if (PayrollService::isEscalation($locked)) {
+                return app(PayrollService::class)->decideEscalation($locked, $decision, $remarks, $actor);
+            }
 
             $this->applyDecision($locked, $decision, $remarks, $actor);
 
@@ -584,7 +591,17 @@ class ProgramDashboardService
                 'ip_address' => request()->ip(),
                 'created_at' => now(),
             ]);
+
+            return null;
         });
+
+        // Tell the people concerned once the decision is committed (a failed
+        // notification never undoes it).
+        if ($batch) {
+            app(PayrollService::class)->notifyEscalationDecision($approval->fresh(), $batch, $actor);
+        } else {
+            app(BudgetRequestService::class)->notifyDecision($approval->fresh(), $actor);
+        }
 
         return $approval->fresh()->load(['requestedBy', 'tranche', 'liquidation']);
     }
@@ -674,6 +691,7 @@ class ProgramDashboardService
             'total_days' => $time['total_days'],
             'receipt_compliance_pct' => $receiptPct,
             'expenses_count' => $expenseCount,
+            'verified_count' => $metrics['verified_count'],
             'receipts_count' => $withReceipt,
             'tranche_status' => $tranche['status'],
             'tranche_overdue' => $tranche['overdue'],

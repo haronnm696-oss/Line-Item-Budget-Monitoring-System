@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\HasDocuments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Validation\ValidationException;
 
-class ApprovalRequest extends Model
+class ApprovalRequest extends Model implements HasDocuments
 {
     public const TYPES = [
         'disbursement' => 'Fund Release',
@@ -71,5 +73,25 @@ class ApprovalRequest extends Model
     public function isPending(): bool
     {
         return $this->status === 'pending';
+    }
+
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'documentable');
+    }
+
+    /** Supporting documents (liquidation): added by the requester while pending. */
+    public function documentRules(): array
+    {
+        return [
+            'folder' => 'approval-requests',
+            'types' => Document::TYPES,
+            'uploader_ids' => array_filter([(int) $this->requested_by]),
+            'uploader_message' => 'Only the person who made this request can attach documents.',
+            'open' => $this->isPending(),
+            'closed_message' => 'Documents can be attached only while the request is pending.',
+            'locked' => ! $this->isPending(),
+            'locked_message' => 'Documents of a reviewed request cannot be deleted.',
+        ];
     }
 }

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import RoleRoute from './routes/RoleRoute';
@@ -19,10 +19,12 @@ import ResearchAssistantDashboard from './pages/dashboards/ResearchAssistantDash
 import FinanceDashboard from './pages/dashboards/FinanceDashboard';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
-import Expenses from './pages/Expenses';
-import Payroll from './pages/Payroll';
 import Reports from './pages/Reports';
 import AuditTrail from './pages/AuditTrail';
+import LineItemBudget from './pages/leader/LineItemBudget';
+import Transactions from './pages/leader/Transactions';
+import Submissions from './pages/leader/Submissions';
+import MyRequests from './pages/leader/MyRequests';
 import ProgramApprovals from './pages/program/ProgramApprovals';
 import ProgramProjects from './pages/program/ProgramProjects';
 import ProgramProjectDetail from './pages/program/ProgramProjectDetail';
@@ -30,8 +32,25 @@ import ProgramReports from './pages/program/ProgramReports';
 import ProgramExecutiveReport from './pages/program/ProgramExecutiveReport';
 import ProgramAudit from './pages/program/ProgramAudit';
 import ProgramUsers from './pages/program/ProgramUsers';
+import AssistantExpenses from './pages/assistant/AssistantExpenses';
+import AssistantPayroll from './pages/assistant/AssistantPayroll';
+import PurchaseRequests from './pages/assistant/PurchaseRequests';
+import MySubmissions from './pages/assistant/MySubmissions';
+import Documents from './pages/assistant/Documents';
+import BalancingQuery from './pages/assistant/BalancingQuery';
+import VerificationQueue from './pages/finance/VerificationQueue';
+import FinanceExpenses from './pages/finance/FinanceExpenses';
+import FinancePayroll from './pages/finance/FinancePayroll';
+import ResearcherBudget from './pages/researcher/ResearcherBudget';
+import ByRole from './routes/ByRole';
 import HomeRoute from './routes/HomeRoute';
 import NotFound from './pages/NotFound';
+
+/** A short URL that keeps its ?project= (and other filters). */
+function RedirectKeepingQuery({ to }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
 
 // Pages inside the shared role shell. Who may open each one is in
 // routes/access.js (ROUTE_ROLES).
@@ -48,10 +67,24 @@ const ROLE_PAGES = [
   ['/dashboard/finance', <FinanceDashboard />],
   ['/projects', <Projects />],
   ['/projects/:id', <ProjectDetail />],
-  ['/expenses', <Expenses />],
-  ['/payroll', <Payroll />],
+  // Shared paths: the Research Assistant gets their own encoding pages.
+  ['/expenses', <ByRole RA={<AssistantExpenses />} FIN={<FinanceExpenses />} />],
+  ['/payroll', <ByRole RA={<AssistantPayroll />} FIN={<FinancePayroll />} />],
+  // Finance/Admin.
+  ['/verification-queue', <VerificationQueue />],
+  ['/verification', <RedirectKeepingQuery to="/verification-queue" />],
+  ['/transaction-history', <Transactions />],
+  ['/purchase-requests', <PurchaseRequests />],
+  ['/my-submissions', <MySubmissions />],
+  ['/documents', <Documents />],
+  ['/balancing-query', <BalancingQuery />],
+  ['/balancing', <RedirectKeepingQuery to="/balancing-query" />],
   ['/reports', <Reports />],
   ['/audit', <AuditTrail />],
+  ['/budget', <ByRole RES={<ResearcherBudget />} other={<LineItemBudget />} />],
+  ['/transactions', <Transactions />],
+  ['/submissions', <Submissions />],
+  ['/my-requests', <MyRequests />],
 ];
 
 export default function App() {
