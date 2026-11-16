@@ -385,7 +385,7 @@ class ProjectLeaderService
         ];
     }
 
-    private function spentQuery(Project $project)
+    public function spentQuery(Project $project)
     {
         return ProjectFinancialService::onlySpent($project->expenses())
             ->with(['libCategory', 'recordedBy', 'verifiedBy'])
@@ -394,7 +394,7 @@ class ProjectLeaderService
             ->orderByDesc('id');
     }
 
-    private function transactionRows($expenses): array
+    public function transactionRows($expenses): array
     {
         return collect($expenses)->map(fn (Expense $expense) => [
             'id' => $expense->id,

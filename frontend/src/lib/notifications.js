@@ -54,6 +54,16 @@ function assistantTarget(link, record, projectId) {
 }
 
 /**
+ * Finance/Admin: expenses and payroll batches open in the Verification
+ * queue side panel (whatever their stage; the panel loads it fresh).
+ */
+function financeTarget(link, record, projectId) {
+  const project = projectOf(link, projectId);
+  if (!record || !project || !['expense', 'payroll'].includes(record.type)) return null;
+  return `/verification-queue?project=${encodeURIComponent(project)}&open=${record.type}-${record.id}`;
+}
+
+/**
  * Where clicking a notification takes this user. For a Project Leader, the
  * record itself when the notification names one (see leaderTarget()).
  * Otherwise the notification's own link when their role may open that page,
@@ -69,6 +79,10 @@ export function notificationTarget(role, link, record = null, projectId = null) 
   }
   if (role === 'RA') {
     const target = assistantTarget(link, record, projectId);
+    if (target) return target;
+  }
+  if (role === 'FIN') {
+    const target = financeTarget(link, record, projectId);
     if (target) return target;
   }
 

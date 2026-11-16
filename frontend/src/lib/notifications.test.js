@@ -37,8 +37,8 @@ test('a Project Leader opens the record each notification is about', () => {
     notificationTarget('PL', '/my-requests?project=4', { type: 'approval', id: 21 }, 4),
     '/my-requests?project=4&request=21'
   );
-  // Other roles keep the notification's own link.
-  assert.equal(notificationTarget('FIN', LINK, { type: 'expense', id: 17 }, 4), LINK);
+  // A record type the role has no panel for keeps the notification's own link.
+  assert.equal(notificationTarget('FIN', LINK, { type: 'approval', id: 17 }, 4), LINK);
 });
 
 test('badge text is capped', () => {
@@ -62,4 +62,15 @@ test('a Research Assistant opens the exact record on its own page and panel', ()
   );
   // No record: the link itself (or the role's page).
   assert.equal(notificationTarget('RA', LINK), LINK);
+});
+
+test('a Finance/Admin opens the record in the Verification queue panel', () => {
+  assert.equal(
+    notificationTarget('FIN', LINK, { type: 'expense', id: 17 }, 4),
+    '/verification-queue?project=4&open=expense-17',
+  );
+  assert.equal(
+    notificationTarget('FIN', '/payroll?project=4&month=2026-11', { type: 'payroll', id: 3 }, 4),
+    '/verification-queue?project=4&open=payroll-3',
+  );
 });

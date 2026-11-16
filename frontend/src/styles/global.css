@@ -3785,3 +3785,34 @@ select.signin-input:disabled{
   .ra-table td.num{text-align:left}
   .ra-inline-form .program-field{min-width:0;flex:1 1 100%}
 }
+
+/* ------------------------------------------------------------------
+   Finance/Admin and Researcher pages (same tokens as the PL / RA pages).
+   ------------------------------------------------------------------ */
+.fin-blocked{color:var(--pg-watch);font-weight:600}
+.fin-row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.fin-verify-note{flex:1 1 100%;margin:0 0 4px;text-align:right}
+.fin-late{margin-top:14px;padding-top:12px;border-top:1px solid var(--pg2-line)}
+.fin-late .ld-panel-sub{margin-top:0;font-size:14px}
+.res-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.res-readonly{
+  display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:650;letter-spacing:0;
+  color:var(--pg-neutral);background:var(--pg-neutral-bg);border:1px solid #E7E0D5;border-radius:99px;padding:4px 10px;
+}
+@media (max-width: 900px){
+  .fin-row-actions{justify-content:flex-start}
+  .fin-verify-note{text-align:left}
+}
+.fin-queue-card{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:14px 0;border-top:1px solid var(--pg2-line)}
+.fin-queue-card:first-of-type{border-top:none;padding-top:2px}
+.fin-queue-main{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.fin-queue-title{font-size:14px;overflow-wrap:anywhere}
+.fin-queue-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
+.fin-note{margin:12px 0 0;padding:12px 14px;border-radius:10px;background:var(--pg-page);font-size:12.5px;color:var(--pg-muted);line-height:1.5}
+.res-greeting{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.res-cat{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--pg-neutral-bg);color:var(--pg-neutral);font-size:11.5px;font-weight:700;letter-spacing:.03em}
+.res-export{display:flex;gap:6px;flex-shrink:0}
+@media (max-width: 900px){
+  .fin-queue-card{flex-direction:column}
+  .fin-queue-side{align-items:flex-start}
+}

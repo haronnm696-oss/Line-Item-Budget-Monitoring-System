@@ -10,6 +10,7 @@ use App\Http\Controllers\BudgetRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PayRateController;
 use App\Http\Controllers\PayrollController;
@@ -126,6 +127,17 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::get('/projects/{project}/assistant-badges', [ResearchAssistantController::class, 'badges']);
     Route::get('/projects/{project}/my-submissions', [ResearchAssistantController::class, 'submissions']);
     Route::get('/projects/{project}/my-submissions/{type}/{id}', [ResearchAssistantController::class, 'show'])->where('id', '[0-9]+');
+    // Finance/Admin pages (read-only; verify / reject use the workflow routes above).
+    Route::get('/projects/{project}/finance-overview', [FinanceController::class, 'overview']);
+    Route::get('/projects/{project}/finance-badges', [FinanceController::class, 'badges']);
+    Route::get('/projects/{project}/verification-queue', [FinanceController::class, 'queue']);
+    Route::get('/projects/{project}/verification-queue/{type}/{id}', [FinanceController::class, 'show'])->where('id', '[0-9]+');
+    Route::get('/projects/{project}/payroll-batches', [FinanceController::class, 'payrollBatches']);
+    // Notify RA: ask for the missing receipt of a verified expense (Finance/Admin).
+    Route::post('/expenses/{expense}/request-receipt', [FinanceController::class, 'requestReceipt']);
+    // Read-only budget summary for any project member (Researcher, Finance/Admin).
+    Route::get('/projects/{project}/budget-summary', [FinanceController::class, 'summary']);
+
     // Every document of the project's records (project members).
     Route::get('/projects/{project}/documents', [ResearchAssistantController::class, 'documents']);
 

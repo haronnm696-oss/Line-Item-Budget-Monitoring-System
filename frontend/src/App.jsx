@@ -19,8 +19,6 @@ import ResearchAssistantDashboard from './pages/dashboards/ResearchAssistantDash
 import FinanceDashboard from './pages/dashboards/FinanceDashboard';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
-import Expenses from './pages/Expenses';
-import Payroll from './pages/Payroll';
 import Reports from './pages/Reports';
 import AuditTrail from './pages/AuditTrail';
 import LineItemBudget from './pages/leader/LineItemBudget';
@@ -40,6 +38,10 @@ import PurchaseRequests from './pages/assistant/PurchaseRequests';
 import MySubmissions from './pages/assistant/MySubmissions';
 import Documents from './pages/assistant/Documents';
 import BalancingQuery from './pages/assistant/BalancingQuery';
+import VerificationQueue from './pages/finance/VerificationQueue';
+import FinanceExpenses from './pages/finance/FinanceExpenses';
+import FinancePayroll from './pages/finance/FinancePayroll';
+import ResearcherBudget from './pages/researcher/ResearcherBudget';
 import ByRole from './routes/ByRole';
 import HomeRoute from './routes/HomeRoute';
 import NotFound from './pages/NotFound';
@@ -66,8 +68,12 @@ const ROLE_PAGES = [
   ['/projects', <Projects />],
   ['/projects/:id', <ProjectDetail />],
   // Shared paths: the Research Assistant gets their own encoding pages.
-  ['/expenses', <ByRole RA={<AssistantExpenses />} other={<Expenses />} />],
-  ['/payroll', <ByRole RA={<AssistantPayroll />} other={<Payroll />} />],
+  ['/expenses', <ByRole RA={<AssistantExpenses />} FIN={<FinanceExpenses />} />],
+  ['/payroll', <ByRole RA={<AssistantPayroll />} FIN={<FinancePayroll />} />],
+  // Finance/Admin.
+  ['/verification-queue', <VerificationQueue />],
+  ['/verification', <RedirectKeepingQuery to="/verification-queue" />],
+  ['/transaction-history', <Transactions />],
   ['/purchase-requests', <PurchaseRequests />],
   ['/my-submissions', <MySubmissions />],
   ['/documents', <Documents />],
@@ -75,7 +81,7 @@ const ROLE_PAGES = [
   ['/balancing', <RedirectKeepingQuery to="/balancing-query" />],
   ['/reports', <Reports />],
   ['/audit', <AuditTrail />],
-  ['/budget', <LineItemBudget />],
+  ['/budget', <ByRole RES={<ResearcherBudget />} other={<LineItemBudget />} />],
   ['/transactions', <Transactions />],
   ['/submissions', <Submissions />],
   ['/my-requests', <MyRequests />],

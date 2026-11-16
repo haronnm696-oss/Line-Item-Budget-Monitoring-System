@@ -124,6 +124,18 @@
  *   GET /api/projects/:id/my-submissions/:type/:id -> { item } (any stage; fields, next_step, returned_by, can_*)
  *   GET /api/projects/:id/documents?document_type=&record=expense|payroll|purchase_request (any project member)
  *   Payroll batch submit needs a payroll_file document (422 otherwise).
+ *
+ * Finance/Admin pages (finance-admin of the project; 403 otherwise):
+ *   GET  /api/projects/:id/finance-overview  -> { project, kpis: { to_verify, verified_this_month, missing_receipts, total_spent, ... },
+ *                                               queue, missing_receipts, recently_verified, late_receipts }
+ *   GET  /api/projects/:id/finance-badges    -> { verification } (= To verify, same query as the KPI)
+ *   GET  /api/projects/:id/verification-queue?tab=waiting|verified|rejected&type=expense|payroll
+ *                                            -> { counts, items, late_receipts }
+ *   GET  /api/projects/:id/verification-queue/:type/:id -> { item } (can_verify, blocked_text, fields)
+ *   GET  /api/projects/:id/payroll-batches   -> { batches } (every month, with next step)
+ *   POST /api/expenses/:id/request-receipt   -> Notify RA (verified expense without a receipt; one audit entry)
+ * Read-only for any project member:
+ *   GET  /api/projects/:id/budget-summary    -> { project, kpis, monthly_expenses, category_summary, line_items, transactions }
  *   A verified expense with no receipt accepts one late receipt (POST /api/expenses/:id/documents, receipt only).
  *
  * All list endpoints accept `page` / `per_page` and return Laravel's default
@@ -203,6 +215,15 @@ export const ENDPOINTS = {
   mySubmissions: (projectId) => `/api/projects/${projectId}/my-submissions`,
   mySubmission: (projectId, type, id) => `/api/projects/${projectId}/my-submissions/${type}/${id}`,
   projectDocuments: (projectId) => `/api/projects/${projectId}/documents`,
+  // Finance/Admin pages (read-only; verify / reject use the workflow routes).
+  financeOverview: (projectId) => `/api/projects/${projectId}/finance-overview`,
+  financeBadges: (projectId) => `/api/projects/${projectId}/finance-badges`,
+  verificationQueue: (projectId) => `/api/projects/${projectId}/verification-queue`,
+  verificationItem: (projectId, type, id) => `/api/projects/${projectId}/verification-queue/${type}/${id}`,
+  payrollBatches: (projectId) => `/api/projects/${projectId}/payroll-batches`,
+  requestReceipt: (expenseId) => `/api/expenses/${expenseId}/request-receipt`,
+  // Read-only budget summary for any project member (Researcher, Finance/Admin).
+  budgetSummary: (projectId) => `/api/projects/${projectId}/budget-summary`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,

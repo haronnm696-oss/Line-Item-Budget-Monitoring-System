@@ -57,7 +57,9 @@ export const ROUTE_ROLES = {
   '/my-submissions': ['RA'],
   '/balancing-query': ['RA'],
   '/balancing': ['RA'],
+  '/verification-queue': ['FIN'],
   '/verification': ['FIN'],
+  '/transaction-history': ['FIN'],
 
   // Earlier pages kept on their routes (not in a menu).
   '/projects': ['PL', 'FIN', 'RES'],

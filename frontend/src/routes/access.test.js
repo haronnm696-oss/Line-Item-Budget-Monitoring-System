@@ -30,10 +30,10 @@ test('every guarded route is in the table (no route open to nobody)', () => {
 test("a role cannot open another role's pages", () => {
   const denied = {
     PRG: ['/dashboard/project-leader', '/expenses', '/payroll', '/reports', '/verification', '/projects', '/audit'],
-    PL: ['/program-dashboard', '/program-users', '/expenses', '/payroll', '/verification', '/purchase-requests', '/dashboard/finance'],
-    RA: ['/program-approvals', '/reports', '/audit', '/projects', '/budget', '/submissions', '/verification', '/dashboard/researcher'],
+    PL: ['/program-dashboard', '/program-users', '/expenses', '/payroll', '/verification', '/verification-queue', '/purchase-requests', '/dashboard/finance'],
+    RA: ['/program-approvals', '/reports', '/audit', '/projects', '/budget', '/submissions', '/verification', '/verification-queue', '/transaction-history', '/dashboard/researcher'],
     FIN: ['/program-audit', '/submissions', '/my-requests', '/purchase-requests', '/documents', '/budget', '/dashboard/project-leader'],
-    RES: ['/program-reports', '/expenses', '/payroll', '/audit', '/submissions', '/verification', '/my-submissions'],
+    RES: ['/program-reports', '/expenses', '/payroll', '/audit', '/submissions', '/verification', '/verification-queue', '/transaction-history', '/my-submissions', '/purchase-requests', '/documents'],
   };
   for (const [role, paths] of Object.entries(denied)) {
     for (const path of paths) {

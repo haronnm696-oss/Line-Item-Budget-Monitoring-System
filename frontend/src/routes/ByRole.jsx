@@ -1,8 +1,11 @@
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 
-/** One path, two pages: the Research Assistant's own page, else the shared one. */
-export default function ByRole({ RA, other }) {
+/**
+ * One path, a page per role: <ByRole RA={…} FIN={…} other={…} /> renders the
+ * page named by the user's role code, else `other`.
+ */
+export default function ByRole({ other = null, ...pages }) {
   const { user } = useAuth();
-  return normalizeRole(user) === 'RA' ? RA : other;
+  return pages[normalizeRole(user)] ?? other;
 }

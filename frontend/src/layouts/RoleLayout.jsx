@@ -14,6 +14,7 @@ const BADGE_LABEL = {
   submissions: (count) => `${count} waiting for your review`,
   requests: (count) => `${count} request${count === 1 ? '' : 's'} decided since you last looked`,
   'my-submissions': (count) => `${count} returned to you`,
+  verification: (count) => `${count} waiting for verification`,
 };
 
 /** Which badge endpoint each role uses, and how its counts map to nav badges. */
@@ -22,6 +23,12 @@ const BADGE_SOURCE = {
     role: 'project-leader',
     url: ENDPOINTS.leaderBadges,
     read: (data) => ({ submissions: Number(data?.submissions) || 0, requests: Number(data?.requests) || 0 }),
+  },
+  // Finance/Admin: Verification queue = "To verify" (same query as the Overview KPI).
+  FIN: {
+    role: 'finance-admin',
+    url: ENDPOINTS.financeBadges,
+    read: (data) => ({ verification: Number(data?.verification) || 0 }),
   },
   // Research Assistant: My submissions = "Returned to you" (same query as the Overview KPI).
   RA: {
@@ -35,7 +42,8 @@ const BADGE_SOURCE = {
  * Sidebar badges for the project the page shows (?project=, else the
  * user's first project in that role). Project Leader: Submissions = "To
  * review", My requests = decisions not seen yet. Research Assistant: My
- * submissions = "Returned to you". Reloaded on every navigation and when a
+ * submissions = "Returned to you". Finance/Admin: Verification queue =
+ * "To verify". Reloaded on every navigation and when a
  * page calls refreshBadges(). A failed count never breaks the shell.
  */
 function useProjectBadges(code) {
