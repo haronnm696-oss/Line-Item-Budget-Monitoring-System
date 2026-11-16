@@ -17,7 +17,7 @@ class ProgramApprovalController extends Controller
         $data = $request->validate([
             'status' => ['nullable', Rule::in(['pending', 'approved', 'rejected'])],
             'type' => ['nullable', Rule::in([
-                'all', 'fund-release', 'realignment', 'liquidation', 'budget-change',
+                'all', 'fund-release', 'realignment', 'liquidation',
                 'disbursement', 'payroll', 'budget_realignment',
             ])],
             'project' => ['nullable', 'integer', 'exists:projects,id'],

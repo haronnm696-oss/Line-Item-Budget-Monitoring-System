@@ -41,7 +41,6 @@ export default function Payroll() {
   const psItems = Array.isArray(run?.ps_line_items) ? run.ps_line_items : [];
   const unsetRules = Array.isArray(run?.unset_rules) ? run.unset_rules : [];
   const canPrepare = user.role === 'RA' || user.role === 'FIN';
-  const canVerify = user.role === 'FIN';
   const editable = batch ? batch.editable : true;
   const chosenLineItem = lineItemId || (psItems[0] ? String(psItems[0].id) : '');
   const label = run?.month_label ?? month;
@@ -124,7 +123,6 @@ export default function Payroll() {
                   label={label}
                   busy={busy}
                   canPrepare={canPrepare}
-                  canVerify={canVerify}
                   rejectReason={rejectReason}
                   setRejectReason={setRejectReason}
                   compute={compute}
@@ -215,8 +213,8 @@ export default function Payroll() {
   );
 }
 
-/** Month-level actions: recompute and submit (preparers), verify / reject with a reason (Finance/Admin). */
-function BatchActions({ batch, label, busy, canPrepare, canVerify, rejectReason, setRejectReason, compute, step, spinner }) {
+/** Month-level actions: recompute and submit (preparers), verify / reject with a reason (an allowed Finance/Admin), or what it waits for. */
+function BatchActions({ batch, label, busy, canPrepare, rejectReason, setRejectReason, compute, step, spinner }) {
   if (canPrepare && batch.editable) {
     return (
       <div className="payroll-actions">
@@ -226,7 +224,8 @@ function BatchActions({ batch, label, busy, canPrepare, canVerify, rejectReason,
     );
   }
 
-  if (canVerify && batch.workflow_status === 'endorsed') {
+  // The server decides who may verify (not the preparer, the approver, or anyone paid in it).
+  if (batch.can_verify) {
     if (rejectReason !== null) {
       return (
         <div className="field" style={{ marginBottom: 0, width: 'min(320px, 100%)' }}>
@@ -249,7 +248,5 @@ function BatchActions({ batch, label, busy, canPrepare, canVerify, rejectReason,
     );
   }
 
-  if (batch.workflow_status === 'submitted') return <small style={{ color: 'var(--muted)' }}>Waiting for the Project Leader</small>;
-  if (batch.workflow_status === 'endorsed') return <small style={{ color: 'var(--muted)' }}>Waiting for Finance/Admin</small>;
-  return null;
+  return batch.waiting_text ? <small style={{ color: 'var(--muted)' }}>{batch.waiting_text}</small> : null;
 }

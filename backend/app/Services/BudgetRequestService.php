@@ -77,6 +77,10 @@ class BudgetRequestService
     /** Tell the requester the Program Leader's decision (after it is committed). */
     public function notifyDecision(ApprovalRequest $approval, User $actor): void
     {
+        // Only budget requests (payroll escalations notify through PayrollService).
+        if (! in_array($approval->type, self::TYPES, true)) {
+            return;
+        }
         $approval->loadMissing('project');
         $approved = $approval->status === 'approved';
         $because = $approval->review_notes ? ' Remarks: ' . $approval->review_notes : '';

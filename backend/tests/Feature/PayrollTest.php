@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
 use App\Models\LibCategory;
 use App\Models\Payroll;
@@ -245,9 +246,10 @@ class PayrollTest extends TestCase
 
     public function test_the_whole_month_moves_with_one_audit_entry_and_one_notification_per_hand_off(): void
     {
+        // No self-pay: neither the Project Leader nor a Finance/Admin is paid.
         $this->rate($this->researcher, 30000);
         $this->rate($this->assistant, 20000);
-        $this->rate($this->projectLeader, 45000);
+        $this->rate(AuditLogger::muted(fn () => $this->member('researcher')), 45000);
         $this->createMonth();
         $batch = $this->batch();
         $link = "/payroll?project={$this->project->id}&month={$this->month}";
@@ -348,6 +350,230 @@ class PayrollTest extends TestCase
             ->assertForbidden()->assertJsonPath('message', 'You cannot verify or reject a payroll you prepared.');
         $this->postJson("/api/payroll-batches/{$batch->id}/reject", ['reason' => 'x'])->assertForbidden();
         $this->actingAs($this->finance2)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk();
+    }
+
+    // ------------------------------------------------------------ self-pay escalation
+
+    public function test_a_batch_with_the_project_leaders_pay_goes_to_the_program_leader(): void
+    {
+        $this->rate($this->researcher, 30000);
+        $this->rate($this->projectLeader, 45000);
+        $this->createMonth();
+        $batch = $this->batch();
+
+        $audit = AuditTrail::count();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")
+            ->assertOk()
+            ->assertJsonPath('batch.workflow_status', 'submitted')
+            ->assertJsonPath('batch.escalated_step', 'approve')
+            ->assertJsonPath('batch.waiting_text', "Waiting for Program Leader (includes the Project Leader's pay)");
+        $this->assertStep($audit, 'submitted', $batch->id);
+
+        // A pending "payroll" approval request on the Program Leader Approvals page.
+        $approval = ApprovalRequest::findOrFail($batch->fresh()->approval_request_id);
+        $this->assertSame(['payroll', 'pending', $batch->id, 'approve'], [$approval->type, $approval->status, $approval->payload['payroll_batch_id'], $approval->payload['step']]);
+        $this->assertSame(75000.0, (float) $approval->amount);
+        $pending = collect($this->actingAs($this->programLeader)->getJson('/api/program/approvals?status=pending')->json('approvals'));
+        $this->assertNotNull($pending->firstWhere('id', $approval->id));
+
+        // One notification each: the Program Leader to decide, the Project Leader to know.
+        $this->assertSame(2, DB::table('notifications')->count());
+        $this->assertSame("/program-approvals?project={$this->project->id}", $this->programLeader->notifications()->first()->data['link']);
+        $note = $this->projectLeader->notifications()->first();
+        $this->assertSame('escalated', $note->data['event']);
+        $this->assertStringContainsString('Waiting for Program Leader (includes your pay)', $note->data['message']);
+
+        // The Project Leader sees why and cannot approve or return it.
+        $this->actingAs($this->projectLeader)
+            ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
+            ->assertOk()->assertJsonPath('batch.waiting_text', 'Waiting for Program Leader (includes your pay)');
+        $this->postJson("/api/payroll-batches/{$batch->id}/endorse")
+            ->assertForbidden()->assertJsonPath('message', 'Waiting for Program Leader (includes your pay).');
+        $this->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'x'])->assertForbidden();
+
+        // The Program Leader approves: the batch moves with one audit entry (on the batch).
+        $audit = AuditTrail::count();
+        $this->actingAs($this->programLeader)
+            ->postJson("/api/program/approvals/{$approval->id}/decision", ['decision' => 'approved'])
+            ->assertOk();
+        $this->assertStep($audit, 'approved', $batch->id);
+        $this->assertSame('endorsed', $batch->fresh()->workflow_status);
+        $this->assertSame($this->programLeader->id, (int) $batch->fresh()->pl_reviewed_by);
+        $this->assertRowsAre('endorsed', 'draft');
+        $this->assertNotified($this->finance, 'endorsed');
+        $this->assertNotified($this->finance2, 'endorsed');
+
+        // Verification as usual.
+        $this->actingAs($this->finance)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk()->assertJsonPath('batch.workflow_status', 'verified');
+    }
+
+    public function test_a_program_leader_rejection_returns_the_batch_and_a_resubmit_escalates_again(): void
+    {
+        $this->rate($this->researcher, 30000);
+        $this->rate($this->projectLeader, 45000);
+        $this->createMonth();
+        $batch = $this->batch();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+        $first = (int) $batch->fresh()->approval_request_id;
+
+        $audit = AuditTrail::count();
+        $this->actingAs($this->programLeader)
+            ->postJson("/api/program/approvals/{$first}/decision", ['decision' => 'rejected', 'remarks' => 'Honoraria rate is above the approved LIB.'])
+            ->assertOk();
+        $this->assertStep($audit, 'returned', $batch->id);
+        $this->assertSame('returned', $batch->fresh()->workflow_status);
+        $this->assertSame('Honoraria rate is above the approved LIB.', $batch->fresh()->return_reason);
+        $this->assertNotified($this->assistant, 'returned');
+        // No "budget request" notification for a payroll step.
+        $this->assertCount(0, $this->assistant->notifications()->get()->filter(fn ($n) => $n->data['kind'] === 'budget_request'));
+
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+        $second = (int) $batch->fresh()->approval_request_id;
+        $this->assertNotSame($first, $second);
+        $this->assertSame('pending', ApprovalRequest::find($second)->status);
+    }
+
+    public function test_a_batch_with_the_verifiers_pay_needs_another_verifier(): void
+    {
+        $this->rate($this->researcher, 30000);
+        $this->rate($this->finance, 28000);
+        $this->createMonth();
+        $batch = $this->batch();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")
+            ->assertOk()->assertJsonPath('batch.escalated_step', null);
+
+        // Only the Finance/Admin who may verify is told.
+        $this->assertNotified($this->finance2, 'endorsed');
+        $this->assertCount(0, $this->finance->notifications()->get());
+
+        $this->actingAs($this->finance)
+            ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
+            ->assertJsonPath('batch.can_verify', false)
+            ->assertJsonPath('batch.waiting_text', 'Waiting for another Finance/Admin (includes your pay)');
+        $this->postJson("/api/payroll-batches/{$batch->id}/verify")
+            ->assertForbidden()->assertJsonPath('message', 'You cannot verify or reject a payroll that includes your pay.');
+        $this->postJson("/api/payroll-batches/{$batch->id}/reject", ['reason' => 'x'])->assertForbidden();
+
+        $this->actingAs($this->finance2)
+            ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
+            ->assertJsonPath('batch.can_verify', true);
+        $this->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk()->assertJsonPath('batch.workflow_status', 'verified');
+    }
+
+    public function test_with_no_other_verifier_the_program_leader_verifies(): void
+    {
+        $this->rate($this->finance, 28000);
+        $this->rate($this->finance2, 27000);
+        $this->createMonth();
+        $batch = $this->batch();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+
+        $audit = AuditTrail::count();
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")
+            ->assertOk()
+            ->assertJsonPath('batch.escalated_step', 'verify')
+            ->assertJsonPath('batch.waiting_text', 'Waiting for the Program Leader to verify (no other Finance/Admin can)');
+        $this->assertStep($audit, 'endorsed', $batch->id);
+        $approval = ApprovalRequest::findOrFail($batch->fresh()->approval_request_id);
+        $this->assertSame(['payroll', 'verify', $this->projectLeader->id], [$approval->type, $approval->payload['step'], (int) $approval->requested_by]);
+        $this->assertNotified($this->programLeader, 'endorsed');
+        $this->assertCount(0, $this->finance->notifications()->get());
+
+        foreach ([$this->finance, $this->finance2] as $user) {
+            $this->actingAs($user)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertForbidden();
+        }
+
+        $audit = AuditTrail::count();
+        $this->actingAs($this->programLeader)
+            ->postJson("/api/program/approvals/{$approval->id}/decision", ['decision' => 'approved'])
+            ->assertOk();
+        $this->assertStep($audit, 'verified', $batch->id);
+        $this->assertSame($this->programLeader->id, (int) $batch->fresh()->verified_by);
+        $this->assertRowsAre('verified', 'approved');
+        $this->assertNotified($this->assistant, 'verified');
+    }
+
+    public function test_with_two_program_leaders_the_other_one_verifies(): void
+    {
+        // The Project Leader and every Finance/Admin are paid: both steps escalate.
+        $secondLeader = AuditLogger::muted(fn () => $this->makePerson('program-leader'));
+        $this->rate($this->projectLeader, 45000);
+        $this->rate($this->finance, 28000);
+        $this->rate($this->finance2, 27000);
+        $this->createMonth();
+        $batch = $this->batch();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+
+        $this->actingAs($this->programLeader)
+            ->postJson('/api/program/approvals/' . $batch->fresh()->approval_request_id . '/decision', ['decision' => 'approved'])
+            ->assertOk();
+        $verifyStep = ApprovalRequest::findOrFail($batch->fresh()->approval_request_id);
+        $this->assertSame('verify', $verifyStep->payload['step']);
+
+        $this->postJson("/api/program/approvals/{$verifyStep->id}/decision", ['decision' => 'approved'])
+            ->assertForbidden()->assertJsonPath('message', 'You cannot approve or reject a request you created.');
+        $this->assertSame('endorsed', $batch->fresh()->workflow_status);
+
+        $this->actingAs($secondLeader)
+            ->postJson("/api/program/approvals/{$verifyStep->id}/decision", ['decision' => 'approved'])
+            ->assertOk();
+        $this->assertSame('verified', $batch->fresh()->workflow_status);
+    }
+
+    public function test_a_single_program_leader_who_approved_cannot_verify_until_an_eligible_finance_admin_is_assigned(): void
+    {
+        // The only Program Leader approves (the Project Leader is paid); every
+        // Finance/Admin is paid too, so nobody may verify.
+        $this->rate($this->projectLeader, 45000);
+        $this->rate($this->finance, 28000);
+        $this->rate($this->finance2, 27000);
+        $this->createMonth();
+        $batch = $this->batch();
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
+        $approveStep = (int) $batch->fresh()->approval_request_id;
+
+        $audit = AuditTrail::count();
+        $this->actingAs($this->programLeader)
+            ->postJson("/api/program/approvals/{$approveStep}/decision", ['decision' => 'approved'])
+            ->assertOk();
+        $this->assertStep($audit, 'approved', $batch->id);
+
+        // Blocked: no verify request, the batch waits for verification.
+        $this->assertSame('endorsed', $batch->fresh()->workflow_status);
+        $this->assertSame($approveStep, (int) $batch->fresh()->approval_request_id);
+        $this->assertSame(0, ApprovalRequest::where('status', 'pending')->where('type', 'payroll')->count());
+        $message = 'No eligible verifier. Assign a Finance/Admin who is not paid in this batch to the project.';
+        $this->actingAs($this->assistant)
+            ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
+            ->assertJsonPath('batch.verification_blocked', true)
+            ->assertJsonPath('batch.waiting_text', 'Waiting for verification. ' . $message);
+
+        // The Program Leader is told once (although they acted), with a link to Users and roles.
+        $notes = $this->programLeader->notifications()->get()->filter(fn ($n) => $n->data['event'] === 'verification_blocked');
+        $this->assertCount(1, $notes);
+        $this->assertStringContainsString($message, $notes->first()->data['message']);
+        $this->assertSame('/program-users', $notes->first()->data['link']);
+
+        // Nobody can verify: not the paid Finance/Admin, not the approving Program Leader.
+        foreach ([$this->finance, $this->finance2, $this->programLeader] as $user) {
+            $this->actingAs($user)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertForbidden();
+        }
+        $this->actingAs($this->programLeader)
+            ->postJson("/api/program/approvals/{$approveStep}/decision", ['decision' => 'approved'])
+            ->assertStatus(409);
+
+        // Assign an unpaid Finance/Admin: they verify normally.
+        $newFinance = AuditLogger::muted(fn () => $this->member('finance-admin'));
+        $this->actingAs($newFinance)
+            ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
+            ->assertJsonPath('batch.verification_blocked', false)
+            ->assertJsonPath('batch.can_verify', true);
+        $audit = AuditTrail::count();
+        $this->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk()->assertJsonPath('batch.workflow_status', 'verified');
+        $this->assertStep($audit, 'verified', $batch->id);
+        $this->assertSame($newFinance->id, (int) $batch->fresh()->verified_by);
+        $this->assertNotified($this->assistant, 'verified');
     }
 
     public function test_payroll_files_attach_to_the_batch(): void

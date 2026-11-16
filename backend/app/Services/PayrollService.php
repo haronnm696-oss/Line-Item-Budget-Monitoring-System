@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ApprovalRequest;
 use App\Models\LibCategory;
 use App\Models\Payroll;
 use App\Models\PayrollBatch;
@@ -22,7 +23,14 @@ use Illuminate\Validation\ValidationException;
  *   draft/returned <------ return (Project Leader) / reject (Finance/Admin)
  *
  * The hand-offs act on the whole batch: one audit entry and one
- * notification per hand-off. Rows (one per person) are created and computed
+ * notification per recipient per hand-off.
+ *
+ * Self-pay: nobody approves or verifies a batch that includes their own
+ * pay. If it pays the Project Leader and no other Project Leader may
+ * approve, the approve step goes to the Program Leader; if no Finance/Admin
+ * without pay in it (and not its maker or approver) may verify, the verify
+ * step goes to the Program Leader. Both are pending "payroll" approval
+ * requests on the Program Leader Approvals page (decideEscalation()). Rows (one per person) are created and computed
  * with PayrollCalculator (config/payroll.php) and can be edited only while
  * the batch is draft or returned; each row change has its own audit entry.
  * The rows' workflow columns follow the batch. Payroll is not LIB spent.
@@ -181,6 +189,11 @@ class PayrollService
 
     // ---------------------------------------------------------------- batch hand-offs
 
+    /**
+     * Submit the month. When the batch pays a Project Leader of the project
+     * and no other Project Leader may approve it, the approve step goes to
+     * the Program Leader as a pending "payroll" approval request.
+     */
     public function submit(PayrollBatch $batch, User $actor): PayrollBatch
     {
         $this->requireRole($batch->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can submit payroll.');
@@ -189,15 +202,38 @@ class PayrollService
             throw ValidationException::withMessages(['rows' => ['There is no payroll in this batch to submit.']]);
         }
 
-        $batch = $this->move($batch, 'submitted', $actor, 'submitted', PayrollBatch::EDITABLE, [
-            'submitted_at' => now(),
-            'submitted_by' => $actor->id,
-            'return_reason' => null,
-            'pl_reviewed_by' => null,
-            'pl_reviewed_at' => null,
-        ]);
+        $paidLeaders = $this->paidLeaders($batch);
+        $escalate = $paidLeaders->isNotEmpty() && $this->eligibleLeaders($batch)->isEmpty();
 
-        $this->notify($this->projectMembers($batch->project_id, 'project-leader'), $batch, 'submitted', $actor);
+        $batch = AuditLogger::transaction(function () use ($batch, $actor, $escalate, $paidLeaders) {
+            $approval = $escalate ? $this->escalate($batch, 'approve', $actor, sprintf(
+                'The %s payroll includes pay for the Project Leader (%s), so the Program Leader approves it.',
+                $batch->monthLabel(),
+                $paidLeaders->pluck('name')->join(', ')
+            )) : null;
+
+            return $this->move($batch, 'submitted', $actor, 'submitted', PayrollBatch::EDITABLE, [
+                'submitted_at' => now(),
+                'submitted_by' => $actor->id,
+                'return_reason' => null,
+                'pl_reviewed_by' => null,
+                'pl_reviewed_at' => null,
+                'approval_request_id' => $approval?->id,
+            ]);
+        });
+
+        if ($escalate) {
+            $this->notify($this->programLeaders(), $batch, 'submitted', $actor, null, [
+                'message' => "{$actor->name} submitted the {$batch->monthLabel()} payroll. It includes pay for the Project Leader, so it comes to you for approval.",
+                'link' => '/program-approvals?project=' . $batch->project_id,
+            ]);
+            $this->notify($paidLeaders, $batch, 'escalated', $actor, null, [
+                'title' => 'Payroll sent to the Program Leader',
+                'message' => "The {$batch->monthLabel()} payroll includes your pay. Waiting for Program Leader (includes your pay).",
+            ]);
+        } else {
+            $this->notify($this->projectMembers($batch->project_id, 'project-leader'), $batch, 'submitted', $actor);
+        }
 
         return $batch;
     }
@@ -207,12 +243,16 @@ class PayrollService
         $this->checkLeader($batch, $actor, 'approve');
         $this->requireState($batch, ['submitted'], 'approved');
 
-        $batch = $this->move($batch, 'endorsed', $actor, 'endorsed', ['submitted'], [
-            'pl_reviewed_by' => $actor->id,
-            'pl_reviewed_at' => now(),
-        ]);
+        $batch = AuditLogger::transaction(function () use ($batch, $actor) {
+            $moved = $this->move($batch, 'endorsed', $actor, 'endorsed', ['submitted'], [
+                'pl_reviewed_by' => $actor->id,
+                'pl_reviewed_at' => now(),
+            ]);
 
-        $this->notify($this->projectMembers($batch->project_id, 'finance-admin'), $batch, 'endorsed', $actor);
+            return $this->escalateVerifyIfNeeded($moved, $actor);
+        });
+
+        $this->notifyVerifiers($batch, $actor);
 
         return $batch;
     }
@@ -265,6 +305,124 @@ class PayrollService
         return $batch;
     }
 
+    // ---------------------------------------------------------------- Program Leader escalation
+
+    /** True when an approval request is a payroll batch step escalated to the Program Leader. */
+    public static function isEscalation(ApprovalRequest $approval): bool
+    {
+        return $approval->type === 'payroll' && ! empty(($approval->payload ?? [])['payroll_batch_id']);
+    }
+
+    /**
+     * The Program Leader's decision on an escalated step (called inside
+     * ProgramDashboardService::decide()'s transaction). One audit entry, on
+     * the batch:
+     *   approve step: approved -> endorsed, rejected -> returned
+     *   verify step:  approved -> verified, rejected -> returned
+     */
+    public function decideEscalation(ApprovalRequest $approval, string $decision, ?string $remarks, User $actor): PayrollBatch
+    {
+        $payload = $approval->payload ?? [];
+        $batch = PayrollBatch::query()->whereKey($payload['payroll_batch_id'] ?? 0)->lockForUpdate()->first();
+        $step = $payload['step'] ?? 'approve';
+        $expected = $step === 'verify' ? 'endorsed' : 'submitted';
+
+        if (! $batch || (int) $batch->approval_request_id !== (int) $approval->id || $batch->workflow_status !== $expected) {
+            abort(409, 'This payroll is no longer waiting for this decision.');
+        }
+        $this->requireNotMaker($batch, $actor, 'You cannot approve or verify a payroll you prepared.');
+        if (in_array((int) $actor->id, $batch->paidUserIds(), true)) {
+            abort(403, 'You cannot decide on a payroll that includes your pay.');
+        }
+
+        if ($step === 'approve') {
+            if ($decision === 'approved') {
+                $moved = $this->move($batch, 'endorsed', $actor, 'approved', ['submitted'], [
+                    'pl_reviewed_by' => $actor->id,
+                    'pl_reviewed_at' => now(),
+                ], $remarks);
+
+                return $this->escalateVerifyIfNeeded($moved, $actor);
+            }
+
+            return $this->move($batch, 'returned', $actor, 'returned', ['submitted'], [
+                'return_reason' => $remarks,
+                'pl_reviewed_by' => $actor->id,
+                'pl_reviewed_at' => now(),
+            ], $remarks);
+        }
+
+        $this->requireNotSame($batch->pl_reviewed_by, $actor, 'You approved this payroll; another person must verify it.');
+
+        return $decision === 'approved'
+            ? $this->move($batch, 'verified', $actor, 'verified', ['endorsed'], ['verified_by' => $actor->id, 'verified_at' => now()], $remarks)
+            : $this->move($batch, 'returned', $actor, 'rejected', ['endorsed'], ['return_reason' => $remarks], $remarks);
+    }
+
+    /** Notifications for an escalated decision, after it is committed. */
+    public function notifyEscalationDecision(ApprovalRequest $approval, PayrollBatch $batch, User $actor): void
+    {
+        $step = ($approval->payload ?? [])['step'] ?? 'approve';
+        $batch = $batch->fresh();
+
+        if ($approval->status === 'approved' && $step === 'approve') {
+            $this->notifyVerifiers($batch, $actor);
+        } elseif ($approval->status === 'approved') {
+            $this->notify($this->activeUser($batch->submitted_by), $batch, 'verified', $actor);
+        } else {
+            $this->notify($this->activeUser($batch->submitted_by), $batch, $step === 'verify' ? 'rejected' : 'returned', $actor, $approval->review_notes);
+        }
+    }
+
+    /**
+     * What the batch is waiting for, worded for the viewer (null when it is
+     * not waiting for anyone).
+     */
+    public function waitingText(PayrollBatch $batch, ?User $viewer = null): ?string
+    {
+        $paid = $viewer && in_array((int) $viewer->id, $batch->paidUserIds(), true);
+        $escalated = $batch->pendingEscalation() !== null;
+
+        if ($batch->workflow_status === 'submitted') {
+            if ($escalated) {
+                return $paid ? 'Waiting for Program Leader (includes your pay)' : "Waiting for Program Leader (includes the Project Leader's pay)";
+            }
+
+            return 'Waiting for the Project Leader';
+        }
+
+        if ($batch->workflow_status === 'endorsed') {
+            if ($escalated) {
+                return 'Waiting for the Program Leader to verify (no other Finance/Admin can)';
+            }
+            if ($this->isVerificationBlocked($batch)) {
+                return 'Waiting for verification. ' . self::NO_VERIFIER;
+            }
+            if ($paid && $viewer && $batch->project && $viewer->roleOn($batch->project) === 'finance-admin') {
+                return 'Waiting for another Finance/Admin (includes your pay)';
+            }
+
+            return 'Waiting for Finance/Admin';
+        }
+
+        return null;
+    }
+
+    /** Whether this user may verify / reject the batch now (Finance/Admin path). */
+    public function canVerify(PayrollBatch $batch, User $user): bool
+    {
+        if ($batch->workflow_status !== 'endorsed') {
+            return false;
+        }
+        try {
+            $this->checkVerifier($batch, $user, 'verify');
+
+            return true;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException) {
+            return false;
+        }
+    }
+
     // ---------------------------------------------------------------- helpers
 
     public static function monthLabel(int $year, int $month): string
@@ -300,13 +458,180 @@ class PayrollService
     {
         $this->requireRole($batch->project, $actor, ['project-leader'], "Only the Project Leader of this project can {$verb} payroll.");
         $this->requireNotMaker($batch, $actor, 'You cannot approve or return a payroll you prepared.');
+
+        $paid = in_array((int) $actor->id, $batch->paidUserIds(), true);
+        if ($batch->pendingEscalation()) {
+            abort(403, $paid ? 'Waiting for Program Leader (includes your pay).' : 'This payroll is waiting for the Program Leader.');
+        }
+        if ($paid) {
+            abort(403, 'You cannot approve or return a payroll that includes your pay.');
+        }
     }
 
+    /**
+     * Finance/Admin of the project who did not prepare, approve or get paid
+     * in the batch. (When there is none, the verify step is escalated to the
+     * Program Leader and decided on the Approvals page.)
+     */
     private function checkVerifier(PayrollBatch $batch, User $actor, string $verb): void
     {
         $this->requireRole($batch->project, $actor, ['finance-admin'], "Only Finance/Admin staff of this project can {$verb} payroll.");
         $this->requireNotMaker($batch, $actor, 'You cannot verify or reject a payroll you prepared.');
         $this->requireNotSame($batch->pl_reviewed_by, $actor, 'You approved this payroll as Project Leader; another person must verify it.');
+        if (in_array((int) $actor->id, $batch->paidUserIds(), true)) {
+            abort(403, 'You cannot verify or reject a payroll that includes your pay.');
+        }
+    }
+
+    /** Project Leaders of the project who are paid in the batch. */
+    private function paidLeaders(PayrollBatch $batch): Collection
+    {
+        $paid = $batch->paidUserIds();
+
+        return $this->projectMembers($batch->project_id, 'project-leader')
+            ->filter(fn (User $user) => in_array((int) $user->id, $paid, true))
+            ->values();
+    }
+
+    /** Project Leaders who may approve: not a maker, not paid in the batch. */
+    private function eligibleLeaders(PayrollBatch $batch): Collection
+    {
+        $excluded = array_merge($batch->makerIds(), $batch->paidUserIds());
+
+        return $this->projectMembers($batch->project_id, 'project-leader')
+            ->reject(fn (User $user) => in_array((int) $user->id, $excluded, true))
+            ->values();
+    }
+
+    /** Finance/Admin who may verify: not a maker, not the approver, not paid. */
+    private function eligibleVerifiers(PayrollBatch $batch): Collection
+    {
+        $excluded = array_merge($batch->makerIds(), $batch->paidUserIds(), array_filter([(int) $batch->pl_reviewed_by]));
+
+        return $this->projectMembers($batch->project_id, 'finance-admin')
+            ->reject(fn (User $user) => in_array((int) $user->id, $excluded, true))
+            ->values();
+    }
+
+    private function programLeaders(): Collection
+    {
+        return User::query()
+            ->where('is_active', true)
+            ->whereHas('primaryRole', fn ($q) => $q->where('slug', 'program-leader'))
+            ->get();
+    }
+
+    /**
+     * After approval: if no Finance/Admin may verify, escalate the verify
+     * step to the Program Leader (the approver is recorded as the requester,
+     * so they cannot decide it themselves).
+     */
+    private function escalateVerifyIfNeeded(PayrollBatch $batch, User $approver): PayrollBatch
+    {
+        // A Finance/Admin can verify; or nobody can (blocked, see
+        // isVerificationBlocked()): no escalation either way.
+        if ($this->eligibleVerifiers($batch)->isNotEmpty() || $this->eligibleProgramVerifiers($batch)->isEmpty()) {
+            return $batch;
+        }
+
+        $approval = $this->escalate($batch, 'verify', $approver, sprintf(
+            'No other Finance/Admin staff of this project can verify the %s payroll (they prepared or approved it, or it includes their pay), so the Program Leader verifies it.',
+            $batch->monthLabel()
+        ));
+        $batch->update(['approval_request_id' => $approval->id]);
+
+        return $batch->fresh();
+    }
+
+    /** A pending "payroll" approval request for one step of the batch. */
+    private function escalate(PayrollBatch $batch, string $step, User $requestedBy, string $why): ApprovalRequest
+    {
+        return ApprovalRequest::create([
+            'project_id' => $batch->project_id,
+            'type' => 'payroll',
+            'title' => 'Payroll ' . $batch->monthLabel() . ($step === 'verify' ? ': verify' : ': approve'),
+            'description' => $why,
+            'justification' => $why,
+            'amount' => round((float) $batch->rows()->sum('gross_pay'), 2),
+            'payload' => ['payroll_batch_id' => $batch->id, 'step' => $step, 'month' => $batch->monthKey()],
+            'requested_by' => $requestedBy->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    /** After approval: the eligible Finance/Admin, or the Program Leader when escalated. */
+    public const NO_VERIFIER = 'No eligible verifier. Assign a Finance/Admin who is not paid in this batch to the project.';
+
+    /**
+     * Approved, but nobody may verify it: no Finance/Admin of the project who
+     * did not prepare, approve or get paid in it, and no Program Leader who
+     * did not approve, prepare or get paid in it (the approver never
+     * verifies, even as Program Leader). It waits until an eligible
+     * Finance/Admin is assigned to the project.
+     */
+    public function isVerificationBlocked(PayrollBatch $batch): bool
+    {
+        return $batch->workflow_status === 'endorsed'
+            && $batch->pendingEscalation() === null
+            && $this->eligibleVerifiers($batch)->isEmpty();
+    }
+
+    /** Program Leaders who could verify: not the approver, not a maker, not paid. */
+    private function eligibleProgramVerifiers(PayrollBatch $batch): Collection
+    {
+        $excluded = array_merge($batch->makerIds(), $batch->paidUserIds(), array_filter([(int) $batch->pl_reviewed_by]));
+
+        return $this->programLeaders()
+            ->reject(fn (User $user) => in_array((int) $user->id, $excluded, true))
+            ->values();
+    }
+
+    private function notifyVerifiers(PayrollBatch $batch, User $actor): void
+    {
+        if ($this->isVerificationBlocked($batch)) {
+            // Once, to every Program Leader, the approver included (the usual
+            // "never the actor" rule would hide this from the person who must act).
+            $this->notifyBlocked($this->programLeaders(), $batch, $actor);
+
+            return;
+        }
+
+        if ($batch->pendingEscalation()) {
+            $this->notify($this->programLeaders()->reject(fn (User $u) => (int) $u->id === (int) $batch->pl_reviewed_by), $batch, 'endorsed', $actor, null, [
+                'title' => 'Payroll waiting for your verification',
+                'message' => "The {$batch->monthLabel()} payroll was approved; no other Finance/Admin of the project can verify it, so it comes to you.",
+                'link' => '/program-approvals?project=' . $batch->project_id,
+            ]);
+
+            return;
+        }
+
+        $this->notify($this->eligibleVerifiers($batch), $batch, 'endorsed', $actor);
+    }
+
+    private function notifyBlocked(Collection $recipients, PayrollBatch $batch, User $actor): void
+    {
+        if ($recipients->isEmpty()) {
+            return;
+        }
+        $batch->loadMissing('project');
+
+        try {
+            \Illuminate\Support\Facades\Notification::send($recipients, new WorkflowNotification([
+                'kind' => 'payroll',
+                'event' => 'verification_blocked',
+                'title' => 'Payroll cannot be verified yet',
+                'message' => "The {$batch->monthLabel()} payroll of {$batch->project?->title} is waiting for verification. " . self::NO_VERIFIER,
+                'payroll_batch_id' => $batch->id,
+                'project_id' => $batch->project_id,
+                'project' => $batch->project?->title,
+                'actor' => $actor->name,
+                'reason' => null,
+                'link' => '/program-users',
+            ]));
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     /** Maker = anyone who prepared, computed or submitted the batch. */
@@ -392,7 +717,7 @@ class PayrollService
     }
 
     /** One notification per recipient for the whole batch. */
-    private function notify(Collection $recipients, PayrollBatch $batch, string $event, User $actor, ?string $reason = null): void
+    private function notify(Collection $recipients, PayrollBatch $batch, string $event, User $actor, ?string $reason = null, array $override = []): void
     {
         $batch->loadMissing('project');
         $period = $batch->monthLabel();
@@ -407,9 +732,10 @@ class PayrollService
             'returned' => ['Payroll returned to you', "{$actor->name} returned the {$period} payroll.{$because}"],
             'rejected' => ['Payroll rejected', "{$actor->name} rejected the {$period} payroll and sent it back.{$because}"],
             'verified' => ['Payroll verified', "{$actor->name} verified the {$period} payroll ({$people}, net {$net})."],
+            'escalated' => ['Payroll sent to the Program Leader', "The {$period} payroll is waiting for the Program Leader."],
         };
 
-        $this->notifyUsers($recipients, new WorkflowNotification([
+        $this->notifyUsers($recipients, new WorkflowNotification(array_merge([
             'kind' => 'payroll',
             'event' => $event,
             'title' => $title,
@@ -420,6 +746,6 @@ class PayrollService
             'actor' => $actor->name,
             'reason' => $reason,
             'link' => '/payroll?project=' . $batch->project_id . '&month=' . $batch->monthKey(),
-        ]), $actor);
+        ], $override)), $actor);
     }
 }

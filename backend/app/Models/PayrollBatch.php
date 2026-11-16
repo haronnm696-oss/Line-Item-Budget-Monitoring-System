@@ -21,7 +21,7 @@ class PayrollBatch extends Model implements HasDocuments
     protected $fillable = [
         'project_id', 'pay_year', 'pay_month', 'prepared_by',
         'workflow_status', 'submitted_at', 'submitted_by', 'pl_reviewed_by', 'pl_reviewed_at',
-        'verified_by', 'verified_at', 'return_reason',
+        'verified_by', 'verified_at', 'return_reason', 'approval_request_id',
     ];
 
     protected $casts = [
@@ -60,6 +60,26 @@ class PayrollBatch extends Model implements HasDocuments
     public function verifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    /** The latest escalation of a step to the Program Leader, if any. */
+    public function approvalRequest(): BelongsTo
+    {
+        return $this->belongsTo(ApprovalRequest::class);
+    }
+
+    /** The pending escalation (approve or verify step), if any. */
+    public function pendingEscalation(): ?ApprovalRequest
+    {
+        $approval = $this->approvalRequest;
+
+        return $approval && $approval->isPending() ? $approval : null;
+    }
+
+    /** People paid in this batch. */
+    public function paidUserIds(): array
+    {
+        return $this->rows()->pluck('personnel_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     public function documents(): MorphMany

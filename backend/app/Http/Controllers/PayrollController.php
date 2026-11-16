@@ -155,6 +155,11 @@ class PayrollController extends Controller
             'workflow_status' => $batch->workflow_status,
             'workflow_label' => PayrollService::LABELS[$batch->workflow_status] ?? $batch->workflow_status,
             'editable' => $batch->isEditable(),
+            // Self-pay escalation to the Program Leader: 'approve' / 'verify' step, or null.
+            'escalated_step' => ($batch->pendingEscalation()?->payload ?? [])['step'] ?? null,
+            'waiting_text' => $this->payroll->waitingText($batch, request()->user()),
+            'verification_blocked' => $this->payroll->isVerificationBlocked($batch),
+            'can_verify' => request()->user() ? $this->payroll->canVerify($batch, request()->user()) : false,
             'return_reason' => $batch->return_reason,
             'documents_count' => $batch->documents()->count(),
             'prepared_by' => $person($batch->preparedBy),
