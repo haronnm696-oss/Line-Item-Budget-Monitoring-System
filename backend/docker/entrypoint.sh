@@ -85,8 +85,12 @@ php artisan storage:link || true
 # (funders, leaders, and the repair of demo titles stored as "???") once on
 # boot. A failure is reported but never stops the app from starting.
 if [ "${RUN_DEMO_ASSIGN:-0}" = "1" ]; then
-    php artisan db:seed --class=DemoProjectAssignmentsSeeder --force \
-        || echo "WARNING: DemoProjectAssignmentsSeeder failed; the app is starting anyway."
+    echo "[demo-assign] start"
+    if php artisan db:seed --class=DemoProjectAssignmentsSeeder --force; then
+        echo "[demo-assign] done"
+    else
+        echo "[demo-assign] FAILED exit=$?; the app is starting anyway."
+    fi
 fi
 
 # Opt-in: set RUN_DOCUMENT_IMPORT=1 on Render (no shell on the free plan) to

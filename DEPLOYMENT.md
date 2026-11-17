@@ -202,6 +202,100 @@ If your Render service is not named `lib-monitoring-api`, update the three
 7. In browser devtools, confirm `laravel_session` and `XSRF-TOKEN` belong to
    the Vercel domain, are `Secure`, and use `SameSite=Lax`.
 
+## 5. Release checklist
+
+Work through this list for every release that reaches production.
+
+### 5.1 Back up the production database first
+
+Use the **MySQL 8 client** (`mysqldump`, not the MariaDB one). Write the dump
+**outside the repository** so it can never be committed:
+
+```bash
+mkdir -p ~/lib-backups
+mysqldump --host=<AIVEN_HOST> --port=<AIVEN_PORT> --user=<AIVEN_USER> --password \
+  --ssl-mode=VERIFY_CA --ssl-ca=ca.pem \
+  --single-transaction --routines --triggers --set-gtid-purged=OFF \
+  --hex-blob --max-allowed-packet=64M \
+  --databases lib_monitoring_system \
+  > ~/lib-backups/lib_monitoring_system_$(date +%Y%m%d_%H%M%S).sql
+```
+
+- `--hex-blob` is required: uploaded documents are stored as binary in
+  `document_contents.content`. Without it, the binary content can be
+  corrupted in the dump.
+- Check the dump: it is not empty, and its last line is
+  `-- Dump completed on …`.
+- To restore, use the import in section 1 (with
+  `SET SESSION sql_require_primary_key = 0;`) and add
+  `--max-allowed-packet=64M` to the `mysql` command.
+
+### 5.2 Check Aiven `max_allowed_packet`
+
+Each document is written to the database as one row of up to 5 MB, and
+the hex-encoded dump rows are about twice that size:
+
+```sql
+SHOW VARIABLES LIKE 'max_allowed_packet';
+```
+
+The value must be at least `33554432` (32 MB). If it is lower, raise
+`mysql.max_allowed_packet` under the service's Advanced configuration in the
+Aiven console before you deploy.
+
+### 5.3 Environment variables (Render)
+
+| Variable | Value | Notes |
+|---|---|---|
+| `DOCUMENTS_DISK` | `database` | Documents are stored in `document_contents`, so they survive Render's ephemeral filesystem. |
+| `RUN_DEMO_ASSIGN` | `1` only for the release that needs it | Runs the idempotent `DemoProjectAssignmentsSeeder` on boot. |
+| `RUN_DOCUMENT_IMPORT` | `1` only for the release that needs it | Copies document files from the old disk into the database on boot (idempotent). |
+| `PAYROLL_*` | **Official values only** | GSIS, PhilHealth, Pag-IBIG and `PAYROLL_WITHHOLDING_TAX_BRACKETS`, as provided by the MSU accounting office. See `backend/.env.example` for the format. |
+
+- **Never** copy the payroll test values from `backend/tests/Feature/PayrollTest.php`
+  or a local `.env` into Render. If the official values are not available yet,
+  leave the `PAYROLL_*` variables empty. The Payroll page then shows
+  "Deduction rates are not set yet" and blocks submission. It never computes
+  with guessed rates.
+- The configuration is cached at boot, so every change needs a redeploy.
+  Draft and returned payroll batches need **Recompute** after a rate change.
+
+### 5.4 Post-deploy checks
+
+1. **Render logs, `[demo-assign]`** (only if `RUN_DEMO_ASSIGN=1`): expect
+   `[demo-assign] start` followed by `[demo-assign] done`. If you see
+   `[demo-assign] FAILED`, read the lines above it. The app still starts.
+2. **Render logs, `[document-import]`** (only if `RUN_DOCUMENT_IMPORT=1`):
+   expect `[document-import] start` and
+   `[document-import] done imported=<n> skipped=<n> missing=<n>`. If
+   `missing` is above 0, those documents had no file on the old disk and are
+   marked as missing. If you see `[document-import] FAILED`, investigate
+   before removing the variable.
+3. **MEDIUMBLOB check.** Run this on Aiven:
+
+   ```sql
+   SELECT DATA_TYPE FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'lib_monitoring_system'
+     AND TABLE_NAME = 'document_contents' AND COLUMN_NAME = 'content';
+   ```
+
+   Expect `mediumblob`. A plain `blob` caps files at 64 KB.
+4. **A 5 MB upload through Vercel.** Sign in at
+   `https://<your-app>.vercel.app` (not the Render URL). Upload a file just
+   under the 5 MB limit to a record, then download it again and confirm that
+   the size matches. This exercises the full path:
+   Vercel rewrite → Render → PHP upload limits → MySQL packet size →
+   MEDIUMBLOB. A 413 or a timeout here means one of those limits is too low.
+5. Run the smoke test in section 4.
+
+### 5.5 Remove the one-time variables afterwards
+
+Once the logs show `[demo-assign] done` and `[document-import] done`, **delete
+`RUN_DEMO_ASSIGN` and `RUN_DOCUMENT_IMPORT`** from the Render environment and
+redeploy. Otherwise they run again on every boot and slow down each cold
+start. Confirm that the next boot log has no `[demo-assign]` or
+`[document-import]` lines.
+
 ## Known free-tier limits
 
 - Render Free sleeps after 15 minutes idle. The first request can take about a
