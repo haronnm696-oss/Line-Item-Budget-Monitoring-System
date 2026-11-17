@@ -16,6 +16,7 @@ import ReviewRow from '../../components/leader/ReviewRow';
 import { useReviewActions } from '../../components/leader/useReviewActions';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { formatPct, peso } from '../../components/money';
+import { REQUEST_STATUS } from '../../lib/budgetRequestForm';
 
 function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -35,7 +36,6 @@ const BURN_PILL = {
   neutral: ['neutral', '•'],
 };
 
-const REQUEST_STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' };
 
 /** Project Leader Overview: one project's budget, review queue, alerts and requests (descriptive only). */
 export default function ProjectLeaderDashboard() {

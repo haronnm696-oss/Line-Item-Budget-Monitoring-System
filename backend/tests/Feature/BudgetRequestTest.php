@@ -190,7 +190,7 @@ class BudgetRequestTest extends TestCase
         $notes = $this->projectLeader->notifications()->get();
         $this->assertCount(1, $notes);
         $this->assertSame('approved', $notes->first()->data['event']);
-        $this->assertSame("/my-requests?project={$this->project->id}", $notes->first()->data['link']);
+        $this->assertSame("/my-requests?project={$this->project->id}&request={$id}", $notes->first()->data['link']);
         $this->assertStringContainsString('Release on Dec 1.', $notes->first()->data['message']);
         $this->assertSame('released', $this->tranche->fresh()->status);
 
@@ -204,7 +204,7 @@ class BudgetRequestTest extends TestCase
             ->assertOk()->assertJsonPath('budget_requests.0.status', 'approved');
     }
 
-    public function test_a_rejection_reaches_the_project_leader_with_the_remarks(): void
+    public function test_a_return_reaches_the_project_leader_with_the_reason(): void
     {
         $id = $this->actingAs($this->projectLeader)
             ->postJson("/api/projects/{$this->project->id}/budget-requests", [
@@ -217,7 +217,8 @@ class BudgetRequestTest extends TestCase
             ->assertOk();
 
         $note = $this->projectLeader->notifications()->first();
-        $this->assertSame('rejected', $note->data['event']);
+        $this->assertSame('returned', $note->data['event']);
+        $this->assertSame('Budget request returned', $note->data['title']);
         $this->assertSame('Not allowed by the funder.', $note->data['reason']);
         $this->assertSame(500000.0, (float) $this->lineItem->fresh()->allocated_amount);
     }

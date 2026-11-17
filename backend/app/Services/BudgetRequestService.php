@@ -20,6 +20,11 @@ use Illuminate\Validation\ValidationException;
  * liquidation (with documents). Each becomes a pending ApprovalRequest on
  * the Program Leader Approvals page. The Program Leader is notified on
  * create; the requester on the decision (see notifyDecision()).
+ *
+ * The Program Leader approves or returns (with a reason). A returned
+ * request goes back to its maker, who edits and resubmits it (pending
+ * again, same row) or withdraws it. A returned or withdrawn fund release no
+ * longer holds its tranche (only pending requests do).
  */
 class BudgetRequestService
 {
@@ -83,20 +88,114 @@ class BudgetRequestService
         }
         $approval->loadMissing('project');
         $approved = $approval->status === 'approved';
-        $because = $approval->review_notes ? ' Remarks: ' . $approval->review_notes : '';
+        $because = $approval->review_notes ? ($approved ? ' Remarks: ' : ' Reason: ') . $approval->review_notes : '';
 
         $this->notifyUsers($this->activeUser($approval->requested_by), new WorkflowNotification([
             'kind' => 'budget_request',
-            'event' => $approved ? 'approved' : 'rejected',
-            'title' => $approved ? 'Budget request approved' : 'Budget request rejected',
-            'message' => "{$actor->name} " . ($approved ? 'approved' : 'rejected') . " your {$approval->typeLabel()} request: {$approval->title}.{$because}",
+            'event' => $approved ? 'approved' : 'returned',
+            'title' => $approved ? 'Budget request approved' : 'Budget request returned',
+            'message' => $approved
+                ? "{$actor->name} approved your {$approval->typeLabel()} request: {$approval->title}.{$because}"
+                : "{$actor->name} returned your {$approval->typeLabel()} request for changes: {$approval->title}.{$because} Edit and resubmit it, or withdraw it, from My requests.",
             'approval_id' => $approval->id,
             'project_id' => $approval->project_id,
             'project' => $approval->project?->title,
             'actor' => $actor->name,
             'reason' => $approval->review_notes,
-            'link' => '/my-requests?project=' . $approval->project_id,
+            'link' => '/my-requests?project=' . $approval->project_id . '&request=' . $approval->id,
         ]), $actor);
+    }
+
+    /**
+     * Edit a returned request and send it back to the Program Leader (same
+     * row, pending again). The type stays; the other fields are checked as
+     * on create. $removeDocumentIds are the maker's documents to delete;
+     * $files are added. One audit entry ("resubmitted") on the request, one
+     * notification per Program Leader.
+     *
+     * @param UploadedFile[] $files
+     * @param int[] $removeDocumentIds
+     */
+    public function resubmit(ApprovalRequest $approval, array $data, array $files, array $removeDocumentIds, User $actor): ApprovalRequest
+    {
+        $this->requireBudgetRequest($approval);
+        $this->requireMaker($approval, $actor, 'Only the person who made this request can edit and resubmit it.');
+        $this->requireRole($approval->project, $actor, ['project-leader'], 'Only the Project Leader of this project can resubmit budget requests.');
+        $this->requireReturned($approval, 'resubmitted');
+
+        $project = $approval->project;
+        $removeDocumentIds = array_values(array_unique(array_map('intval', $removeDocumentIds)));
+        $remove = $approval->documents()->whereIn('id', $removeDocumentIds)->get();
+        if ($remove->count() !== count($removeDocumentIds)) {
+            throw ValidationException::withMessages(['remove_document_ids' => ['Choose documents of this request.']]);
+        }
+        if ($remove->contains(fn ($doc) => (int) $doc->uploaded_by !== (int) $actor->id)) {
+            throw ValidationException::withMessages(['remove_document_ids' => ['You can only remove documents you uploaded.']]);
+        }
+        $kept = $approval->documents()->count() - $remove->count();
+
+        $attributes = match ($approval->type) {
+            'disbursement' => $this->fundRelease($project, $data),
+            'budget_realignment' => $this->realignment($project, $data),
+            'liquidation' => $this->liquidation($project, $data, $files, $kept),
+        };
+
+        $removed = AuditLogger::transaction(function () use ($approval, $data, $files, $remove, $actor, $attributes) {
+            $locked = $this->lockRecord($approval);
+            $this->requireReturned($locked, 'resubmitted');
+            $fields = ['title', 'amount', 'payload', 'project_tranche_id', 'description', 'justification', 'status', 'review_notes', 'last_return_reason'];
+            $old = $locked->only($fields);
+
+            $locked->update(array_merge([
+                'payload' => null,
+                'project_tranche_id' => null,
+            ], $attributes, [
+                'description' => array_key_exists('description', $data) ? $data['description'] : $locked->description,
+                'justification' => trim((string) ($data['justification'] ?? '')),
+                'status' => 'pending',
+                'last_return_reason' => $locked->review_notes,
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_by_name' => null,
+                'reviewed_by_role' => null,
+                'reviewed_at' => null,
+                'resubmitted_at' => now(),
+            ]));
+            $locked->liquidation?->update(['status' => 'pending', 'reviewed_by' => null, 'reviewed_at' => null, 'remarks' => null]);
+
+            foreach ($remove as $document) {
+                DocumentController::detach($document, $locked, $actor);
+            }
+            foreach ($files as $file) {
+                DocumentController::attach($locked, $file, $data['document_type'] ?? ($locked->type === 'liquidation' ? 'receipt' : 'other'), $actor);
+            }
+
+            AuditLogger::write('resubmitted', $locked, $old, $locked->fresh()->only($fields), $actor);
+
+            return $remove;
+        });
+        DocumentController::deleteFiles($removed);
+
+        $this->notifyProgramLeaders($approval->fresh(['project']), $actor, true);
+
+        return $approval->fresh(['requestedBy', 'documents']);
+    }
+
+    /** The maker closes a returned request without resubmitting it. One audit entry. */
+    public function withdraw(ApprovalRequest $approval, ?string $reason, User $actor): ApprovalRequest
+    {
+        $this->requireBudgetRequest($approval);
+        $this->requireMaker($approval, $actor, 'Only the person who made this request can withdraw it.');
+        $this->requireReturned($approval, 'withdrawn');
+
+        return AuditLogger::transaction(function () use ($approval, $reason, $actor) {
+            $locked = $this->lockRecord($approval);
+            $this->requireReturned($locked, 'withdrawn');
+            $locked->update(['withdrawn_at' => now(), 'withdrawn_by' => $actor->id]);
+            AuditLogger::write('withdrawn', $locked, ['withdrawn_at' => null, 'withdrawn_by' => null], $locked->fresh()->only(['withdrawn_at', 'withdrawn_by']), $actor, trim((string) $reason) ?: null);
+
+            return $locked->fresh(['requestedBy', 'documents']);
+        });
     }
 
     // ---------------------------------------------------------------- types
@@ -154,9 +253,9 @@ class BudgetRequestService
         ];
     }
 
-    private function liquidation(Project $project, array $data, array $files): array
+    private function liquidation(Project $project, array $data, array $files, int $keptDocuments = 0): array
     {
-        if ($files === []) {
+        if ($files === [] && $keptDocuments === 0) {
             throw ValidationException::withMessages(['files' => ['Attach at least one supporting document.']]);
         }
 
@@ -174,7 +273,27 @@ class BudgetRequestService
 
     // ---------------------------------------------------------------- helpers
 
-    private function notifyProgramLeaders(ApprovalRequest $approval, User $actor): void
+    private function requireBudgetRequest(ApprovalRequest $approval): void
+    {
+        abort_unless(in_array($approval->type, self::TYPES, true), 404, 'Budget request not found.');
+    }
+
+    private function requireMaker(ApprovalRequest $approval, User $actor, string $message): void
+    {
+        abort_unless((int) $approval->requested_by === (int) $actor->id, 403, $message);
+    }
+
+    private function requireReturned(ApprovalRequest $approval, string $verb): void
+    {
+        if (! $approval->isReturned()) {
+            $label = strtolower($approval->statusLabel());
+            throw ValidationException::withMessages([
+                'status' => ["This budget request cannot be {$verb} while it is {$label}."],
+            ]);
+        }
+    }
+
+    private function notifyProgramLeaders(ApprovalRequest $approval, User $actor, bool $resubmitted = false): void
     {
         $leaders = User::query()
             ->where('is_active', true)
@@ -184,9 +303,11 @@ class BudgetRequestService
 
         $this->notifyUsers($leaders, new WorkflowNotification([
             'kind' => 'budget_request',
-            'event' => 'requested',
-            'title' => 'New budget request',
-            'message' => "{$actor->name} requested a {$approval->typeLabel()} for {$approval->project?->title}: {$approval->title}{$amount}.",
+            'event' => $resubmitted ? 'resubmitted' : 'requested',
+            'title' => $resubmitted ? 'Budget request resubmitted' : 'New budget request',
+            'message' => $resubmitted
+                ? "{$actor->name} edited and resubmitted a returned {$approval->typeLabel()} for {$approval->project?->title}: {$approval->title}{$amount}."
+                : "{$actor->name} requested a {$approval->typeLabel()} for {$approval->project?->title}: {$approval->title}{$amount}.",
             'approval_id' => $approval->id,
             'project_id' => $approval->project_id,
             'project' => $approval->project?->title,

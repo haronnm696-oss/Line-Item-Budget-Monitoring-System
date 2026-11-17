@@ -66,6 +66,8 @@ class AuditEntryPresenter
         'reopened' => 'Reopened',
         'pay_rate_changed' => 'Pay rate changed',
         'requested' => 'Submitted',
+        'resubmitted' => 'Resubmitted',
+        'withdrawn' => 'Withdrawn',
         'budget_changed' => 'Budget changed',
         'assignment_created' => 'Assigned to project',
         'assignment_updated' => 'Project role changed',
@@ -365,7 +367,9 @@ class AuditEntryPresenter
             'verified' => "{$noun} verified",
             'submitted' => "{$noun} submitted",
             'endorsed' => "{$noun} approved by Project Leader",
-            'returned' => "{$noun} returned",
+            'returned' => $type === 'ApprovalRequest' ? 'Request returned' : "{$noun} returned",
+            'resubmitted' => $type === 'ApprovalRequest' ? 'Request resubmitted' : "{$noun} resubmitted",
+            'withdrawn' => $type === 'ApprovalRequest' ? 'Request withdrawn' : "{$noun} withdrawn",
             'computed' => "{$noun} computed",
             'fulfilled' => "{$noun} fulfilled",
             'cancelled' => "{$noun} cancelled",
@@ -381,7 +385,7 @@ class AuditEntryPresenter
             return 'success';
         }
 
-        return in_array($action, ['rejected', 'returned', 'cancelled', 'deleted', 'assignment_removed'], true) ? 'danger' : 'neutral';
+        return in_array($action, ['rejected', 'returned', 'withdrawn', 'cancelled', 'deleted', 'assignment_removed'], true) ? 'danger' : 'neutral';
     }
 
     // ---------------------------------------------------------------- record
@@ -420,14 +424,15 @@ class AuditEntryPresenter
             case 'ApprovalRequest':
                 $approval = $this->records['ApprovalRequest'][$id] ?? null;
                 $kind = $approval?->type ?? $pick('type');
-                $status = $approval?->status ?? $pick('status') ?? 'pending';
+                $status = $approval?->displayStatus() ?? $pick('status') ?? 'pending';
+                $status = $status === 'rejected' ? 'returned' : $status;
 
                 return [
                     'label' => $approval?->title ?? $pick('title') ?? 'Deleted approval request',
                     'type' => 'Approval request' . (isset(self::APPROVAL_TYPES[$kind]) ? ' · ' . self::APPROVAL_TYPES[$kind] : ''),
                     'link' => [
                         'kind' => 'approval',
-                        'tab' => in_array($status, ['approved', 'rejected'], true) ? $status : 'pending',
+                        'tab' => in_array($status, ['approved', 'returned', 'withdrawn'], true) ? $status : 'pending',
                         'project_id' => $entry->project_id ? (int) $entry->project_id : null,
                     ],
                 ];

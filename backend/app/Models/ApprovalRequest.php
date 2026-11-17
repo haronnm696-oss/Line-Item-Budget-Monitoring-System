@@ -21,12 +21,31 @@ class ApprovalRequest extends Model implements HasDocuments
         'project_id', 'project_tranche_id', 'liquidation_id', 'type', 'title', 'description',
         'justification', 'amount', 'payload', 'requested_by', 'reviewed_by',
         'reviewed_by_name', 'reviewed_by_role', 'status', 'review_notes', 'reviewed_at',
+        'withdrawn_at', 'withdrawn_by', 'resubmitted_at', 'last_return_reason',
+    ];
+
+    /**
+     * Stored status of a Program Leader "Return". The enum keeps its original
+     * value `rejected`; it is shown, filtered and handled as "returned" (the
+     * maker may edit and resubmit, or withdraw). Legacy rejected rows are
+     * therefore returned requests too.
+     */
+    public const STORED_RETURNED = 'rejected';
+
+    /** API / UI status => label. */
+    public const STATUS_LABELS = [
+        'pending' => 'Pending',
+        'approved' => 'Approved',
+        'returned' => 'Returned',
+        'withdrawn' => 'Withdrawn',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'payload' => 'array',
         'reviewed_at' => 'datetime',
+        'withdrawn_at' => 'datetime',
+        'resubmitted_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -65,6 +84,11 @@ class ApprovalRequest extends Model implements HasDocuments
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function withdrawnBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'withdrawn_by');
+    }
+
     public function typeLabel(): string
     {
         return self::TYPES[$this->type] ?? ucfirst(str_replace('_', ' ', $this->type));
@@ -73,6 +97,44 @@ class ApprovalRequest extends Model implements HasDocuments
     public function isPending(): bool
     {
         return $this->status === 'pending';
+    }
+
+    /** Returned to the maker and not withdrawn: it may be edited and resubmitted, or withdrawn. */
+    public function isReturned(): bool
+    {
+        return $this->status === self::STORED_RETURNED && $this->withdrawn_at === null;
+    }
+
+    public function isWithdrawn(): bool
+    {
+        return $this->status === self::STORED_RETURNED && $this->withdrawn_at !== null;
+    }
+
+    /** pending | approved | returned | withdrawn (see STORED_RETURNED). */
+    public function displayStatus(): string
+    {
+        if ($this->isWithdrawn()) {
+            return 'withdrawn';
+        }
+
+        return $this->status === self::STORED_RETURNED ? 'returned' : (string) $this->status;
+    }
+
+    public function statusLabel(): string
+    {
+        return self::STATUS_LABELS[$this->displayStatus()] ?? ucfirst((string) $this->status);
+    }
+
+    /** When it last went to the Program Leader (resubmission, else creation). */
+    public function sentAt()
+    {
+        return $this->resubmitted_at ?? $this->created_at;
+    }
+
+    /** Pending, or returned to the maker: its documents may still change. */
+    public function isOpenForDocuments(): bool
+    {
+        return $this->isPending() || $this->isReturned();
     }
 
     public function documents(): MorphMany
@@ -88,9 +150,9 @@ class ApprovalRequest extends Model implements HasDocuments
             'types' => Document::TYPES,
             'uploader_ids' => array_filter([(int) $this->requested_by]),
             'uploader_message' => 'Only the person who made this request can attach documents.',
-            'open' => $this->isPending(),
-            'closed_message' => 'Documents can be attached only while the request is pending.',
-            'locked' => ! $this->isPending(),
+            'open' => $this->isOpenForDocuments(),
+            'closed_message' => 'Documents can be attached only while the request is pending or returned.',
+            'locked' => ! $this->isOpenForDocuments(),
             'locked_message' => 'Documents of a reviewed request cannot be deleted.',
         ];
     }

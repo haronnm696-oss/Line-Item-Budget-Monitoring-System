@@ -45,7 +45,8 @@ class ProgramApprovalsTest extends TestCase
             ->assertOk()
             ->assertJsonPath('counts.pending', 1)
             ->assertJsonPath('counts.approved', 1)
-            ->assertJsonPath('counts.rejected', 1)
+            ->assertJsonPath('counts.returned', 1)
+            ->assertJsonPath('counts.withdrawn', 0)
             ->assertJsonCount(1, 'approvals')
             ->assertJsonPath('approvals.0.id', $pending->id);
 
@@ -70,7 +71,7 @@ class ProgramApprovalsTest extends TestCase
         $liquidation = $this->approval($project, 'liquidation', 'pending');
 
         $expected = [
-            // type => [pending ids, [pending, approved, rejected] counts]
+            // type => [pending ids, [pending, approved, returned] counts] (stored "rejected" = returned)
             'fund-release' => [[$disbursement->id], [1, 1, 0]],
             'payroll' => [[$payroll->id], [1, 0, 0]],
             'realignment' => [[$realignment->id], [1, 0, 1]],
@@ -78,13 +79,13 @@ class ProgramApprovalsTest extends TestCase
             'all' => [[$disbursement->id, $payroll->id, $realignment->id, $liquidation->id], [4, 1, 1]],
         ];
 
-        foreach ($expected as $type => [$ids, [$pending, $approved, $rejected]]) {
+        foreach ($expected as $type => [$ids, [$pending, $approved, $returned]]) {
             $response = $this->actingAs($leader)
                 ->getJson("/api/program/approvals?status=pending&type={$type}")
                 ->assertOk()
                 ->assertJsonPath('counts.pending', $pending)
                 ->assertJsonPath('counts.approved', $approved)
-                ->assertJsonPath('counts.rejected', $rejected);
+                ->assertJsonPath('counts.returned', $returned);
 
             $this->assertEqualsCanonicalizing($ids, collect($response->json('approvals'))->pluck('id')->all(), "type={$type}");
         }

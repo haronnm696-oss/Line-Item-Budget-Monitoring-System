@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+/** Return a request to its maker with a required reason (they edit and resubmit, or withdraw). */
 export default function ProgramRejectModal({ approval, busy, error, onClose, onConfirm }) {
   const [reason, setReason] = useState('');
   const [localError, setLocalError] = useState('');
@@ -9,7 +10,7 @@ export default function ProgramRejectModal({ approval, busy, error, onClose, onC
   function handleSubmit(event) {
     event.preventDefault();
     if (!reason.trim()) {
-      setLocalError('A reason for rejection is required.');
+      setLocalError('A reason is required to return a request.');
       return;
     }
     setLocalError('');
@@ -27,7 +28,7 @@ export default function ProgramRejectModal({ approval, busy, error, onClose, onC
       <div className="program-modal" onClick={(event) => event.stopPropagation()}>
         <div className="program-modal-head">
           <div>
-            <div className="program-modal-title" id="program-reject-title">Reject request</div>
+            <div className="program-modal-title" id="program-reject-title">Return request</div>
             <p className="program-card-sub">
               {approval.title} · {approval.project}
             </p>
@@ -44,13 +45,13 @@ export default function ProgramRejectModal({ approval, busy, error, onClose, onC
 
         <form onSubmit={handleSubmit}>
           <div className="program-field">
-            <label htmlFor="program-reject-reason">Reason for rejection (required)</label>
+            <label htmlFor="program-reject-reason">Reason for returning (required)</label>
             <textarea
               id="program-reject-reason"
               className="program-textarea"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Tell the Project Leader what to fix"
+              placeholder="Tell the requester what to fix, e.g. add the work plan"
               aria-describedby={localError || error ? 'program-reject-error' : undefined}
               autoFocus
             />
@@ -67,7 +68,7 @@ export default function ProgramRejectModal({ approval, busy, error, onClose, onC
               Cancel
             </button>
             <button type="submit" className="program-btn primary" disabled={busy}>
-              {busy ? 'Rejecting…' : 'Confirm rejection'}
+              {busy ? 'Returning…' : 'Return to requester'}
             </button>
           </div>
         </form>

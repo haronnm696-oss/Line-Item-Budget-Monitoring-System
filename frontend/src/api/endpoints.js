@@ -84,6 +84,9 @@
  * Budget requests (Project Leader -> Program Leader; shown on Program Approvals):
  *   GET    /api/projects/:id/budget-requests
  *   POST   /api/projects/:id/budget-requests  -> { type: fund_release|realignment|liquidation, justification, ... }
+ *   POST   /api/budget-requests/:id/resubmit   -> a returned request, edited (same fields; type fixed; files[], remove_document_ids[])
+ *   POST   /api/budget-requests/:id/withdraw   -> a returned request, closed by its maker
+ *   Row status: pending | approved | returned | withdrawn (Program Leader decision: approved | returned + remarks)
  *          fund_release: project_tranche_id; realignment: from_lib_category_id, to_lib_category_id, amount;
  *          liquidation: amount, title?, files[] (multipart, at least one)
  *   Documents: GET/POST /api/approvals/:id/documents (requester, while pending)
@@ -213,6 +216,8 @@ export const ENDPOINTS = {
   purchaseRequestStep: (id, action) => `/api/purchase-requests/${id}/${action}`,
   purchaseRequestDocuments: (id) => `/api/purchase-requests/${id}/documents`,
   budgetRequests: (projectId) => `/api/projects/${projectId}/budget-requests`,
+  resubmitBudgetRequest: (id) => `/api/budget-requests/${id}/resubmit`,
+  withdrawBudgetRequest: (id) => `/api/budget-requests/${id}/withdraw`,
   approvalDocuments: (id) => `/api/approvals/${id}/documents`,
   balancing: (projectId) => `/api/projects/${projectId}/balancing`,
   // Project Leader pages (read-only; decisions use the workflow routes).

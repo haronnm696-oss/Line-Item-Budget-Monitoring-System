@@ -23,25 +23,31 @@ class ProgramDashboardController extends Controller
 
     public function decision(Request $request, ApprovalRequest $approval)
     {
+        // Approve, or Return with a reason. "rejected" is still accepted from
+        // older clients and means the same as "returned".
         $data = $request->validate([
-            'decision' => ['required', 'in:approved,rejected'],
-            'remarks' => ['nullable', 'string', 'max:2000', 'required_if:decision,rejected'],
+            'decision' => ['required', 'in:approved,returned,rejected'],
+            'remarks' => ['nullable', 'string', 'max:2000', 'required_if:decision,returned', 'required_if:decision,rejected', 'not_regex:/^\s*$/'],
+        ], [
+            'remarks.required_if' => 'A reason is required to return a request.',
+            'remarks.not_regex' => 'A reason is required to return a request.',
         ]);
+        $approve = $data['decision'] === 'approved';
 
         $approval = $this->dashboard->decide(
             $approval,
-            $data['decision'],
-            $data['remarks'] ?? null,
+            $approve ? 'approved' : 'returned',
+            $approve ? ($data['remarks'] ?? null) : trim((string) $data['remarks']),
             $request->user()
         );
 
         return response()->json([
-            'message' => $data['decision'] === 'approved'
+            'message' => $approve
                 ? 'Approval recorded and related records updated.'
-                : 'Request rejected.',
+                : 'Request returned to the requester with your reason.',
             'approval' => [
                 'id' => $approval->id,
-                'status' => $approval->status,
+                'status' => $approval->displayStatus(),
                 'review_notes' => $approval->review_notes,
                 'reviewed_at' => $approval->reviewed_at?->toIso8601String(),
             ],

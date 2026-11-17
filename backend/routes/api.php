@@ -110,6 +110,9 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     // Budget requests from the Project Leader to the Program Leader.
     Route::get('/projects/{project}/budget-requests', [BudgetRequestController::class, 'index']);
     Route::post('/projects/{project}/budget-requests', [BudgetRequestController::class, 'store']);
+    // A returned request: its maker edits and resubmits it, or withdraws it.
+    Route::post('/budget-requests/{approval}/resubmit', [BudgetRequestController::class, 'resubmit']);
+    Route::post('/budget-requests/{approval}/withdraw', [BudgetRequestController::class, 'withdraw']);
 
     // Balancing query per line item.
     Route::get('/projects/{project}/balancing', [BalancingController::class, 'show']);
