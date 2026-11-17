@@ -103,9 +103,7 @@ export default function ProjectLeaderDashboard() {
                       <ReviewRow
                         key={item.key}
                         item={item}
-                        busy={actions.busyKey === item.key}
-                        onApprove={actions.approve}
-                        onReturn={actions.openReturn}
+                        openHref={`/submissions?project=${picker.projectId}&open=${item.key}`}
                       />
                     ))
                   )}

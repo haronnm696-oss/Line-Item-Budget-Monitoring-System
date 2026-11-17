@@ -188,6 +188,10 @@ export const ENDPOINTS = {
   projectBurnRate: (projectId) => `/api/projects/${projectId}/burn-rate`,
   projectCompliance: (projectId) => `/api/projects/${projectId}/compliance`,
   approvals: '/api/approvals',
+  // One request for the review side panel: status history, type-specific figures
+  // (tranche / line items before and after / liquidated expenses / payroll batch)
+  // and attachments. Program Leader and project members only (403 otherwise).
+  approvalDetail: (id) => `/api/approvals/${id}`,
   projects: '/api/projects',
   project: (id) => `/api/projects/${id}`,
   expenses: (projectId) => `/api/projects/${projectId}/expenses`,

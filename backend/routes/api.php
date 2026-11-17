@@ -64,6 +64,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
 
     // Read-only. Decisions are Program Leader-only: POST /program/approvals/{approval}/decision.
     Route::get('/approvals', [ApprovalController::class, 'index']);
+    // One request for the review panel (details, history, attachments).
+    Route::get('/approvals/{approval}', [ApprovalController::class, 'show']);
 
     // Expense workflow (ExpenseWorkflowService): draft -> submitted ->
     // endorsed ("Approved by Project Leader") -> verified, or returned.

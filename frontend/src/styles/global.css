@@ -3824,3 +3824,14 @@ select.signin-input:disabled{
 .ld-file-missing{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:12.5px;font-weight:650;color:var(--pg-watch)}
 .file-size-line{margin-top:4px;overflow-wrap:anywhere}
 .file-size-line b{font-weight:700}
+
+/* Program Leader review panel (ApprovalPanel): history, figures, decision. */
+.pa-history{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.pa-history li{padding:6px 10px;border-left:3px solid var(--pg-card-border,#E8DFD3);background:#FAF7F2;border-radius:0 6px 6px 0;overflow-wrap:anywhere}
+.pa-caption{caption-side:top;text-align:left;font-size:13px;font-weight:700;padding:6px 0}
+.ld-panel .ld-table tfoot th,.ld-panel .ld-table tfoot td{border-top:1px solid var(--pg-card-border,#E8DFD3)}
+.pa-panel-actions{flex-wrap:wrap}
+.pa-panel-actions .pa-return-field{flex:1 1 100%;margin:0}
+.program-row-actions .program-btn{min-height:44px}
+.pa-decided-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+@media (max-width:720px){.pa-decided-side{align-items:flex-start}}

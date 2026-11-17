@@ -96,7 +96,7 @@ export default function VerificationQueue() {
 
         <LoadState state={list} loadingText="Loading the queue…" emptyText={EMPTY[tab]} isEmpty={items.length === 0}>
           <section className="program-card ld-list-card">
-            <QueueTable items={items} actions={actions} showActions={tab === 'waiting'} caption="Verification queue" onOpen={(item) => update({ open: item.key })} />
+            <QueueTable items={items} showActions={tab === 'waiting'} caption="Verification queue" onOpen={(item) => update({ open: item.key })} />
           </section>
         </LoadState>
 

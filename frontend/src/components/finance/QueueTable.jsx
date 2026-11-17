@@ -3,11 +3,12 @@ import StagePill from '../assistant/StagePill';
 import { peso } from '../money';
 
 /**
- * Verification queue rows: reference, description, amount, who approved it,
- * and Verify / Reject when this user may verify (otherwise the reason).
- * `actions` = useVerifyActions(); `onOpen` opens the side panel.
+ * Verification queue rows: reference, description, amount, documents, who
+ * approved it, and "Review" when this user may verify (otherwise the
+ * reason). Verify / Reject live only in the side panel (FinanceRecordPanel),
+ * so the receipts are seen first. `onOpen` opens the panel.
  */
-export default function QueueTable({ items, actions, onOpen, showActions = true, caption }) {
+export default function QueueTable({ items, onOpen, showActions = true, caption }) {
   return (
     <div className="ra-table-wrap">
       <table className="program-table ld-table ra-table">
@@ -23,7 +24,6 @@ export default function QueueTable({ items, actions, onOpen, showActions = true,
         </thead>
         <tbody>
           {items.map((item) => {
-            const busy = actions.busyKey === item.key;
             return (
               <tr key={item.key}>
                 <td data-label="Reference">
@@ -33,6 +33,7 @@ export default function QueueTable({ items, actions, onOpen, showActions = true,
                 <td data-label="Description">
                   <div className="ra-desc">{item.title}</div>
                   {item.details && <div className="ra-details">{item.details}</div>}
+                  <div className="ra-details">{item.documents_count > 0 ? `${item.documents_count} document${item.documents_count === 1 ? '' : 's'}` : 'No documents'}</div>
                 </td>
                 <td data-label="Amount" className="num ld-amount">{peso(item.amount)}</td>
                 <td data-label="Status">
@@ -48,8 +49,7 @@ export default function QueueTable({ items, actions, onOpen, showActions = true,
                   <td data-label="Actions">
                     {item.can_verify && (
                       <div className="fin-row-actions">
-                        <button type="button" className="program-btn sm danger" disabled={busy} onClick={() => actions.reject(item)}>Reject</button>
-                        <button type="button" className="program-btn sm primary" disabled={busy} onClick={() => actions.verify(item)}>{busy ? 'Saving…' : 'Verify'}</button>
+                        <button type="button" className="program-btn sm primary" onClick={() => onOpen(item)}>Review</button>
                       </div>
                     )}
                   </td>
