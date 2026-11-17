@@ -223,6 +223,8 @@ function BudgetAlerts({ alerts, projectQuery }) {
   const burn = alerts.burn_rate;
   const [tone, icon] = BURN_PILL[burn.tone] ?? BURN_PILL.neutral;
   const next = alerts.next_tranche;
+  // With zero tranches, "no next tranche" must not read as "all released".
+  const noTranches = Number(alerts.tranche_count) === 0;
   const missing = alerts.missing_receipts;
 
   return (
@@ -250,7 +252,8 @@ function BudgetAlerts({ alerts, projectQuery }) {
 
       <AlertRow
         title="Next tranche"
-        pill={!next ? <ProgramPill value="All released" tone="healthy" icon="✓" />
+        pill={noTranches ? <ProgramPill value="Not set" label="No tranches set yet" tone="neutral" icon="•" />
+          : !next ? <ProgramPill value="All released" tone="healthy" icon="✓" />
           : next.display_status === 'overdue' ? <ProgramPill value="Overdue" />
           : next.requested ? <ProgramPill value="Pending" label="Release requested" />
           : <ProgramPill value="Not yet requested" />}
@@ -263,7 +266,7 @@ function BudgetAlerts({ alerts, projectQuery }) {
             )}
           </p>
         ) : (
-          <p className="ld-muted">Every tranche of this project is released.</p>
+          <p className="ld-muted">{noTranches ? 'No tranches set yet. The Program Leader schedules them on the project page.' : 'Every tranche of this project is released.'}</p>
         )}
       </AlertRow>
 

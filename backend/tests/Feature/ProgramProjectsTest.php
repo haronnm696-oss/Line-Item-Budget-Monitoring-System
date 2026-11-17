@@ -302,26 +302,46 @@ class ProgramProjectsTest extends TestCase
         }
     }
 
-    public function test_excel_export_lists_the_filtered_projects_with_totals(): void
+    public function test_csv_export_lists_the_filtered_projects_with_totals(): void
     {
         $agency = FundingAgency::firstOrFail();
 
         $response = $this->actingAs($this->programLeader())
             ->get('/api/program/projects/export?funder=' . $agency->id)
             ->assertOk()
-            ->assertHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8');
+            ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+        $this->assertStringContainsString('.csv"', $response->headers->get('Content-Disposition'));
 
         $body = $response->getContent();
-        $this->assertStringContainsString('<Workbook', $body);
-        $this->assertStringContainsString('Total allocated', $body);
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $body); // BOM: Excel reads ₱ and accents
+        $rows = array_map('str_getcsv', explode("\r\n", substr($body, 3)));
 
-        foreach (Project::all() as $project) {
-            if ((int) $project->funding_agency_id === (int) $agency->id) {
-                $this->assertStringContainsString('>' . $project->code . '<', $body);
-            } else {
-                $this->assertStringNotContainsString('>' . $project->code . '<', $body);
+        // Same columns as before (and as the page's PDF).
+        $header = array_search('Project', array_column($rows, 0), true);
+        $this->assertSame([
+            'Project', 'Code', 'Funder reference', 'Funder', 'Project leader',
+            'Approved budget', 'Spent', 'Spent %', 'PS spent %', 'MOOE spent %', 'Remaining',
+            'Start', 'End', 'Last entry', 'Status', 'Health', 'Health note', 'Pending approvals',
+        ], $rows[$header]);
+
+        $listed = [];
+        foreach (array_slice($rows, $header + 1) as $row) {
+            if (($row[0] ?? '') === '' || $row[0] === 'Summary') {
+                break;
             }
+            $this->assertCount(18, $row);
+            $this->assertMatchesRegularExpression('/^\d+\.\d{2}$/', $row[5], 'budget is a plain number');
+            $listed[] = $row[1];
         }
+        $expected = Project::where('funding_agency_id', $agency->id)->pluck('code')->all();
+        $this->assertEqualsCanonicalizing($expected, $listed);
+        $this->assertNotEmpty($listed);
+
+        // The page's numbers for the same filter, in the summary.
+        $summary = $this->getJson('/api/program/projects?funder=' . $agency->id)->json('summary');
+        $totals = collect($rows)->filter(fn ($row) => in_array($row[0] ?? null, ['Total allocated', 'Total spent'], true))->mapWithKeys(fn ($row) => [$row[0] => $row[1]]);
+        $this->assertSame(number_format($summary['allocated'], 2, '.', ''), $totals['Total allocated']);
+        $this->assertSame(number_format($summary['spent'], 2, '.', ''), $totals['Total spent']);
     }
 
     public function test_projects_export_is_forbidden_for_other_roles(): void

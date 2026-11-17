@@ -44,7 +44,7 @@ const FEATURES = [
   {
     icon: 'file',
     title: 'Funder-ready reports',
-    text: 'Export the funder’s official line-item budget form, plus ledgers and summaries, as PDF or Excel.',
+    text: 'Export the funder’s official line-item budget form, plus ledgers and summaries, as PDF or CSV.',
   },
 ];
 

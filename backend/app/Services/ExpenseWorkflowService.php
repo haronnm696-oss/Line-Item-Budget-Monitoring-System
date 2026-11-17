@@ -168,6 +168,7 @@ class ExpenseWorkflowService
                 'documents' => ['Attach at least one receipt before submitting.'],
             ]);
         }
+        $this->requireAvailable($expense);
 
         // A Project Leader's own expense skips their approval step.
         $expense = $this->move($expense, $byLeader ? 'endorsed' : 'submitted', $actor, 'submitted', ['draft', 'returned'], [
@@ -184,6 +185,30 @@ class ExpenseWorkflowService
         }
 
         return $expense;
+    }
+
+    /**
+     * The amount may not exceed the line item's available balance
+     * (allocated - spent - pending, ProjectFinancialService::balancing). A
+     * linked expense already counts in "pending" (it took over its purchase
+     * request's money), so its own amount is added back.
+     */
+    private function requireAvailable(Expense $expense): void
+    {
+        $row = app(ProjectFinancialService::class)
+            ->balancing($expense->project, (int) $expense->lib_category_id)['line_items'][0] ?? null;
+        if (! $row) {
+            return;
+        }
+        $available = round((float) $row['available'] + ($expense->purchase_request_id ? (float) $expense->amount : 0), 2);
+        if (round((float) $expense->amount, 2) > $available) {
+            throw ValidationException::withMessages(['amount' => [sprintf(
+                'The amount (₱%s) is more than the ₱%s available on %s. Lower the amount or ask the Project Leader for a realignment.',
+                number_format((float) $expense->amount, 2),
+                number_format(max(0, $available), 2),
+                $row['name']
+            )]]);
+        }
     }
 
     /**

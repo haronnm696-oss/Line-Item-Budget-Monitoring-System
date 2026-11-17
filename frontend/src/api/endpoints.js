@@ -160,6 +160,16 @@ export const ENDPOINTS = {
   programProjects: '/api/program/projects',
   programProjectsExport: '/api/program/projects/export',
   programProject: (id) => `/api/program/projects/${id}`,
+  // Project set-up (Program Leader only; one audit entry per change):
+  //   GET  project-options -> { funders, leaders }
+  //   POST projects, PATCH projects/:id (funder, reference, period, total budget, project_leader_id)
+  //   POST projects/:id/line-items, PATCH|DELETE line-items/:id
+  //   POST projects/:id/tranches, PATCH|DELETE tranches/:id (unreleased only)
+  programProjectOptions: '/api/program/project-options',
+  programLineItems: (projectId) => `/api/program/projects/${projectId}/line-items`,
+  programLineItem: (id) => `/api/program/line-items/${id}`,
+  programTranches: (projectId) => `/api/program/projects/${projectId}/tranches`,
+  programTranche: (id) => `/api/program/tranches/${id}`,
   programApprovals: '/api/program/approvals',
   programAudit: '/api/program/audit',
   programDecision: (id) => `/api/program/approvals/${id}/decision`,
