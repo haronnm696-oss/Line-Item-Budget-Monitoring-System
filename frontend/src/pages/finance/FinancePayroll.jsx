@@ -11,11 +11,13 @@ import StagePill from '../../components/assistant/StagePill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { peso } from '../../components/money';
+import { PayRatesCard } from '../../components/payroll/PayRates';
 
 /**
  * Payroll (Finance/Admin): every monthly batch of the project with its
  * stage and next step; a batch opens in the side panel. Verifying happens
- * from the Verification queue (the panel's buttons are the same).
+ * from the Verification queue (the panel's buttons are the same). The
+ * "Pay rates" card sets each assigned person's monthly rate and allowance.
  */
 export default function FinancePayroll() {
   const picker = useAssignedProject({ role: 'finance-admin' });
@@ -86,6 +88,8 @@ export default function FinancePayroll() {
             </div>
           </section>
         </LoadState>
+
+        {picker.projectId && <PayRatesCard key={picker.projectId} projectId={picker.projectId} editable />}
 
         {picker.projectId && (
           <FinanceRecordPanel projectId={picker.projectId} target={open} refreshKey={refreshKey} actions={actions} verifyHere={false} onClose={() => update({ open: '' })} />

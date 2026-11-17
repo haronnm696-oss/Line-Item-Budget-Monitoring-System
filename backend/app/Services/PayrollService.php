@@ -129,11 +129,14 @@ class PayrollService
 
     /**
      * Recompute every row of the month's batch from the current pay rates and
-     * deduction rules (batch draft or returned only).
+     * deduction rules (batch draft or returned only). A person whose rate is
+     * now not set or 0.00 is taken out of the batch (one "deleted" audit
+     * entry each), the same as Prepare leaves them out; never a 0.00 row.
+     * Submitted and verified batches are refused, so they never change.
      *
-     * @return Collection<int, Payroll>
+     * @return array{rows: Collection<int, Payroll>, removed: array<int, string>}
      */
-    public function computeMonth(Project $project, int $year, int $month, User $actor): Collection
+    public function computeMonth(Project $project, int $year, int $month, User $actor): array
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can compute payroll.');
 
@@ -150,20 +153,25 @@ class PayrollService
         return AuditLogger::transaction(function () use ($batch, $rates, $actor) {
             $this->requireState($this->lockRecord($batch), PayrollBatch::EDITABLE, 'computed');
 
-            return $batch->rows()->orderBy('id')->get()->map(function (Payroll $row) use ($rates, $actor) {
+            $rows = collect();
+            $removed = [];
+            foreach ($batch->rows()->with('personnel')->orderBy('id')->get() as $row) {
                 $locked = $this->lockRecord($row);
                 $rate = $rates->get($locked->personnel_id);
-                $hasRate = $rate && $rate->monthly_rate !== null;
 
-                return $this->recompute(
-                    $locked,
-                    $hasRate ? (float) $rate->monthly_rate : (float) $locked->basic_rate,
-                    $hasRate ? (float) $rate->allowance : (float) $locked->allowance,
-                    [],
-                    'computed',
-                    $actor
-                );
-            });
+                if (! $rate || $rate->monthly_rate === null || (float) $rate->monthly_rate <= 0) {
+                    $old = $this->money($locked);
+                    $locked->deductions()->delete();
+                    $locked->delete();
+                    AuditLogger::write('deleted', $locked, $old, [], $actor);
+                    $removed[] = $row->personnel?->name ?? ('User #' . $locked->personnel_id);
+                    continue;
+                }
+
+                $rows->push($this->recompute($locked, (float) $rate->monthly_rate, (float) $rate->allowance, [], 'computed', $actor));
+            }
+
+            return ['rows' => $rows, 'removed' => $removed];
         });
     }
 
@@ -453,18 +461,47 @@ class PayrollService
         return Carbon::create($year, $month, 1)->format('F Y');
     }
 
-    /** Active members of the project with a monthly rate, one per person. */
+    /** Active members of the project with a monthly rate above zero, one per person. */
     public function ratedMembers(Project $project): Collection
     {
         return ProjectUser::query()
             ->where('project_id', $project->id)
             ->whereNotNull('monthly_rate')
+            ->where('monthly_rate', '>', 0)
             ->with('user')
             ->orderBy('id')
             ->get()
             ->filter(fn (ProjectUser $member) => $member->user && $member->user->is_active)
             ->unique('user_id')
             ->values();
+    }
+
+    /**
+     * Active members of the project who are NOT included in payroll: no
+     * monthly rate set, or a rate of 0.00. Names and the reason, so the page
+     * can say who is missing (they never get a 0.00 row).
+     *
+     * @return array<int, array{user_id: int, name: string, reason: string}>
+     */
+    public function unratedMembers(Project $project): array
+    {
+        $rated = $this->ratedMembers($project)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+
+        return ProjectUser::query()
+            ->where('project_id', $project->id)
+            ->with('user')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (ProjectUser $member) => $member->user && $member->user->is_active && ! in_array((int) $member->user_id, $rated, true))
+            ->unique('user_id')
+            ->map(fn (ProjectUser $member) => [
+                'user_id' => (int) $member->user_id,
+                'name' => $member->user->name,
+                'reason' => $member->monthly_rate === null ? 'not_set' : 'zero',
+            ])
+            ->sortBy('name')
+            ->values()
+            ->all();
     }
 
     protected function stageLabels(): array

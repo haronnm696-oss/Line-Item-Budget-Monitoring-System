@@ -46,7 +46,7 @@ class PayrollController extends Controller
         $created = $this->payroll->createMonth($project, $year, $month, LibCategory::findOrFail($data['lib_category_id']), $request->user());
 
         return response()->json([
-            'message' => 'Payroll created for ' . $created->count() . ' ' . ($created->count() === 1 ? 'person' : 'people') . '.',
+            'message' => 'Payroll created for ' . $created->count() . ' ' . ($created->count() === 1 ? 'person' : 'people') . '.' . $this->notIncluded($project),
         ] + $this->run($project, $year, $month), 201);
     }
 
@@ -56,9 +56,14 @@ class PayrollController extends Controller
         $data = $request->validate(['month' => array_merge(['required'], self::MONTH)], $this->monthMessage());
         [$year, $month] = $this->parts($data['month']);
 
-        $rows = $this->payroll->computeMonth($project, $year, $month, $request->user());
+        $result = $this->payroll->computeMonth($project, $year, $month, $request->user());
+        $rows = $result['rows'];
 
-        return response()->json(['message' => 'Payroll computed for ' . $rows->count() . ' ' . ($rows->count() === 1 ? 'entry' : 'entries') . '.'] + $this->run($project, $year, $month));
+        return response()->json([
+            'message' => 'Payroll computed for ' . $rows->count() . ' ' . ($rows->count() === 1 ? 'entry' : 'entries') . '.' . $this->notIncluded($project, $result['removed']),
+            // Rows taken out of this batch because the person's rate is now not set or 0.00.
+            'removed_members' => $result['removed'],
+        ] + $this->run($project, $year, $month));
     }
 
     public function update(Request $request, Payroll $payroll)
@@ -135,6 +140,8 @@ class PayrollController extends Controller
             // Deduction rules whose rates are not set yet (config/payroll.php).
             'unset_rules' => $this->calculator->unsetRules(),
             'rated_members' => $this->payroll->ratedMembers($project)->count(),
+            // Assigned people left out (no rate, or 0.00): named, never computed as 0.00.
+            'unrated_members' => $this->payroll->unratedMembers($project),
             'ps_line_items' => $project->libCategories()->where('category_type', 'PS')->orderBy('id')->get()
                 ->map(fn (LibCategory $item) => ['id' => $item->id, 'name' => $item->line_item_name])->values(),
         ];
@@ -203,6 +210,19 @@ class PayrollController extends Controller
             'submitted_at' => $payroll->submitted_at?->toIso8601String(),
             'verified_at' => $payroll->verified_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * " Not included: no pay rate set for A, B." (empty when everyone has a
+     * rate). $removed adds people whose row Recompute just took out (they may
+     * no longer be assigned to the project).
+     */
+    private function notIncluded(Project $project, array $removed = []): string
+    {
+        $names = collect($this->payroll->unratedMembers($project))->pluck('name')
+            ->merge($removed)->unique()->sort()->values();
+
+        return $names->isEmpty() ? '' : ' Not included: no pay rate set for ' . $names->join(', ', ' and ') . '.';
     }
 
     private function psLineItem(Project $project)

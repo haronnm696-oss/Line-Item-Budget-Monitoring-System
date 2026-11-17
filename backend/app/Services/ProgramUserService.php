@@ -275,6 +275,9 @@ class ProgramUserService
                     'project_code' => $assignment->project->code,
                     'role_slug' => $assignment->role?->slug,
                     'role_label' => self::ROLE_LABELS[$assignment->role?->slug] ?? $assignment->role?->name,
+                    // Pay rate on this project (null = not set); edited with PATCH /projects/{id}/pay-rates/{user}.
+                    'monthly_rate' => $assignment->monthly_rate !== null ? (float) $assignment->monthly_rate : null,
+                    'allowance' => $assignment->allowance !== null ? (float) $assignment->allowance : null,
                 ])
                 ->values()
                 ->all(),
@@ -588,6 +591,8 @@ class ProgramUserService
                 'role_slug' => $assignment->role?->slug,
                 'role_label' => $assignment->role?->name,
                 'assigned_at' => $assignment->assigned_at?->toIso8601String(),
+                'monthly_rate' => $assignment->monthly_rate !== null ? (float) $assignment->monthly_rate : null,
+                'allowance' => $assignment->allowance !== null ? (float) $assignment->allowance : null,
             ])->values()->all(),
         ];
     }

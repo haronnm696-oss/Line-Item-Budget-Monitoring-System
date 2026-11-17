@@ -58,8 +58,8 @@ class ProgramUsersDirectoryTest extends TestCase
 
         $this->assertSame('Research Assistant', $rows['Norjannah Haron']['role_label']);
         $this->assertSame([
-            ['project_id' => $this->urban->id, 'project' => 'Enhancing Urban Mobility in Marawi City', 'project_code' => 'MOST-RD-2026-001', 'role_slug' => 'research-assistant', 'role_label' => 'Research Assistant'],
-            ['project_id' => $this->goat->id, 'project' => 'Halal Goat Value Chain Development', 'project_code' => 'MOST-RD-2026-002', 'role_slug' => 'researcher', 'role_label' => 'Researcher'],
+            ['project_id' => $this->urban->id, 'project' => 'Enhancing Urban Mobility in Marawi City', 'project_code' => 'MOST-RD-2026-001', 'role_slug' => 'research-assistant', 'role_label' => 'Research Assistant', 'monthly_rate' => null, 'allowance' => null],
+            ['project_id' => $this->goat->id, 'project' => 'Halal Goat Value Chain Development', 'project_code' => 'MOST-RD-2026-002', 'role_slug' => 'researcher', 'role_label' => 'Researcher', 'monthly_rate' => null, 'allowance' => null],
         ], $rows['Norjannah Haron']['assignments']);
         $this->assertFalse($rows['Norjannah Haron']['program_wide']);
         $this->assertSame($assistant->id, $rows['Norjannah Haron']['id']);

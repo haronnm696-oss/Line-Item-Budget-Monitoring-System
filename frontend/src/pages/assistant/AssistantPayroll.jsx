@@ -15,6 +15,7 @@ import AssistantRecordPanel from '../../components/assistant/AssistantRecordPane
 import StagePill from '../../components/assistant/StagePill';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
 import { peso } from '../../components/money';
+import { PayRatesCard } from '../../components/payroll/PayRates';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const RATES_NOT_SET = 'Deduction rates are not set yet. Ask your Program Leader or Finance/Admin.';
@@ -57,13 +58,14 @@ export default function AssistantPayroll() {
   const chosenLine = lineItemId || (psItems[0] ? String(psItems[0].id) : '');
   const label = run?.month_label ?? month;
   const missingPeople = Math.max(0, (Number(run?.rated_members) || 0) - rows.length);
+  const unrated = Array.isArray(run?.unrated_members) ? run.unrated_members : [];
 
   async function act(key, send, okText) {
     setBusy(key);
     actions.setFeedback(null);
     try {
-      await send();
-      actions.setFeedback({ tone: 'ok', text: okText });
+      const data = await send();
+      actions.setFeedback({ tone: 'ok', text: typeof okText === 'function' ? okText(data) : okText });
       reload();
     } catch (error) {
       actions.setFeedback({ tone: 'error', text: errorText(error, 'Could not save. Please try again.') });
@@ -72,8 +74,9 @@ export default function AssistantPayroll() {
     }
   }
 
-  const prepare = () => act('prepare', () => apiWrite('post', ENDPOINTS.payroll(projectId), { month, lib_category_id: Number(chosenLine) }), `Payroll for ${label} prepared and computed. Review the rows, upload the payroll file, then submit.`);
-  const recompute = () => act('compute', () => apiWrite('post', ENDPOINTS.computePayroll(projectId), { month }), `Payroll for ${label} recomputed from the current pay rates.`);
+  // The server's message names anyone left out ("Not included: no pay rate set for …").
+  const prepare = () => act('prepare', () => apiWrite('post', ENDPOINTS.payroll(projectId), { month, lib_category_id: Number(chosenLine) }), (data) => `${data?.message ?? `Payroll for ${label} prepared and computed.`} Review the rows, upload the payroll file, then submit.`);
+  const recompute = () => act('compute', () => apiWrite('post', ENDPOINTS.computePayroll(projectId), { month }), (data) => data?.message ?? `Payroll for ${label} recomputed from the current pay rates.`);
   const submit = () => act('submit', () => apiWrite('post', ENDPOINTS.payrollBatchStep(batch.id, 'submit')), `Payroll for ${label} submitted.`);
   const batchRecord = batch ? { key: `payroll-${batch.id}`, type: 'payroll', id: batch.id, type_label: 'Payroll', reference: `PAY-${month}`, title: `Payroll ${label}` } : null;
 
@@ -110,6 +113,12 @@ export default function AssistantPayroll() {
               {ratesMissing && (
                 <div className="program-banner error" role="alert">
                   <b>⚠ {RATES_NOT_SET}</b> Not set: {unsetRules.join(', ')}. You can prepare and review the rows, but the batch cannot be submitted until the rates are set.
+                </div>
+              )}
+
+              {unrated.length > 0 && (
+                <div className="program-banner info" role="status">
+                  <b>ⓘ Not included: no pay rate set for {unrated.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until Finance/Admin or the Program Leader sets a monthly rate.
                 </div>
               )}
 
@@ -241,6 +250,8 @@ export default function AssistantPayroll() {
             </>
           )}
         </LoadState>
+
+        {projectId && <PayRatesCard key={projectId} projectId={projectId} editable={false} />}
 
         {projectId && (
           <AssistantRecordPanel projectId={projectId} target={open} refreshKey={refreshKey} actions={actions} onClose={() => update({ open: '' })} />

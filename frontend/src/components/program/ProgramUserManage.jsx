@@ -1,6 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ACCOUNT_ROLE_OPTIONS, PROJECT_ROLE_OPTIONS } from '../../lib/roles';
+import { rateText } from '../../lib/payRate';
+import { peso } from '../money';
+import { PayRateForm } from '../payroll/PayRates';
 
 const MSU_EMAIL = /^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i;
 const MSU_EMPLOYEE_ID = /^MSU-\d{5}$/i;
@@ -340,11 +343,13 @@ function messageOf(error, fallback) {
 
 /**
  * One assignment in the "Edit project assignments" dialog: change the role on
- * that project, or remove the person from it (confirmation + required reason).
+ * that project, set the pay rate (monthly rate and allowance), or remove the
+ * person from it (confirmation + required reason).
  */
-function AssignmentRow({ assignment, programWide, onChangeRole, onRemove, onDone }) {
+function AssignmentRow({ user, assignment, programWide, onChangeRole, onRemove, onDone }) {
   const [role, setRole] = useState(assignment.role_slug ?? '');
   const [removing, setRemoving] = useState(false);
+  const [editingRate, setEditingRate] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -381,6 +386,26 @@ function AssignmentRow({ assignment, programWide, onChangeRole, onRemove, onDone
         </Link>
         <div className="au-sub">Currently: {assignment.role_label ?? 'No role'}</div>
       </div>
+
+      {!programWide && !removing && (
+        editingRate ? (
+          <PayRateForm
+            projectId={assignment.project_id}
+            member={{ user_id: user.id, name: user.name, monthly_rate: assignment.monthly_rate ?? null, allowance: assignment.allowance ?? null }}
+            idBase={`${base}-pay`}
+            onCancel={() => setEditingRate(false)}
+            onSaved={(_, message) => { setEditingRate(false); onDone(`${message.replace(/\.$/, '')} on ${assignment.project}.`); }}
+          />
+        ) : (
+          <div className="pu-asg-pay">
+            <span>Monthly rate: <b>{rateText(assignment.monthly_rate, peso)}</b></span>
+            <span>Allowance: <b>{assignment.monthly_rate == null ? 'Not set' : rateText(assignment.allowance, peso)}</b></span>
+            <button type="button" className="program-btn sm" disabled={busy} onClick={() => { setEditingRate(true); setError(''); }}>
+              Edit pay rate<span className="pa-sr-only"> on {assignment.project}</span>
+            </button>
+          </div>
+        )
+      )}
 
       {!programWide && !removing && (
         <div className="pu-asg-controls">
@@ -465,6 +490,7 @@ export function AssignmentsDialog({ user, onChangeRole, onRemove, onChanged, onC
             {assignments.map((assignment) => (
               <AssignmentRow
                 key={`${assignment.project_id}-${assignment.role_slug}`}
+                user={user}
                 assignment={assignment}
                 programWide={user.program_wide}
                 onChangeRole={onChangeRole}
