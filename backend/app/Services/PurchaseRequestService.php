@@ -41,7 +41,7 @@ class PurchaseRequestService
 
     private const ENCODERS = ['research-assistant', 'finance-admin'];
     private const EDITABLE = ['draft', 'returned'];
-    private const FIELDS = ['lib_category_id', 'description', 'quantity', 'estimated_amount'];
+    private const FIELDS = ['lib_category_id', 'description', 'quantity', 'estimated_amount', 'supplier'];
 
     public function create(Project $project, array $data, User $actor): PurchaseRequest
     {
@@ -253,7 +253,7 @@ class PurchaseRequestService
 
     private function snapshot(PurchaseRequest $request): array
     {
-        return $request->only(['project_id', 'lib_category_id', 'description', 'quantity', 'estimated_amount', 'workflow_status']);
+        return $request->only(['project_id', 'lib_category_id', 'description', 'quantity', 'estimated_amount', 'supplier', 'workflow_status']);
     }
 
     private function notify(Collection $recipients, PurchaseRequest $request, string $event, User $actor, ?string $reason = null, ?Expense $expense = null): void

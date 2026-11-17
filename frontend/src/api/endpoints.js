@@ -73,7 +73,7 @@
  * Purchase requests (draft -> submitted -> endorsed, or returned; no Finance step;
  * an approved request ends as fulfilled or cancelled):
  *   GET    /api/projects/:id/purchase-requests?workflow_status=
- *   POST   /api/projects/:id/purchase-requests -> { lib_category_id, description, quantity, estimated_amount }
+ *   POST   /api/projects/:id/purchase-requests -> { lib_category_id, description, quantity, estimated_amount, supplier? }
  *   PATCH  /api/purchase-requests/:id          (draft / returned)
  *   DELETE /api/purchase-requests/:id          (own draft)
  *   POST   /api/purchase-requests/:id/submit (needs a quotation or invoice) | endorse | return { reason }

@@ -91,6 +91,7 @@ class PurchaseRequestController extends Controller
             'description' => [$required, 'string', 'max:500'],
             'quantity' => [$required, 'integer', 'min:1', 'max:1000000'],
             'estimated_amount' => [$required, 'numeric', 'gt:0', 'max:9999999999999.99'],
+            'supplier' => ['sometimes', 'nullable', 'string', 'max:255'],
         ], ['lib_category_id.exists' => 'Choose a line item of this project.']);
     }
 
@@ -107,6 +108,7 @@ class PurchaseRequestController extends Controller
             'description' => $row->description,
             'quantity' => $row->quantity,
             'estimated_amount' => round((float) $row->estimated_amount, 2),
+            'supplier' => $row->supplier,
             'workflow_status' => $row->workflow_status,
             'workflow_label' => PurchaseRequestService::LABELS[$row->workflow_status] ?? $row->workflow_status,
             'return_reason' => $row->return_reason,
