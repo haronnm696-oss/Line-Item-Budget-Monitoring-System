@@ -15,7 +15,8 @@ class ProgramApprovalController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
-            'status' => ['nullable', Rule::in(['pending', 'approved', 'rejected'])],
+            // "rejected" (older links) is the Returned tab.
+            'status' => ['nullable', Rule::in(['pending', 'approved', 'returned', 'withdrawn', 'rejected'])],
             'type' => ['nullable', Rule::in([
                 'all', 'fund-release', 'realignment', 'liquidation',
                 'disbursement', 'payroll', 'budget_realignment',

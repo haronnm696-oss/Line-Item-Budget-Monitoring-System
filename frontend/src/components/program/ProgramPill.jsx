@@ -26,6 +26,7 @@ const PILL = {
   Draft: ['neutral', '•'],
   Submitted: ['watch', '⚠'],
   Returned: ['risk', '↩'],
+  Withdrawn: ['neutral', '⊘'],
   'Approved by Project Leader': ['healthy', '✓'],
   Verified: ['healthy', '✓'],
   Fulfilled: ['healthy', '✓'],

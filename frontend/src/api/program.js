@@ -71,8 +71,9 @@ export async function fetchProgramApprovals(params = {}, { signal } = {}) {
 }
 
 /**
- * Record an approval decision. Rejections require remarks; the backend
- * enforces that rule as well.
+ * Record an approval decision: "approved", or "returned" with remarks (the
+ * reason; the backend enforces it as well). A returned request goes back
+ * to its maker to edit and resubmit, or withdraw.
  */
 export async function decideApproval(id, { decision, remarks = '' }) {
   const response = await client.post(ENDPOINTS.programDecision(id), {

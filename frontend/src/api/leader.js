@@ -45,12 +45,30 @@ export function fetchDocuments(type, id) {
  * the rejected error (error.response.data.errors).
  */
 export function submitBudgetRequest(projectId, fields, files = []) {
-  const url = ENDPOINTS.budgetRequests(projectId);
+  return postWithFiles(ENDPOINTS.budgetRequests(projectId), fields, files);
+}
+
+/**
+ * POST /api/budget-requests/:id/resubmit: a returned request, edited. The
+ * type stays; removeDocumentIds are documents the maker deletes.
+ */
+export function resubmitBudgetRequest(id, fields, files = [], removeDocumentIds = []) {
+  return postWithFiles(ENDPOINTS.resubmitBudgetRequest(id), { ...fields, remove_document_ids: removeDocumentIds }, files);
+}
+
+/** POST /api/budget-requests/:id/withdraw: the maker closes a returned request. */
+export function withdrawBudgetRequest(id) {
+  return apiWrite('post', ENDPOINTS.withdrawBudgetRequest(id));
+}
+
+/** JSON without files; multipart (arrays as key[]) with files[]. */
+function postWithFiles(url, fields, files) {
   if (files.length === 0) return performWrite(() => client.post(url, fields));
 
   const form = new FormData();
   Object.entries(fields).forEach(([key, value]) => {
-    if (value !== '' && value != null) form.append(key, value);
+    if (Array.isArray(value)) value.forEach((item) => form.append(`${key}[]`, item));
+    else if (value !== '' && value != null) form.append(key, value);
   });
   files.forEach((file) => form.append('files[]', file));
   return performWrite(() => client.post(url, form));

@@ -105,23 +105,35 @@ class DocumentController extends Controller
             abort_if($rules['locked'], 422, $rules['locked_message']);
         }
 
-        $storage = app(DocumentStorage::class);
-        AuditLogger::transaction(function () use ($document, $record, $actor, $storage) {
-            $values = self::auditValues($document, $record);
-            // Database bytes go with the row (same transaction).
-            if ($document->disk === DocumentStorage::DATABASE) {
-                $storage->delete($document);
-            }
-            $document->delete();
-            AuditLogger::write('deleted', $document, $values, [], $actor);
-        });
-
-        // A file on a disk is removed once the row is gone; a missing file is fine.
-        if ($document->disk !== DocumentStorage::DATABASE) {
-            $storage->delete($document);
-        }
+        AuditLogger::transaction(fn () => self::detach($document, $record, $actor));
+        self::deleteFiles([$document]);
 
         return response()->json(['message' => 'Document deleted.']);
+    }
+
+    /**
+     * Delete a document's row (and database bytes) with its audit entry.
+     * Call inside a transaction, then deleteFiles() once it is committed.
+     */
+    public static function detach(Document $document, $record, User $actor): void
+    {
+        $values = self::auditValues($document, $record);
+        if ($document->disk === DocumentStorage::DATABASE) {
+            app(DocumentStorage::class)->delete($document);
+        }
+        $document->delete();
+        AuditLogger::write('deleted', $document, $values, [], $actor);
+    }
+
+    /** After commit: remove detached documents' files on a disk (a missing file is fine). */
+    public static function deleteFiles(iterable $documents): void
+    {
+        $storage = app(DocumentStorage::class);
+        foreach ($documents as $document) {
+            if ($document->disk !== DocumentStorage::DATABASE) {
+                $storage->delete($document);
+            }
+        }
     }
 
     // ------------------------------------------------------------ shared helpers

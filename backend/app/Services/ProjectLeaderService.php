@@ -113,7 +113,7 @@ class ProjectLeaderService
     private function unseenDecisions(Project $project, User $user): Collection
     {
         return $user->unreadNotifications()->get()->filter(fn ($n) => ($n->data['kind'] ?? null) === 'budget_request'
-            && in_array($n->data['event'] ?? null, ['approved', 'rejected'], true)
+            && in_array($n->data['event'] ?? null, ['approved', 'returned', 'rejected'], true)
             && (int) ($n->data['project_id'] ?? 0) === (int) $project->id)->values();
     }
 
@@ -351,7 +351,9 @@ class ProjectLeaderService
                 'title' => $approval->title,
                 'amount' => $approval->amount !== null ? (float) $approval->amount : null,
                 'project_tranche_id' => $approval->project_tranche_id,
-                'status' => $approval->status,
+                // pending | approved | returned | withdrawn
+                'status' => $approval->displayStatus(),
+                'status_label' => $approval->statusLabel(),
                 'reviewed_by' => $approval->reviewedBy?->name ?? $approval->reviewed_by_name,
                 'reviewed_at' => $approval->reviewed_at?->toIso8601String(),
                 'review_notes' => $approval->review_notes,

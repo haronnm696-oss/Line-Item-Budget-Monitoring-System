@@ -18,13 +18,22 @@ const TYPES = [
 const TABS = [
   ['pending', 'Pending'],
   ['approved', 'Approved'],
-  ['rejected', 'Rejected'],
+  ['returned', 'Returned'],
+  ['withdrawn', 'Withdrawn'],
 ];
 
 const EMPTY = {
   pending: 'All caught up. No pending approvals.',
   approved: 'No approved requests yet.',
-  rejected: 'No rejected requests.',
+  returned: 'No returned requests.',
+  withdrawn: 'No withdrawn requests.',
+};
+
+// Decided rows: status text plus icon.
+const DECIDED = {
+  approved: ['is-approved', '✓', 'Approved'],
+  returned: ['is-rejected', '↩', 'Returned'],
+  withdrawn: ['is-rejected', '⊘', 'Withdrawn'],
 };
 
 const PAGE_SIZE = 20;
@@ -49,14 +58,14 @@ function RemarkBox({ text }) {
 }
 
 function DecidedRow({ approval }) {
-  const approved = approval.status === 'approved';
+  const [tone, icon, label] = DECIDED[approval.status] ?? DECIDED.returned;
   return (
     <li className="pa-decided-row">
       <div className="pa-decided-main">
         <div className="pa-decided-title">
-          <span className={`pa-status ${approved ? 'is-approved' : 'is-rejected'}`}>
-            <span aria-hidden="true">{approved ? '✓' : '✕'}</span>
-            {approved ? 'Approved' : 'Rejected'}
+          <span className={`pa-status ${tone}`}>
+            <span aria-hidden="true">{icon}</span>
+            {label}
           </span>
           <b>{approval.title}</b>
           <span className="pa-type">{TYPE_PILL[approval.type] ?? approval.type_label}</span>
@@ -68,7 +77,9 @@ function DecidedRow({ approval }) {
           {' on '}{formatDate(approval.created_at)}
         </div>
         <div className="pa-meta">
-          Decided by {approval.reviewed_by ?? 'Unknown user'} on {formatDate(approval.reviewed_at)}
+          {approval.status === 'approved' ? 'Approved' : 'Returned'} by {approval.reviewed_by ?? 'Unknown user'} on {formatDate(approval.reviewed_at)}
+          {approval.status === 'withdrawn' && approval.withdrawn_at ? ` · withdrawn by the requester on ${formatDate(approval.withdrawn_at)}` : ''}
+          {approval.status === 'returned' ? ' · waiting for the requester to edit and resubmit' : ''}
         </div>
         <RemarkBox text={approval.review_notes} />
       </div>
@@ -163,8 +174,9 @@ export default function ProgramApprovals() {
   const { refreshPending } = useProgramRefresh();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Older links use ?status=; ?tab= is the current name.
-  const rawTab = searchParams.get('tab') ?? searchParams.get('status');
+  // Older links use ?status=; ?tab= is the current name. "rejected" (older links) is Returned.
+  const tabParam = searchParams.get('tab') ?? searchParams.get('status');
+  const rawTab = tabParam === 'rejected' ? 'returned' : tabParam;
   const status = TABS.some(([value]) => value === rawTab) ? rawTab : 'pending';
   const rawType = searchParams.get('type');
   const type = TYPES.some(([value]) => value === rawType) ? rawType : 'all';
@@ -180,10 +192,10 @@ export default function ProgramApprovals() {
   const controllerRef = useRef(null);
   const [feedback, setFeedback] = useState(null);
   const [busyId, setBusyId] = useState(null);
-  const [rejectId, setRejectId] = useState(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [rejectError, setRejectError] = useState('');
-  const [rejectBusy, setRejectBusy] = useState(false);
+  const [returnId, setReturnId] = useState(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnError, setReturnError] = useState('');
+  const [returnBusy, setReturnBusy] = useState(false);
 
   function updateQuery(changes) {
     const next = new URLSearchParams(searchParams);
@@ -249,32 +261,32 @@ export default function ProgramApprovals() {
     }
   }
 
-  function openReject(approval) {
-    setRejectId(approval.id);
-    setRejectReason('');
-    setRejectError('');
+  function openReturn(approval) {
+    setReturnId(approval.id);
+    setReturnReason('');
+    setReturnError('');
   }
 
-  async function confirmReject(approval) {
-    if (!rejectReason.trim()) {
-      setRejectError('A reason for rejection is required.');
+  async function confirmReturn(approval) {
+    if (!returnReason.trim()) {
+      setReturnError('A reason is required to return a request.');
       return;
     }
-    if (rejectBusy) return;
+    if (returnBusy) return;
 
-    setRejectBusy(true);
-    setRejectError('');
+    setReturnBusy(true);
+    setReturnError('');
     try {
-      await decideApproval(approval.id, { decision: 'rejected', remarks: rejectReason.trim() });
-      setFeedback({ tone: 'ok', text: `Rejected “${approval.title}”. The reason was recorded.` });
-      setRejectId(null);
-      setRejectReason('');
+      await decideApproval(approval.id, { decision: 'returned', remarks: returnReason.trim() });
+      setFeedback({ tone: 'ok', text: `Returned “${approval.title}” to the requester with your reason. They can edit and resubmit it.` });
+      setReturnId(null);
+      setReturnReason('');
       await refreshAll();
     } catch (requestError) {
       const validationError = requestError?.response?.data?.errors?.remarks?.[0];
-      setRejectError(validationError || messageFor(requestError, 'Unable to reject this request.'));
+      setReturnError(validationError || messageFor(requestError, 'Unable to return this request.'));
     } finally {
-      setRejectBusy(false);
+      setReturnBusy(false);
     }
   }
 
@@ -404,7 +416,7 @@ export default function ProgramApprovals() {
           {approvals.map((approval) => {
             const isOwn = Number(approval.requested_by_id) === Number(user?.id);
             const busy = busyId === approval.id;
-            const rejecting = rejectId === approval.id;
+            const returning = returnId === approval.id;
 
             return (
               <div key={approval.id}>
@@ -423,6 +435,12 @@ export default function ProgramApprovals() {
                     </div>
                     {approval.justification?.trim() && (
                       <p className="pa-remark">“{approval.justification.trim()}”</p>
+                    )}
+                    {approval.resubmitted_at && (
+                      <div className="program-row-sub">
+                        ↩ Resubmitted {formatDate(approval.resubmitted_at)}
+                        {approval.last_return_reason ? ` after your return: “${approval.last_return_reason}”` : ''}
+                      </div>
                     )}
                     {isOwn && (
                       <div className="program-warning" style={{ marginTop: 6 }}>
@@ -446,44 +464,44 @@ export default function ProgramApprovals() {
                       className="program-btn"
                       disabled={busy || isOwn}
                       aria-disabled={busy || isOwn}
-                      onClick={() => openReject(approval)}
+                      onClick={() => openReturn(approval)}
                     >
-                      Reject
+                      Return
                     </button>
                   </div>
                 </div>
 
-                {rejecting && (
+                {returning && (
                   <div className="program-reject">
                     <div className="program-field">
-                      <label htmlFor={`reject-${approval.id}`}>Reason for rejection (required)</label>
+                      <label htmlFor={`return-${approval.id}`}>Reason for returning (required)</label>
                       <textarea
-                        id={`reject-${approval.id}`}
+                        id={`return-${approval.id}`}
                         className="program-textarea"
-                        value={rejectReason}
-                        onChange={(event) => setRejectReason(event.target.value)}
-                        placeholder="Tell the Project Leader what to fix"
+                        value={returnReason}
+                        onChange={(event) => setReturnReason(event.target.value)}
+                        placeholder="Tell the requester what to fix, e.g. add the work plan"
                       />
                     </div>
-                    {rejectError && (
-                      <p className="program-error" aria-live="polite">{rejectError}</p>
+                    {returnError && (
+                      <p className="program-error" aria-live="polite">{returnError}</p>
                     )}
                     <div className="program-reject-actions">
                       <button
                         type="button"
                         className="program-btn"
-                        onClick={() => setRejectId(null)}
-                        disabled={rejectBusy}
+                        onClick={() => setReturnId(null)}
+                        disabled={returnBusy}
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
                         className="program-btn primary"
-                        onClick={() => confirmReject(approval)}
-                        disabled={rejectBusy}
+                        onClick={() => confirmReturn(approval)}
+                        disabled={returnBusy}
                       >
-                        {rejectBusy ? 'Rejecting…' : 'Confirm rejection'}
+                        {returnBusy ? 'Returning…' : 'Return to requester'}
                       </button>
                     </div>
                   </div>

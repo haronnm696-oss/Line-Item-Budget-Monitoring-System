@@ -150,14 +150,14 @@ export default function ProgramLeaderDashboard() {
     setRejectError('');
 
     try {
-      await decideApproval(rejectTarget.id, { decision: 'rejected', remarks: reason });
-      setFeedback({ tone: 'ok', text: `Rejected “${rejectTarget.title}”.` });
+      await decideApproval(rejectTarget.id, { decision: 'returned', remarks: reason });
+      setFeedback({ tone: 'ok', text: `Returned “${rejectTarget.title}” to the requester with your reason.` });
       setRejectTarget(null);
       await refreshAll();
     } catch (requestError) {
       const validationError = requestError?.response?.data?.errors?.remarks?.[0];
       setRejectError(
-        validationError || messageFor(requestError, 'Unable to reject this request. Please try again.')
+        validationError || messageFor(requestError, 'Unable to return this request. Please try again.')
       );
     } finally {
       setRejectBusy(false);
@@ -501,7 +501,7 @@ export default function ProgramLeaderDashboard() {
                             setRejectTarget(approval);
                           }}
                         >
-                          Reject
+                          Return
                         </button>
                       </div>
                     </div>

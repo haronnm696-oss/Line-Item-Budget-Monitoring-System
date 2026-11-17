@@ -432,18 +432,20 @@ class ProgramDashboardService
 
         $all = $query->orderBy('created_at')->get();
 
-        $counts = [
-            'pending' => $all->where('status', 'pending')->count(),
-            'approved' => $all->where('status', 'approved')->count(),
-            'rejected' => $all->where('status', 'rejected')->count(),
-        ];
+        // One count per tab, from the same display status the rows use
+        // (a stored "rejected" is Returned; see ApprovalRequest::displayStatus()).
+        $counts = array_fill_keys(array_keys(ApprovalRequest::STATUS_LABELS), 0);
+        foreach ($all as $approval) {
+            $counts[$approval->displayStatus()] = ($counts[$approval->displayStatus()] ?? 0) + 1;
+        }
 
         $status = $filters['status'] ?? 'pending';
-        $rows = $all->where('status', $status);
+        $status = $status === 'rejected' ? 'returned' : $status;
+        $rows = $all->filter(fn (ApprovalRequest $approval) => $approval->displayStatus() === $status);
 
-        // Pending: oldest request first. Decided: newest decision first.
+        // Pending: oldest first (by when it was last sent). Decided: newest decision first.
         $rows = $status === 'pending'
-            ? $rows->sortBy(fn (ApprovalRequest $approval) => [$approval->created_at?->timestamp ?? 0, $approval->id])
+            ? $rows->sortBy(fn (ApprovalRequest $approval) => [$approval->sentAt()?->timestamp ?? 0, $approval->id])
             : $rows->sortByDesc(fn (ApprovalRequest $approval) => [$approval->reviewed_at?->timestamp ?? 0, $approval->id]);
 
         $rows = $rows
@@ -482,8 +484,8 @@ class ProgramDashboardService
             $kind = 'liquidation';
         }
 
-        $created = $approval->created_at
-            ? $approval->created_at->copy()->startOfDay()
+        $created = $approval->sentAt()
+            ? $approval->sentAt()->copy()->startOfDay()
             : $today->copy();
 
         return [
@@ -505,8 +507,13 @@ class ProgramDashboardService
             'requested_by_id' => $approval->requested_by,
             'requested_by_role' => $approval->requestedBy?->primaryRole?->name,
             'days_waiting' => max(0, (int) $created->diffInDays($today)),
-            'status' => $approval->status,
+            // pending | approved | returned | withdrawn
+            'status' => $approval->displayStatus(),
+            'status_label' => $approval->statusLabel(),
             'review_notes' => $approval->review_notes,
+            'resubmitted_at' => $approval->resubmitted_at?->toIso8601String(),
+            'last_return_reason' => $approval->last_return_reason,
+            'withdrawn_at' => $approval->withdrawn_at?->toIso8601String(),
             // Legacy rows may have no justification; the UI then shows none.
             'justification' => $approval->justification,
             'created_at' => $approval->created_at?->toIso8601String(),
@@ -519,6 +526,8 @@ class ProgramDashboardService
 
     /**
      * Apply one approval decision atomically and write an audit trail row.
+     * $decision is "approved" or "returned" ("rejected" is read as
+     * "returned"). A return is stored as ApprovalRequest::STORED_RETURNED.
      */
     public function decide(
         ApprovalRequest $approval,
@@ -526,6 +535,11 @@ class ProgramDashboardService
         ?string $remarks,
         User $actor
     ): ApprovalRequest {
+        $decision = $decision === 'approved' ? 'approved' : ApprovalRequest::STORED_RETURNED;
+        if ($decision !== 'approved' && trim((string) $remarks) === '') {
+            throw ValidationException::withMessages(['remarks' => ['A reason is required to return a request.']]);
+        }
+
         if ((int) $approval->requested_by === (int) $actor->id) {
             abort(403, 'You cannot approve or reject a request you created.');
         }
@@ -583,11 +597,12 @@ class ProgramDashboardService
 
             AuditTrail::create([
                 'user_id' => $actor->id,
-                'action' => $decision,
+                'action' => $decision === 'approved' ? 'approved' : 'returned',
                 'model_type' => 'ApprovalRequest',
                 'model_id' => $locked->id,
                 'old_values' => $oldValues,
                 'new_values' => $locked->fresh()->toArray(),
+                'reason' => $decision === 'approved' ? null : $remarks,
                 'ip_address' => request()->ip(),
                 'created_at' => now(),
             ]);
@@ -921,8 +936,8 @@ class ProgramDashboardService
                     $kind = 'liquidation';
                 }
 
-                $created = $approval->created_at
-                    ? $approval->created_at->copy()->startOfDay()
+                $created = $approval->sentAt()
+                    ? $approval->sentAt()->copy()->startOfDay()
                     : $today->copy();
                 $daysWaiting = max(0, (int) $created->diffInDays($today));
 

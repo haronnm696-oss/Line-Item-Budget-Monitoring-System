@@ -138,8 +138,8 @@ class ProgramAuditTest extends TestCase
             ->assertOk();
 
         $this->assertSame(0, AuditTrail::where('action', 'budget_changed')->count());
-        $row = collect($this->feed()['entries'])->firstWhere('action.code', 'rejected');
-        $this->assertSame('Request rejected', $row['action']['label']);
+        $row = collect($this->feed()['entries'])->firstWhere('action.code', 'returned');
+        $this->assertSame('Request returned', $row['action']['label']);
         $this->assertNotContains('Liquidation', array_column($row['changes'], 'label'));
 
         // An entry written by older code for a rejected realignment shows no amounts.
@@ -420,7 +420,7 @@ class ProgramAuditTest extends TestCase
         $this->postJson("/api/program/registrations/{$c->id}/decision", ['decision' => 'approved', 'role' => 'researcher'])->assertOk();
         $this->postJson("/api/program/registrations/{$d->id}/decision", ['decision' => 'rejected', 'remarks' => 'Unknown applicant'])->assertOk();
 
-        foreach ([[$a, 'approved'], [$b, 'rejected']] as [$approval, $action]) {
+        foreach ([[$a, 'approved'], [$b, 'returned']] as [$approval, $action]) {
             $this->assertDatabaseHas('audit_trails', ['model_type' => 'ApprovalRequest', 'model_id' => $approval->id, 'action' => $action, 'user_id' => $this->leader->id, 'project_id' => $this->project->id]);
         }
         foreach ([[$c, 'approved'], [$d, 'rejected']] as [$user, $action]) {
