@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
@@ -47,7 +48,7 @@ export default function BalancingQuery() {
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="ra-balancing-project" /></div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as a Research Assistant yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={state} loadingText="Loading line items…" emptyText="This project has no line items yet." isEmpty={rows.length === 0}>
           <section className="program-card">
             <div className="ra-table-scroll">

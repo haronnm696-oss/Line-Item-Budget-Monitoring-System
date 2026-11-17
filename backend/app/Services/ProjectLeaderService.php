@@ -54,7 +54,7 @@ class ProjectLeaderService
     /** 403 unless the user is a Project Leader of this project. */
     public function requireLeader(Project $project, User $user): void
     {
-        abort_unless($user->roleOn($project) === 'project-leader', 403, 'Only the Project Leader of this project can open this page.');
+        abort_unless($user->hasRoleOn($project, 'project-leader'), 403, 'Only the Project Leader of this project can open this page.');
     }
 
     // ---------------------------------------------------------------- review queue

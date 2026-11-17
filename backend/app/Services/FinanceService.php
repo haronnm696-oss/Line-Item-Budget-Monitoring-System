@@ -48,7 +48,7 @@ class FinanceService
 
     public function requireFinance(Project $project, User $user): void
     {
-        abort_unless($user->roleOn($project) === 'finance-admin', 403, 'Only Finance/Admin staff of this project can open this page.');
+        abort_unless($user->hasRoleOn($project, 'finance-admin'), 403, 'Only Finance/Admin staff of this project can open this page.');
     }
 
     // ---------------------------------------------------------------- queue
@@ -305,7 +305,7 @@ class FinanceService
             'approval_note' => $expense->pl_reviewed_by === null && $expense->workflow_status !== 'draft'
                 ? 'Recorded by the Project Leader (no approval step)' : null,
             'receipts_count' => $receipts,
-            'can_verify' => $endorsed && $blocked === null && $user->roleOn($expense->project) === 'finance-admin',
+            'can_verify' => $endorsed && $blocked === null && $user->hasRoleOn($expense->project, 'finance-admin'),
             'blocked_text' => $blocked,
             'counts_as_spent' => true,
             // An expense this Finance/Admin recorded: edit and resubmit while draft / returned.

@@ -249,6 +249,26 @@ class DemoProjectAssignmentsSeeder extends Seeder
 
         $leader ??= $this->createLeader($target['leader'], $role);
 
+        // The new leader may already hold another role on this project: turn
+        // that row into the leader row instead of adding a second one (two
+        // rows for one person made pages disagree about "my projects").
+        $own = ProjectUser::query()->where('project_id', $project->id)->where('user_id', $leader->id)->orderBy('id')->first();
+        if ($own) {
+            $oldOwn = ['project_id' => $project->id, 'user_id' => $leader->id, 'role_id' => $own->role_id];
+            $own->forceFill(['role_id' => $role->id])->save();
+            $this->audit($project, 'assignment_updated', $oldOwn, [
+                'project_id' => $project->id, 'user_id' => $leader->id, 'role_id' => $role->id,
+            ]);
+            if ($replacing) {
+                $this->audit($project, 'assignment_removed', [
+                    'project_id' => $project->id, 'user_id' => $replacing->user_id, 'role_id' => $role->id,
+                ], []);
+                $replacing->delete();
+            }
+
+            return $changes;
+        }
+
         if ($replacing) {
             $oldLeader = ['project_id' => $project->id, 'user_id' => $replacing->user_id, 'role_id' => $role->id];
             $replacing->timestamps = false;

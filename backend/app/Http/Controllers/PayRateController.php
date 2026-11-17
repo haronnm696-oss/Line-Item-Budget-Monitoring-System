@@ -23,7 +23,7 @@ class PayRateController extends Controller
     {
         $actor = $request->user();
         abort_unless(
-            $actor->isProgramLeader() || in_array($actor->roleOn($project), ['finance-admin', 'research-assistant'], true),
+            $actor->isProgramLeader() || $actor->hasRoleOn($project, ['finance-admin', 'research-assistant']),
             403,
             'Only Finance/Admin staff, Research Assistants of this project or the Program Leader can see pay rates.'
         );
@@ -44,7 +44,7 @@ class PayRateController extends Controller
     {
         $actor = $request->user();
         abort_unless(
-            $actor->isProgramLeader() || $actor->roleOn($project) === 'finance-admin',
+            $actor->isProgramLeader() || $actor->hasRoleOn($project, 'finance-admin'),
             403,
             'Only Finance/Admin staff of this project or the Program Leader can set pay rates.'
         );

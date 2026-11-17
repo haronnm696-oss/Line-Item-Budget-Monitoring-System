@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
@@ -52,7 +53,7 @@ export default function FinancePayroll() {
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
       )}
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as Finance/Admin yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={list} loadingText="Loading payroll…" emptyText="No payroll has been prepared for this project yet." isEmpty={batches.length === 0}>
           <section className="program-card ld-list-card">
             <div className="ra-table-wrap">

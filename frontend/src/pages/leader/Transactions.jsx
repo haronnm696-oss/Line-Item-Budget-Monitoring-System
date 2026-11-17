@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
 import DocumentList from '../../components/leader/DocumentList';
@@ -63,7 +64,7 @@ export default function Transactions() {
         </div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <div className="program-filter-row ld-controls">
           <div className="program-field">
             <label htmlFor="tx-from">From</label>

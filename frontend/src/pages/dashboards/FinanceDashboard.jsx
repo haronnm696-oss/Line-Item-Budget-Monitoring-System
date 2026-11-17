@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import { formatDate, formatInManila } from '../../lib/datetime';
@@ -68,7 +69,7 @@ export default function FinanceDashboard() {
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
       )}
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as Finance/Admin yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={overview} loadingText="Loading verification data…">
           {data && (
             <>

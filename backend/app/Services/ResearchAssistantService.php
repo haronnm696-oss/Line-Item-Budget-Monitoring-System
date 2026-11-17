@@ -65,7 +65,7 @@ class ResearchAssistantService
     /** 403 unless the user is a Research Assistant of this project. */
     public function requireAssistant(Project $project, User $user): void
     {
-        abort_unless($user->roleOn($project) === 'research-assistant', 403, 'Only a Research Assistant of this project can open this page.');
+        abort_unless($user->hasRoleOn($project, 'research-assistant'), 403, 'Only a Research Assistant of this project can open this page.');
     }
 
     // ---------------------------------------------------------------- counts

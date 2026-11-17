@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\DashboardService;
 
 class ProjectController extends Controller
@@ -21,12 +22,19 @@ class ProjectController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        // The caller's role on each project (null for the Program Leader's unassigned ones).
-        $roles = $user->projectUsers()->with('role')->get()
-            ->mapWithKeys(fn ($pivot) => [(int) $pivot->project_id => $pivot->role?->slug]);
+        // Every role the caller holds on each project (the "my projects"
+        // resolver, see User::rolesOn). Pages of one role keep the projects
+        // whose my_roles include that role. my_role is the one to display.
+        $roles = $user->projectUsers()->with('role')->orderBy('id')->get()
+            ->groupBy(fn ($pivot) => (int) $pivot->project_id)
+            ->map(fn ($rows) => $rows->map(fn ($pivot) => $pivot->role?->slug)->filter()->unique()->values()->all());
+        $accountRole = $user->primaryRole?->slug;
 
         return response()->json(array_map(
-            fn (array $row) => $row + ['my_role' => $roles[(int) $row['id']] ?? null],
+            fn (array $row) => $row + [
+                'my_roles' => $roles[(int) $row['id']] ?? [],
+                'my_role' => User::displayRole($roles[(int) $row['id']] ?? [], $accountRole),
+            ],
             $this->dashboard->projectSummaries($user->accessibleProjectIds())
         ));
     }

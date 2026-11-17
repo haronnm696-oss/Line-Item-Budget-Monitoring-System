@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { formatDate, formatInManila } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
@@ -58,7 +59,7 @@ export default function ResearcherDashboard() {
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="res-overview-project" /></div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as a Researcher yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={summary} loadingText="Loading the budget…">
           {data && (
             <>

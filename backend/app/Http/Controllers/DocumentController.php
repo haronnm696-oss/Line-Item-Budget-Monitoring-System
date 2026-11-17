@@ -151,15 +151,19 @@ class DocumentController extends Controller
         if ($project === null) {
             return false;
         }
-        $role = $actor->roleOn($project);
+        $roles = $actor->rolesOn($project);
+
+        if (array_intersect($roles, $rules['uploader_roles']) !== []) {
+            return true;
+        }
 
         // Roles that may attach only to a record they made (e.g. a Project
         // Leader's own expense).
-        if (in_array($role, $rules['recorder_roles'] ?? [], true)) {
+        if (array_intersect($roles, $rules['recorder_roles'] ?? []) !== []) {
             return (int) ($rules['recorder_id'] ?? 0) === (int) $actor->id;
         }
 
-        return in_array($role, $rules['uploader_roles'], true);
+        return false;
     }
 
     /**
