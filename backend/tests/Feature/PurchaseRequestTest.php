@@ -152,6 +152,50 @@ class PurchaseRequestTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['quantity', 'estimated_amount']);
     }
 
+    public function test_supplier_is_optional_and_returned(): void
+    {
+        $this->actingAs($this->assistant);
+        $url = "/api/projects/{$this->project->id}/purchase-requests";
+
+        $with = $this->postJson($url, $this->payload(['supplier' => '  ABC Lab Supply  ']))
+            ->assertCreated()
+            ->assertJsonPath('purchase_request.supplier', 'ABC Lab Supply')
+            ->json('purchase_request.id');
+        $without = $this->postJson($url, $this->payload())
+            ->assertCreated()
+            ->assertJsonPath('purchase_request.supplier', null)
+            ->json('purchase_request.id');
+        $blank = $this->postJson($url, $this->payload(['supplier' => '']))
+            ->assertCreated()
+            ->assertJsonPath('purchase_request.supplier', null)
+            ->json('purchase_request.id');
+
+        $rows = collect($this->getJson($url)->assertOk()->json('purchase_requests'))->keyBy('id');
+        $this->assertSame('ABC Lab Supply', $rows[$with]['supplier']);
+        $this->assertNull($rows[$without]['supplier']);
+        $this->assertNull($rows[$blank]['supplier']);
+
+        // Editable on a draft, and can be cleared.
+        $this->patchJson("/api/purchase-requests/{$without}", ['supplier' => 'XYZ Trading'])
+            ->assertOk()->assertJsonPath('purchase_request.supplier', 'XYZ Trading');
+        $this->patchJson("/api/purchase-requests/{$with}", ['supplier' => null])
+            ->assertOk()->assertJsonPath('purchase_request.supplier', null);
+
+        // A request created without the field (as existing rows were) stays blank.
+        $this->assertNull($this->draft()->fresh()->supplier);
+    }
+
+    public function test_supplier_is_at_most_255_characters(): void
+    {
+        $this->actingAs($this->assistant);
+        $url = "/api/projects/{$this->project->id}/purchase-requests";
+        $this->postJson($url, $this->payload(['supplier' => str_repeat('a', 256)]))
+            ->assertStatus(422)->assertJsonValidationErrors(['supplier']);
+        $this->postJson($url, $this->payload(['supplier' => str_repeat('a', 255)]))->assertCreated();
+        $this->postJson($url, $this->payload(['supplier' => ['not', 'a', 'string']]))
+            ->assertStatus(422)->assertJsonValidationErrors(['supplier']);
+    }
+
     public function test_an_expense_links_only_to_an_approved_open_request_of_the_same_line_item(): void
     {
         $approved = $this->approved();

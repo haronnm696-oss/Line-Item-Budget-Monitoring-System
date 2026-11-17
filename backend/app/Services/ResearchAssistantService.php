@@ -376,6 +376,7 @@ class ResearchAssistantService
                 ['label' => 'Line item', 'value' => $request->libCategory?->line_item_name],
                 ['label' => 'Quantity', 'value' => (string) $request->quantity],
                 ['label' => 'Estimated amount', 'value' => round((float) $request->estimated_amount, 2), 'kind' => 'money'],
+                ['label' => 'Supplier / payee', 'value' => $request->supplier],
                 ['label' => 'Project Leader', 'value' => $request->plReviewedBy?->name],
                 ['label' => 'Linked expense', 'value' => $request->expense ? ($request->expense->reference_no ?: 'EXP-' . $request->expense->id) . ' · ' . $request->expense->description : null],
                 ['label' => 'Cancel reason', 'value' => $request->cancel_reason],
@@ -390,6 +391,7 @@ class ResearchAssistantService
                 'description' => $request->description,
                 'quantity' => $request->quantity,
                 'estimated_amount' => round((float) $request->estimated_amount, 2),
+                'supplier' => $request->supplier,
             ] : null,
         ];
     }

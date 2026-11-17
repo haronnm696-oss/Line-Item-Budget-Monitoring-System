@@ -26,7 +26,7 @@ class PurchaseRequest extends Model implements HasDocuments
     public const OPEN_APPROVED = 'endorsed';
 
     protected $fillable = [
-        'project_id', 'lib_category_id', 'requested_by', 'description', 'quantity', 'estimated_amount',
+        'project_id', 'lib_category_id', 'requested_by', 'description', 'quantity', 'estimated_amount', 'supplier',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at', 'return_reason',
         'fulfilled_at', 'fulfilled_by', 'cancelled_at', 'cancelled_by', 'cancel_reason',
     ];

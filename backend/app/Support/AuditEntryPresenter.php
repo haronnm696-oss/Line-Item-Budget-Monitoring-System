@@ -157,6 +157,7 @@ class AuditEntryPresenter
         'cancelled_by' => 'Cancelled by',
         'fulfilled_by' => 'Fulfilled by',
         'estimated_amount' => 'Estimated amount',
+        'supplier' => 'Supplier / payee',
         'monthly_rate' => 'Monthly rate',
         'allowance' => 'Allowance',
     ];

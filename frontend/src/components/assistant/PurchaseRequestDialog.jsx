@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
 
-const EMPTY = { lib_category_id: '', description: '', quantity: '1', estimated_amount: '' };
+const EMPTY = { lib_category_id: '', description: '', quantity: '1', estimated_amount: '', supplier: '' };
 const FIELDS = Object.keys(EMPTY);
 const SUPPORTING = ['quotation', 'invoice'];
 const TYPE_LABEL = { quotation: 'Quotation', invoice: 'Invoice', other: 'Other' };
@@ -23,6 +23,7 @@ function payload(form, before = null) {
     description: form.description.trim(),
     quantity: Number(form.quantity),
     estimated_amount: Number(form.estimated_amount),
+    supplier: form.supplier.trim() || null,
   };
   if (!before) return value;
   const old = payload(before);
@@ -71,6 +72,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
     if (!form.description.trim()) next.description = 'Describe what is needed.';
     if (!(Number.isInteger(Number(form.quantity)) && Number(form.quantity) >= 1)) next.quantity = 'Enter a whole number of at least 1.';
     if (!(Number(form.estimated_amount) > 0)) next.estimated_amount = 'Enter an amount greater than zero.';
+    if (form.supplier.trim().length > 255) next.supplier = 'Use at most 255 characters.';
     const hasSupporting = (file && SUPPORTING.includes(fileType)) || (saved?.uploaded && SUPPORTING.includes(fileType)) || keptSupporting.length > 0;
     if (submitting && !hasSupporting) next.file = 'Attach a quotation or invoice before submitting.';
     return next;
@@ -202,6 +204,12 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
             <label htmlFor="ra-pr-amount">Estimated amount (₱)</label>
             <input id="ra-pr-amount" className="program-input" type="number" min="0.01" step="0.01" value={form.estimated_amount} onChange={set('estimated_amount')} disabled={locked} />
             {err('estimated_amount')}
+          </div>
+          <div className="program-field full">
+            <label htmlFor="ra-pr-supplier">Supplier / payee <span className="ld-muted">optional</span></label>
+            <input id="ra-pr-supplier" className="program-input" maxLength={255} value={form.supplier} onChange={set('supplier')} disabled={locked} />
+            <div className="ld-hint">Fills the payee when an expense is linked to this request.</div>
+            {err('supplier')}
           </div>
 
           {editing && (

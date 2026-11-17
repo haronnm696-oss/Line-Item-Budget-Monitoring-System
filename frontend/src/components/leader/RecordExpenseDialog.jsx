@@ -9,6 +9,19 @@ import { performWrite } from '../../lib/apiResult';
 import { useApiData } from '../../lib/useApiData';
 import { todayInManila } from '../../lib/datetime';
 import { peso } from '../money';
+import {
+  PS_NOTE, defaultLineItemId, groupLineItems, lineItemAvailable, prefillFromRequest,
+  rememberLineItemId, rememberedLineItemId,
+} from '../../lib/expenseForm';
+
+/** localStorage, or null when the browser blocks it. */
+function browserStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 const EMPTY = { lib_category_id: '', description: '', amount: '', expense_date: '', payee: '', reference_no: '', purchase_request_id: '' };
 const FIELDS = Object.keys(EMPTY);
@@ -75,6 +88,16 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   const [saved, setSaved] = useState(editing ? { id: expense.id, patched: false, removed: [], uploaded: false } : null);
   const [documents, setDocuments] = useState(null); // edit: the expense's current documents
   const [toRemove, setToRemove] = useState([]);
+  const [defaulted, setDefaulted] = useState(editing || !assistant);
+
+  // A new expense starts on the only line item, else the last one chosen
+  // for this project in this browser.
+  // (Set once, during render, when the line items arrive.)
+  if (!defaulted && balancing.status === 'ready') {
+    setDefaulted(true);
+    const id = defaultLineItemId(lineItems, rememberedLineItemId(browserStorage(), user?.id, projectId, lineItems));
+    if (id && !form.lib_category_id) setForm({ ...form, lib_category_id: id });
+  }
 
   useEffect(() => {
     if (!editing) return undefined;
@@ -91,8 +114,9 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   // A linked request's estimate (or an already linked expense) is held in
   // "pending"; it is freed by this expense, so it counts as available here.
   const heldForThis = alreadyLinked ? Number(expense.edit.amount) || 0 : Number(linkedRequest?.estimated_amount) || 0;
-  const available = chosen ? Number(chosen.available) + heldForThis : null;
-  const requestOptions = requests.filter((request) => !form.lib_category_id || String(request.lib_category_id) === form.lib_category_id);
+  const available = chosen ? lineItemAvailable(chosen) + heldForThis : null;
+  // Every approved request is listed; linking one switches to its line item.
+  const requestOptions = requests;
   const keptReceipts = (documents ?? []).filter((doc) => doc.document_type === 'receipt' && !toRemove.includes(doc.id));
 
   const set = (key) => (event) => {
@@ -100,19 +124,14 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
     const next = { ...form, [key]: value };
     // A linked request stays on its own line item.
     if (key === 'lib_category_id' && linkedRequest && String(linkedRequest.lib_category_id) !== value) next.purchase_request_id = '';
+    if (key === 'lib_category_id' && assistant) rememberLineItemId(browserStorage(), user?.id, projectId, value);
     setForm(next);
   };
 
   function chooseRequest(event) {
     const id = event.target.value;
     const request = requests.find((row) => String(row.id) === id);
-    setForm({
-      ...form,
-      purchase_request_id: id,
-      lib_category_id: request ? String(request.lib_category_id) : form.lib_category_id,
-      description: request && !form.description.trim() ? request.description : form.description,
-      amount: request && !form.amount ? String(request.estimated_amount) : form.amount,
-    });
+    setForm(prefillFromRequest(form, request ?? null, linkedRequest ?? null));
   }
 
   function validate(submitting) {
@@ -254,7 +273,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
               ) : (
                 <select id="ld-exp-pr" className="program-select" value={form.purchase_request_id} onChange={chooseRequest} disabled={locked || approved.status !== 'ready'}>
                   <option value="">
-                    {approved.status === 'error' ? 'Could not load the purchase requests' : approved.status !== 'ready' ? 'Loading…' : requestOptions.length === 0 ? 'No approved request on this line item' : 'Not linked'}
+                    {approved.status === 'error' ? 'Could not load the purchase requests' : approved.status !== 'ready' ? 'Loading…' : requestOptions.length === 0 ? 'No approved purchase request' : 'Not linked'}
                   </option>
                   {requestOptions.map((request) => (
                     <option key={request.id} value={request.id}>
@@ -271,10 +290,15 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
             <label htmlFor="ld-exp-line">Line item</label>
             <select id="ld-exp-line" className="program-select" value={form.lib_category_id} onChange={set('lib_category_id')} disabled={locked || alreadyLinked || balancing.status !== 'ready'}>
               <option value="">{balancing.status === 'ready' ? 'Choose a line item' : 'Loading…'}</option>
-              {lineItems.map((item) => (
-                <option key={item.id} value={item.id}>{item.type} · {item.name} — {peso(item.available)} available</option>
+              {groupLineItems(lineItems).map((group) => (
+                <optgroup key={group.type} label={group.type}>
+                  {group.items.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name} — {peso(lineItemAvailable(item))} available</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            {chosen?.type === 'PS' && <div className="ld-hint" role="note">{PS_NOTE}</div>}
             {chosen && <div className="ld-hint">{peso(available)} available on this line item{heldForThis > 0 ? ' (including the amount held for the purchase request)' : ''}.</div>}
             {chosen && Number(form.amount) > available && (
               <div className="ld-hint is-risk" role="status">⚠ More than the {peso(available)} available on this line item.</div>

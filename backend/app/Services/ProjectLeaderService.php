@@ -262,6 +262,7 @@ class ProjectLeaderService
                 ['label' => 'Line item', 'value' => $request->libCategory?->line_item_name],
                 ['label' => 'Quantity', 'value' => (string) $request->quantity],
                 ['label' => 'Estimated amount', 'value' => round((float) $request->estimated_amount, 2), 'kind' => 'money'],
+                ['label' => 'Supplier / payee', 'value' => $request->supplier],
                 ['label' => 'Cancel reason', 'value' => $request->cancel_reason],
             ],
             'can_review' => $request->workflow_status === 'submitted' && ! $mine,
