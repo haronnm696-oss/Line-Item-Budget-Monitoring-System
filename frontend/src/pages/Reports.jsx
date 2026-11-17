@@ -622,7 +622,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                   {detailStatus === 'loading' ? 'Loading data…' : 'Generate PDF'}
                 </button>
                 <button type="button" className="btn sm" onClick={handleCSV} disabled={!reportAvailable(printReport?.key)}>
-                  Export to Excel / CSV
+                  Export to CSV
                 </button>
               </>
             )}

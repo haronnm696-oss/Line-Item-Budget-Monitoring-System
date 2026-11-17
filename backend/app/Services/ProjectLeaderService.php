@@ -306,6 +306,8 @@ class ProjectLeaderService
             'alerts' => [
                 'burn_rate' => $this->dashboard->burnRate($project, $metrics['budget'], $metrics['spent']),
                 'next_tranche' => $this->nextTranche($tranches['items'], $requests),
+                // 0 = no tranches set yet (next_tranche null then does not mean "all released").
+                'tranche_count' => count($tranches['items']),
                 'missing_receipts' => [
                     'count' => $compliance['missing_receipt'],
                     'items' => array_slice($compliance['missing_items'], 0, 3),

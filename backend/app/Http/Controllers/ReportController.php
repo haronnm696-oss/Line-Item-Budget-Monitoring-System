@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\ProjectFinancialService;
 use App\Models\Project;
 use App\Services\DashboardService;
+use App\Support\Csv;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -37,11 +38,7 @@ class ReportController extends Controller
 
         $filename = Str::slug($project->code . '-' . $type . '-' . now()->format('Ymd')) . '.csv';
 
-        return response($this->toCsv($rows), 200, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Cache-Control' => 'no-store, no-cache',
-        ]);
+        return response(Csv::render($rows), 200, Csv::headers($filename));
     }
 
     protected function formBRows(array $summary): array
@@ -235,31 +232,4 @@ class ReportController extends Controller
         ];
     }
 
-    protected function toCsv(array $rows): string
-    {
-        $lines = array_map(function (array $row) {
-            return implode(',', array_map(fn ($value) => $this->csvCell($value), $row));
-        }, $rows);
-
-        return "\xEF\xBB\xBF" . implode("\r\n", $lines);
-    }
-
-    protected function csvCell(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        if (is_bool($value)) {
-            return $value ? '1' : '0';
-        }
-
-        $string = (string) $value;
-
-        if (str_contains($string, ',') || str_contains($string, '"') || str_contains($string, "\n") || str_contains($string, "\r")) {
-            return '"' . str_replace('"', '""', $string) . '"';
-        }
-
-        return $string;
-    }
 }

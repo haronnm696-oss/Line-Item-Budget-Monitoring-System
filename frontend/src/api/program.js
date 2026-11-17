@@ -28,15 +28,15 @@ export async function fetchProgramProjects(params = {}) {
   return response.data;
 }
 
-/** Excel workbook (.xls) of the filtered projects list, built by the backend. */
-export async function downloadProgramProjectsExcel(params = {}) {
+/** CSV of the filtered projects list, built by the backend (same columns as the page's PDF). */
+export async function downloadProgramProjectsCsv(params = {}) {
   const response = await client.get(ENDPOINTS.programProjectsExport, {
     params: cleanParams(params),
     responseType: 'blob',
   });
   const disposition = response.headers?.['content-disposition'] ?? '';
   const match = /filename="?([^";]+)"?/i.exec(disposition);
-  return { blob: response.data, filename: match?.[1] ?? 'program-projects.xls' };
+  return { blob: response.data, filename: match?.[1] ?? 'program-projects.csv' };
 }
 
 /** Read-only project detail: header, line items, tranches, expenses, team, activity. */

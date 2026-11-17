@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { downloadProgramProjectsExcel, fetchProgramProjects } from '../../api/program';
+import { downloadProgramProjectsCsv, fetchProgramProjects } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
+import { ProjectFormDialog } from '../../components/program/ProjectSetup';
 import { compactPeso, formatPct, peso } from '../../components/money';
 import { formatDateTime, formatInManila, todayInManila } from '../../lib/datetime';
 
@@ -193,6 +194,7 @@ export default function ProgramProjects() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const search = params.get('q') ?? '';
   const status = params.get('status') ?? '';
@@ -288,14 +290,14 @@ export default function ProgramProjects() {
     );
   }
 
-  async function exportExcel() {
+  async function exportCsv() {
     setExporting(true);
     setError('');
     try {
-      const { blob, filename } = await downloadProgramProjectsExcel(query);
+      const { blob, filename } = await downloadProgramProjectsCsv(query);
       saveBlob(blob, filename);
     } catch {
-      setError('Unable to export the Excel file. Try again.');
+      setError('Unable to export the CSV file. Try again.');
     } finally {
       setExporting(false);
     }
@@ -382,14 +384,23 @@ export default function ProgramProjects() {
           <button type="button" className="program-btn" onClick={exportPdf} disabled={exportDisabled}>
             Export PDF
           </button>
-          <button type="button" className="program-btn" onClick={exportExcel} disabled={exportDisabled || exporting}>
-            {exporting ? 'Preparing…' : 'Export Excel'}
+          <button type="button" className="program-btn" onClick={exportCsv} disabled={exportDisabled || exporting}>
+            {exporting ? 'Preparing…' : 'Export CSV'}
           </button>
-          <button type="button" className="program-btn pp-soon" disabled title="Available soon">
+          <button type="button" className="program-btn primary" onClick={() => setCreating(true)}>
             New project
           </button>
         </div>
       </div>
+
+      {creating && (
+        <ProjectFormDialog
+          mode="create"
+          onClose={() => setCreating(false)}
+          // Straight to the new project's page to set up its line items and tranches.
+          onSaved={(_, data) => navigate(`/program-projects/${data.project.id}`, { state: detailState })}
+        />
+      )}
 
       {error && (
         <div className="program-banner error" role="alert">{error}</div>

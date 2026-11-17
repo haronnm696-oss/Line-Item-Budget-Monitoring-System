@@ -17,8 +17,10 @@ use Tests\Feature\Concerns\BuildsExpenseWorkflow;
 use Tests\TestCase;
 
 /**
- * End to end, one project, one user per role, every assignment made only
- * through the Program Leader's assignment endpoints. Walks the whole chain
+ * End to end, one project, one user per role. The Program Leader creates the
+ * project (with its Project Leader), its Line-Item Budget and tranche through
+ * the set-up endpoints and assigns everyone else through the assignment
+ * endpoints. Walks the whole chain
  * (expense, rejection, payroll with and without the Project Leader's pay,
  * fund release, Researcher read-only, unassignment) and checks at each
  * hand-off: exactly one notification to the right person and one audit
@@ -47,14 +49,9 @@ class ConnectionWalkthroughTest extends TestCase
         Storage::fake('local');
 
         AuditLogger::muted(function () {
-            $this->project = $this->makeProject('RP-2026-009', 'Halal Goat Value Chain Development');
-            $this->supplies = LibCategory::create(['project_id' => $this->project->id, 'category_type' => 'MOOE', 'line_item_name' => 'Supplies', 'allocated_amount' => 500000]);
-            $this->salaries = LibCategory::create(['project_id' => $this->project->id, 'category_type' => 'PS', 'line_item_name' => 'Salaries', 'allocated_amount' => 400000]);
-            ProjectTranche::create(['project_id' => $this->project->id, 'sequence' => 1, 'name' => 'First tranche', 'amount' => 500000, 'status' => 'released', 'released_at' => '2026-01-15']);
-            $this->tranche = ProjectTranche::create(['project_id' => $this->project->id, 'sequence' => 2, 'name' => 'Second tranche', 'amount' => 250000, 'status' => 'due', 'planned_release_date' => '2026-12-01']);
-            $this->lineItem = $this->supplies;
-
-            // Accounts only; no project_user rows here.
+            // Accounts and a funder only. The project, its Line-Item Budget,
+            // tranches and every assignment are made through the endpoints.
+            \App\Models\FundingAgency::create(['name' => 'Department of Science and Technology - PCAARRD', 'acronym' => 'DOST-PCAARRD']);
             $this->prg = $this->makePerson('program-leader');
             $this->pl = $this->makePerson('project-leader');
             $this->ra = $this->makePerson('research-assistant');
@@ -65,11 +62,46 @@ class ConnectionWalkthroughTest extends TestCase
 
     public function test_the_whole_chain_on_one_project(): void
     {
-        $p = $this->project->id;
-
-        // ------------------------------------------------ 0. Assignments by the Program Leader
+        // ------------------------------------------------ 0a. Project set-up by the Program Leader
         $this->actingAs($this->pl)->getJson('/api/projects')->assertOk()->assertJsonCount(0);
-        foreach ([[$this->pl, 'project-leader'], [$this->ra, 'research-assistant'], [$this->fin, 'finance-admin'], [$this->res, 'researcher']] as [$user, $role]) {
+        $this->actingAs($this->prg);
+        $options = $this->getJson('/api/program/project-options')->assertOk();
+        $audit = AuditTrail::count();
+        $p = $this->postJson('/api/program/projects', [
+            'title' => 'Halal Goat Value Chain Development', 'code' => 'RP-2026-009',
+            'funding_agency_id' => $options->json('funders.0.id'), 'funder_reference' => 'PCAARRD-GIA-2026-0457',
+            'start_date' => '2026-01-01', 'end_date' => '2026-12-31', 'total_approved_budget' => 1000000,
+            'project_leader_id' => $this->pl->id,
+        ])->assertCreated()->json('project.id');
+        $this->assertAudit($audit, 'created');
+        $this->project = Project::findOrFail($p);
+
+        // Before any line item, nothing can be recorded against the project.
+        $this->getJson("/api/program/projects/{$p}")->assertOk()->assertJsonPath('line_items.groups', []);
+        $lineItem = function (string $type, string $name, float $amount) use ($p) {
+            $audit = AuditTrail::count();
+            $id = $this->postJson("/api/program/projects/{$p}/line-items", ['category_type' => $type, 'line_item_name' => $name, 'allocated_amount' => $amount])
+                ->assertCreated()->json('line_item.id');
+            $this->assertAudit($audit, 'created');
+
+            return LibCategory::findOrFail($id);
+        };
+        $this->supplies = $lineItem('MOOE', 'Supplies', 500000);
+        $this->salaries = $lineItem('PS', 'Salaries', 400000);
+        $this->lineItem = $this->supplies;
+        $this->postJson("/api/program/projects/{$p}/line-items", ['category_type' => 'MOOE', 'line_item_name' => 'Travel', 'allocated_amount' => 100000.01])
+            ->assertStatus(422)->assertJsonValidationErrors(['allocated_amount']); // over the 1,000,000 total
+
+        $audit = AuditTrail::count();
+        $this->tranche = ProjectTranche::findOrFail($this->postJson("/api/program/projects/{$p}/tranches", ['amount' => 250000, 'planned_release_date' => '2026-12-01'])
+            ->assertCreated()->assertJsonPath('tranche.name', 'First tranche')->json('tranche.id'));
+        $this->assertAudit($audit, 'created');
+
+        // The leader set at creation has the project at once.
+        $this->assertSame([$p], $this->pl->fresh()->projectIdsAs('project-leader'));
+
+        // ------------------------------------------------ 0b. Team assignments by the Program Leader
+        foreach ([[$this->ra, 'research-assistant'], [$this->fin, 'finance-admin'], [$this->res, 'researcher']] as [$user, $role]) {
             $audit = AuditTrail::count();
             $this->actingAs($this->prg)->postJson('/api/program/assignments', ['user_id' => $user->id, 'project_id' => $p, 'role' => $role])->assertCreated();
             $this->assertAudit($audit, 'assignment_created');
@@ -175,7 +207,7 @@ class ConnectionWalkthroughTest extends TestCase
 
         // ------------------------------------------------ 4. Fund release: PL requests, Program Leader approves
         $released = fn () => $this->actingAs($this->pl)->getJson("/api/projects/{$p}/tranches")->assertOk()->json('summary.released_amount');
-        $this->assertEquals(500000, $released());
+        $this->assertEquals(0, $released());
         [$audit, $notes] = $this->mark();
         $request = $this->actingAs($this->pl)->postJson("/api/projects/{$p}/budget-requests", [
             'type' => 'fund_release', 'project_tranche_id' => $this->tranche->id, 'justification' => 'Fieldwork starts in December.',
@@ -190,7 +222,9 @@ class ConnectionWalkthroughTest extends TestCase
         $this->assertSame($audit + 1, AuditTrail::count());
         $mine = collect($this->actingAs($this->pl)->getJson("/api/projects/{$p}/budget-requests")->assertOk()->json('budget_requests'))->firstWhere('id', $request);
         $this->assertSame('approved', $mine['status']);
-        $this->assertEquals(750000, $released());
+        $this->assertEquals(250000, $released());
+        // Released: the Program Leader can no longer change or remove that tranche.
+        $this->actingAs($this->prg)->patchJson("/api/program/tranches/{$this->tranche->id}", ['amount' => 1])->assertStatus(422);
 
         // ------------------------------------------------ 5. Researcher: reads verified data, every write is 403
         $this->actingAs($this->res);

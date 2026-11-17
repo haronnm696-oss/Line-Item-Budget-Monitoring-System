@@ -18,6 +18,7 @@ use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramAuditController;
 use App\Http\Controllers\ProgramDashboardController;
 use App\Http\Controllers\ProgramProjectController;
+use App\Http\Controllers\ProgramProjectSetupController;
 use App\Http\Controllers\ProgramUserController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectLeaderController;
@@ -171,6 +172,16 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::get('/program/projects', [ProgramProjectController::class, 'index']);
         Route::get('/program/projects/export', [ProgramProjectController::class, 'export']);
         Route::get('/program/projects/{project}', [ProgramProjectController::class, 'show']);
+        // Project set-up: details, Project Leader, Line-Item Budget, tranches.
+        Route::get('/program/project-options', [ProgramProjectSetupController::class, 'options']);
+        Route::post('/program/projects', [ProgramProjectSetupController::class, 'store']);
+        Route::patch('/program/projects/{project}', [ProgramProjectSetupController::class, 'update']);
+        Route::post('/program/projects/{project}/line-items', [ProgramProjectSetupController::class, 'storeLineItem']);
+        Route::patch('/program/line-items/{libCategory}', [ProgramProjectSetupController::class, 'updateLineItem']);
+        Route::delete('/program/line-items/{libCategory}', [ProgramProjectSetupController::class, 'destroyLineItem']);
+        Route::post('/program/projects/{project}/tranches', [ProgramProjectSetupController::class, 'storeTranche']);
+        Route::patch('/program/tranches/{projectTranche}', [ProgramProjectSetupController::class, 'updateTranche']);
+        Route::delete('/program/tranches/{projectTranche}', [ProgramProjectSetupController::class, 'destroyTranche']);
         Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
         // Read-only: entries are never edited or deleted through the API.
         Route::get('/program/audit', [ProgramAuditController::class, 'index']);

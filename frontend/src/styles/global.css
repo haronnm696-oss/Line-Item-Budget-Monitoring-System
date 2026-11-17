@@ -2599,6 +2599,8 @@ select.signin-input:disabled{
   background:#FAF7F2;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pg2-muted);
 }
 .pd-subtotal td{font-weight:700;background:#FDFBF7}
+.pd-actions{white-space:nowrap;text-align:right}
+.pd-actions .program-btn + .program-btn{margin-left:6px}
 .pd-total td{font-weight:800;border-top:2px solid #EDE4D6}
 .pd-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .pd-list li{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-top:1px solid var(--pg2-line);min-width:0}
