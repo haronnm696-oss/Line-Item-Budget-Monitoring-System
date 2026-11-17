@@ -98,7 +98,7 @@ export default function FinanceDashboard() {
                   {data.queue.length === 0 ? (
                     <p className="ld-empty">Nothing is waiting for verification.</p>
                   ) : (
-                    data.queue.map((item) => <QueueCard key={item.key} item={item} actions={actions} onOpen={() => update({ open: item.key })} />)
+                    data.queue.map((item) => <QueueCard key={item.key} item={item} onOpen={() => update({ open: item.key })} />)
                   )}
                   {kpis.to_verify > data.queue.length && (
                     <Link className="ld-more" to={`/verification-queue${q}`}>{kpis.to_verify - data.queue.length} more waiting</Link>
@@ -213,8 +213,7 @@ function Kpi({ label, value, sub, to, format, alert = false }) {
 }
 
 /** One record waiting for verification, with Verify / Reject when this user may verify. */
-function QueueCard({ item, actions, onOpen }) {
-  const busy = actions.busyKey === item.key;
+function QueueCard({ item, onOpen }) {
   const receipt = item.type === 'expense'
     ? (item.receipts_count > 0
       ? <ProgramPill value="Receipt attached" tone="healthy" icon="✓" />
@@ -239,8 +238,7 @@ function QueueCard({ item, actions, onOpen }) {
         <b className="ld-amount">{peso(item.amount)}</b>
         {item.can_verify && (
           <div className="fin-row-actions">
-            <button type="button" className="program-btn sm primary" disabled={busy} onClick={() => actions.verify(item)}>{busy ? 'Saving…' : 'Verify'}</button>
-            <button type="button" className="program-btn sm" disabled={busy} onClick={() => actions.reject(item)}>Reject</button>
+            <button type="button" className="program-btn sm primary" onClick={onOpen}>Review</button>
           </div>
         )}
       </div>

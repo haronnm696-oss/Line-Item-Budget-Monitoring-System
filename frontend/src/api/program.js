@@ -70,6 +70,12 @@ export async function fetchProgramApprovals(params = {}, { signal } = {}) {
   return response.data;
 }
 
+/** One approval request with history, type-specific figures and attachments (review panel). */
+export async function fetchApprovalDetail(id, { signal } = {}) {
+  const response = await client.get(ENDPOINTS.approvalDetail(id), { signal });
+  return response.data;
+}
+
 /**
  * Record an approval decision: "approved", or "returned" with remarks (the
  * reason; the backend enforces it as well). A returned request goes back

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApprovalRequest;
+use App\Services\ApprovalDetailService;
 use App\Services\DashboardService;
 use Illuminate\Http\Request;
 
@@ -16,8 +17,18 @@ use Illuminate\Http\Request;
  */
 class ApprovalController extends Controller
 {
-    public function __construct(private DashboardService $dashboard)
+    public function __construct(private DashboardService $dashboard, private ApprovalDetailService $details)
     {
+    }
+
+    /**
+     * GET /api/approvals/{approval}: one request with its status history,
+     * type-specific figures and attachments (the review side panel).
+     * project.access: the Program Leader and members of its project only.
+     */
+    public function show(Request $request, ApprovalRequest $approval)
+    {
+        return response()->json(['approval' => $this->details->detail($approval, $request->user())]);
     }
 
     /** List approvals, defaulting to the pending queue. */

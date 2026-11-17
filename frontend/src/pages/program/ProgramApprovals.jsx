@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
-import { decideApproval, fetchProgramApprovals } from '../../api/program';
+import { fetchProgramApprovals } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
+import ApprovalPanel from '../../components/program/ApprovalPanel';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
 
@@ -50,6 +51,11 @@ function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
 }
 
+function documentsText(count) {
+  if (!count) return 'No attachments';
+  return `${count} attachment${count === 1 ? '' : 's'}`;
+}
+
 function RemarkBox({ text }) {
   const value = typeof text === 'string' ? text.trim() : '';
   return value
@@ -57,7 +63,7 @@ function RemarkBox({ text }) {
     : <p className="pa-remark is-empty">No remark</p>;
 }
 
-function DecidedRow({ approval }) {
+function DecidedRow({ approval, onOpen }) {
   const [tone, icon, label] = DECIDED[approval.status] ?? DECIDED.returned;
   return (
     <li className="pa-decided-row">
@@ -83,11 +89,14 @@ function DecidedRow({ approval }) {
         </div>
         <RemarkBox text={approval.review_notes} />
       </div>
-      {approval.project_id != null && (
-        <Link className="pa-audit-link" to={`/program-audit?project=${approval.project_id}`}>
-          View in audit trail
-        </Link>
-      )}
+      <div className="pa-decided-side">
+        <button type="button" className="program-btn sm" onClick={() => onOpen(approval)}>View details</button>
+        {approval.project_id != null && (
+          <Link className="pa-audit-link" to={`/program-audit?project=${approval.project_id}`}>
+            View in audit trail
+          </Link>
+        )}
+      </div>
     </li>
   );
 }
@@ -131,8 +140,7 @@ function ListSkeleton({ status }) {
                   <span className="pa-skel pa-skel-box" style={{ height: 62 }} />
                 </div>
                 <div className="program-row-actions">
-                  <span className="pa-skel" style={{ width: 92, height: 40 }} />
-                  <span className="pa-skel" style={{ width: 78, height: 40 }} />
+                  <span className="pa-skel" style={{ width: 92, height: 44 }} />
                 </div>
               </div>
             </div>
@@ -144,14 +152,14 @@ function ListSkeleton({ status }) {
   );
 }
 
-function DecidedList({ approvals }) {
+function DecidedList({ approvals, onOpen }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   return (
     <section className="program-card">
       <ul className="pa-decided-list">
         {approvals.slice(0, visibleCount).map((approval) => (
-          <DecidedRow key={approval.id} approval={approval} />
+          <DecidedRow key={approval.id} approval={approval} onOpen={onOpen} />
         ))}
       </ul>
       {approvals.length > visibleCount && (
@@ -191,11 +199,8 @@ export default function ProgramApprovals() {
   const [failure, setFailure] = useState(null); // { key, message }
   const controllerRef = useRef(null);
   const [feedback, setFeedback] = useState(null);
-  const [busyId, setBusyId] = useState(null);
-  const [returnId, setReturnId] = useState(null);
-  const [returnReason, setReturnReason] = useState('');
-  const [returnError, setReturnError] = useState('');
-  const [returnBusy, setReturnBusy] = useState(false);
+  // ?open=ID shows the review panel; Approve / Return live only there.
+  const openId = /^\d+$/.test(searchParams.get('open') ?? '') ? Number(searchParams.get('open')) : null;
 
   function updateQuery(changes) {
     const next = new URLSearchParams(searchParams);
@@ -246,48 +251,23 @@ export default function ProgramApprovals() {
     refreshPending();
   }
 
-  async function handleApprove(approval) {
-    if (busyId) return;
-    setBusyId(approval.id);
+  function openPanel(approval) {
     setFeedback(null);
-    try {
-      await decideApproval(approval.id, { decision: 'approved' });
-      setFeedback({ tone: 'ok', text: `Approved “${approval.title}”. The decision was written to the audit trail.` });
-      await refreshAll();
-    } catch (requestError) {
-      setFeedback({ tone: 'error', text: messageFor(requestError, 'Unable to approve this request.') });
-    } finally {
-      setBusyId(null);
-    }
+    const next = new URLSearchParams(searchParams);
+    next.set('open', String(approval.id));
+    setSearchParams(next); // a history entry: Back closes the panel
   }
 
-  function openReturn(approval) {
-    setReturnId(approval.id);
-    setReturnReason('');
-    setReturnError('');
-  }
+  const closePanel = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('open');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  async function confirmReturn(approval) {
-    if (!returnReason.trim()) {
-      setReturnError('A reason is required to return a request.');
-      return;
-    }
-    if (returnBusy) return;
-
-    setReturnBusy(true);
-    setReturnError('');
-    try {
-      await decideApproval(approval.id, { decision: 'returned', remarks: returnReason.trim() });
-      setFeedback({ tone: 'ok', text: `Returned “${approval.title}” to the requester with your reason. They can edit and resubmit it.` });
-      setReturnId(null);
-      setReturnReason('');
-      await refreshAll();
-    } catch (requestError) {
-      const validationError = requestError?.response?.data?.errors?.remarks?.[0];
-      setReturnError(validationError || messageFor(requestError, 'Unable to return this request.'));
-    } finally {
-      setReturnBusy(false);
-    }
+  async function handleDecided(text) {
+    closePanel();
+    setFeedback({ tone: 'ok', text });
+    await refreshAll();
   }
 
   const payload = result?.payload;
@@ -415,15 +395,13 @@ export default function ProgramApprovals() {
         <section className="program-card">
           {approvals.map((approval) => {
             const isOwn = Number(approval.requested_by_id) === Number(user?.id);
-            const busy = busyId === approval.id;
-            const returning = returnId === approval.id;
 
             return (
               <div key={approval.id}>
                 <div className="program-row">
                   <div className="program-row-main">
                     <div className="program-row-title">
-                      <span>{approval.title}</span>
+                      <button type="button" className="ld-link" onClick={() => openPanel(approval)}>{approval.title}</button>
                       <ProgramPill value={approval.type_label} />
                     </div>
                     <div className="program-row-sub">
@@ -432,6 +410,7 @@ export default function ProgramApprovals() {
                       {` · waiting ${approval.days_waiting ?? 0} days`}
                       {approval.requested_by ? ` · requested by ${approval.requested_by_role ?? 'user'}` : ''}
                       {approval.requested_by ? ` (${approval.requested_by})` : ''}
+                      {` · ${documentsText(approval.documents_count)}`}
                     </div>
                     {approval.justification?.trim() && (
                       <p className="pa-remark">“{approval.justification.trim()}”</p>
@@ -450,70 +429,21 @@ export default function ProgramApprovals() {
                   </div>
 
                   <div className="program-row-actions">
-                    <button
-                      type="button"
-                      className="program-btn primary"
-                      disabled={busy || isOwn}
-                      aria-disabled={busy || isOwn}
-                      onClick={() => handleApprove(approval)}
-                    >
-                      {busy ? '…' : 'Approve'}
-                    </button>
-                    <button
-                      type="button"
-                      className="program-btn"
-                      disabled={busy || isOwn}
-                      aria-disabled={busy || isOwn}
-                      onClick={() => openReturn(approval)}
-                    >
-                      Return
+                    <button type="button" className="program-btn primary" onClick={() => openPanel(approval)}>
+                      Review
                     </button>
                   </div>
                 </div>
-
-                {returning && (
-                  <div className="program-reject">
-                    <div className="program-field">
-                      <label htmlFor={`return-${approval.id}`}>Reason for returning (required)</label>
-                      <textarea
-                        id={`return-${approval.id}`}
-                        className="program-textarea"
-                        value={returnReason}
-                        onChange={(event) => setReturnReason(event.target.value)}
-                        placeholder="Tell the requester what to fix, e.g. add the work plan"
-                      />
-                    </div>
-                    {returnError && (
-                      <p className="program-error" aria-live="polite">{returnError}</p>
-                    )}
-                    <div className="program-reject-actions">
-                      <button
-                        type="button"
-                        className="program-btn"
-                        onClick={() => setReturnId(null)}
-                        disabled={returnBusy}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        className="program-btn primary"
-                        onClick={() => confirmReturn(approval)}
-                        disabled={returnBusy}
-                      >
-                        {returnBusy ? 'Returning…' : 'Return to requester'}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
         </section>
       ) : (
         // Keyed so "Load more" resets to 20 rows when the tab or filters change.
-        <DecidedList key={`${status}|${type}|${project}|${funder}`} approvals={approvals} />
+        <DecidedList key={`${status}|${type}|${project}|${funder}`} approvals={approvals} onOpen={openPanel} />
       )}
+
+      <ApprovalPanel key={openId ?? 'closed'} approvalId={openId} onClose={closePanel} onDecided={handleDecided} />
     </>
   );
 }

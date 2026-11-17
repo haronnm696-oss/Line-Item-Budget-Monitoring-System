@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
+use App\Models\Document;
 use App\Models\Expense;
 use App\Models\FundingAgency;
 use App\Models\LibCategory;
+use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\ProjectReport;
 use App\Models\ProjectTranche;
@@ -408,6 +410,7 @@ class ProgramDashboardService
 
         $query = ApprovalRequest::query()
             ->with(['project.fundingAgency', 'requestedBy.primaryRole', 'reviewedBy', 'tranche', 'liquidation'])
+            ->withCount('documents')
             // Same project scope as the Overview (soft-deleted projects are
             // excluded there), so the Pending count matches its KPI.
             ->whereHas('project')
@@ -516,12 +519,27 @@ class ProgramDashboardService
             'withdrawn_at' => $approval->withdrawn_at?->toIso8601String(),
             // Legacy rows may have no justification; the UI then shows none.
             'justification' => $approval->justification,
+            // Attachments shown in the review panel (an escalated payroll step shows the batch files).
+            'documents_count' => $this->documentsCount($approval),
             'created_at' => $approval->created_at?->toIso8601String(),
             'reviewed_at' => $approval->reviewed_at?->toIso8601String(),
             // Fall back to the stored reviewer-name snapshot when the user
             // record is gone.
             'reviewed_by' => $approval->reviewedBy?->name ?? $approval->reviewed_by_name,
         ];
+    }
+
+    protected function documentsCount(ApprovalRequest $approval): int
+    {
+        $count = (int) ($approval->documents_count ?? $approval->documents()->count());
+        if (PayrollService::isEscalation($approval)) {
+            $count += Document::query()
+                ->where('documentable_type', PayrollBatch::class)
+                ->where('documentable_id', ($approval->payload ?? [])['payroll_batch_id'] ?? 0)
+                ->count();
+        }
+
+        return $count;
     }
 
     /**

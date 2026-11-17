@@ -21,23 +21,27 @@ function sizeLabel(bytes) {
  * and download links. `type` is expense | payroll | purchase_request | approval.
  * A document whose file is missing (available: false) shows "File not
  * available" instead of a broken preview; its row is kept.
+ * `documents` (already loaded, e.g. with a request's details) skips the fetch.
  */
-export default function DocumentList({ type, id }) {
+export default function DocumentList({ type, id, documents = null, emptyText = 'No documents attached.' }) {
   const key = `${type}-${id}`;
-  const [result, setResult] = useState(null); // { key, documents } | { key, error }
+  const [fetched, setResult] = useState(null); // { key, documents } | { key, error }
   const [preview, setPreview] = useState(null);
+  const given = Array.isArray(documents);
+  const result = given ? { key, documents } : fetched;
 
   useEffect(() => {
+    if (given) return undefined;
     let alive = true;
     fetchDocuments(type, id)
       .then((data) => { if (alive) setResult({ key, documents: Array.isArray(data?.documents) ? data.documents : [] }); })
       .catch(() => { if (alive) setResult({ key, error: 'Could not load the documents. Please try again.' }); });
     return () => { alive = false; };
-  }, [type, id, key]);
+  }, [type, id, key, given]);
 
   if (result?.key !== key) return <p className="ld-muted" aria-busy="true">Loading documents…</p>;
   if (result.error) return <p className="ld-muted" role="alert">{result.error}</p>;
-  if (result.documents.length === 0) return <p className="ld-muted">No documents attached.</p>;
+  if (result.documents.length === 0) return <p className="ld-muted">{emptyText}</p>;
 
   return (
     <div className="ld-docs">

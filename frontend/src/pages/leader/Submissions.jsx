@@ -127,9 +127,6 @@ export default function Submissions() {
                 key={item.key}
                 item={item}
                 showStage={tab !== 'waiting'}
-                busy={actions.busyKey === item.key}
-                onApprove={actions.approve}
-                onReturn={actions.openReturn}
                 onOpen={(row) => updateQuery({ open: row.key })}
               />
             ))}

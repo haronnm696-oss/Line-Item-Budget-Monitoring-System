@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
-import { fetchProgramOverview, decideApproval } from '../../api/program';
+import { fetchProgramOverview } from '../../api/program';
 import { formatInManila } from '../../lib/datetime';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
-import ProgramRejectModal from '../../components/program/ProgramRejectModal';
+import ApprovalPanel from '../../components/program/ApprovalPanel';
 import BudgetByProjectDonut from '../../components/program/BudgetByProjectDonut';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
@@ -80,10 +80,9 @@ export default function ProgramLeaderDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState(null);
-  const [busyApprovalId, setBusyApprovalId] = useState(null);
-  const [rejectTarget, setRejectTarget] = useState(null);
-  const [rejectBusy, setRejectBusy] = useState(false);
-  const [rejectError, setRejectError] = useState('');
+  // The pending request open in the review panel (Approve / Return live there).
+  const [openId, setOpenId] = useState(null);
+  const closePanel = useCallback(() => setOpenId(null), []);
   const requestRef = useRef(0);
 
   const load = useCallback(async (selectedFunder, quiet = false) => {
@@ -123,45 +122,10 @@ export default function ProgramLeaderDashboard() {
     refreshPending();
   }
 
-  async function handleApprove(approval) {
-    if (busyApprovalId) return;
-
-    setBusyApprovalId(approval.id);
-    setFeedback(null);
-
-    try {
-      await decideApproval(approval.id, { decision: 'approved' });
-      setFeedback({ tone: 'ok', text: `Approved “${approval.title}”.` });
-      await refreshAll();
-    } catch (requestError) {
-      setFeedback({
-        tone: 'error',
-        text: messageFor(requestError, 'Unable to approve this request. Please try again.'),
-      });
-    } finally {
-      setBusyApprovalId(null);
-    }
-  }
-
-  async function submitReject(reason) {
-    if (!rejectTarget || rejectBusy) return;
-
-    setRejectBusy(true);
-    setRejectError('');
-
-    try {
-      await decideApproval(rejectTarget.id, { decision: 'returned', remarks: reason });
-      setFeedback({ tone: 'ok', text: `Returned “${rejectTarget.title}” to the requester with your reason.` });
-      setRejectTarget(null);
-      await refreshAll();
-    } catch (requestError) {
-      const validationError = requestError?.response?.data?.errors?.remarks?.[0];
-      setRejectError(
-        validationError || messageFor(requestError, 'Unable to return this request. Please try again.')
-      );
-    } finally {
-      setRejectBusy(false);
-    }
+  async function handleDecided(text) {
+    setOpenId(null);
+    setFeedback({ tone: 'ok', text });
+    await refreshAll();
   }
 
   const kpis = data?.kpis ?? {};
@@ -456,7 +420,6 @@ export default function ProgramLeaderDashboard() {
               <div className="pl-approval-list">
                 {approvals.map((approval) => {
                   const isOwn = Number(approval.requested_by_id) === Number(user?.id);
-                  const busy = busyApprovalId === approval.id;
                   return (
                     <div className="pl-approval" key={approval.id}>
                       <span className="pl-approval-icon" aria-hidden="true">
@@ -464,7 +427,9 @@ export default function ProgramLeaderDashboard() {
                       </span>
                       <div className="pl-approval-main">
                         <div className="pl-approval-title">
-                          <b>{approval.title}</b>
+                          <button type="button" className="ld-link" onClick={() => { setFeedback(null); setOpenId(approval.id); }}>
+                            <b>{approval.title}</b>
+                          </button>
                           <ProgramPill value={approval.type_label} />
                         </div>
                         <div className="pl-approval-meta">
@@ -485,23 +450,9 @@ export default function ProgramLeaderDashboard() {
                         <button
                           type="button"
                           className="program-btn sm primary"
-                          disabled={busy || isOwn}
-                          aria-disabled={busy || isOwn}
-                          onClick={() => handleApprove(approval)}
+                          onClick={() => { setFeedback(null); setOpenId(approval.id); }}
                         >
-                          {busy ? '…' : 'Approve'}
-                        </button>
-                        <button
-                          type="button"
-                          className="program-btn sm"
-                          disabled={busy || isOwn}
-                          aria-disabled={busy || isOwn}
-                          onClick={() => {
-                            setRejectError('');
-                            setRejectTarget(approval);
-                          }}
-                        >
-                          Return
+                          Review
                         </button>
                       </div>
                     </div>
@@ -556,16 +507,7 @@ export default function ProgramLeaderDashboard() {
         </>
       )}
 
-      <ProgramRejectModal
-        key={rejectTarget?.id ?? 'closed'}
-        approval={rejectTarget}
-        busy={rejectBusy}
-        error={rejectError}
-        onClose={() => {
-          if (!rejectBusy) setRejectTarget(null);
-        }}
-        onConfirm={submitReject}
-      />
+      <ApprovalPanel key={openId ?? 'closed'} approvalId={openId} onClose={closePanel} onDecided={handleDecided} />
     </>
   );
 }
