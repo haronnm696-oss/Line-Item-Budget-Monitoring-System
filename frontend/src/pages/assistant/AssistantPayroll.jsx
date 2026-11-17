@@ -5,6 +5,7 @@ import { errorText } from '../../api/leader';
 import { useAuth } from '../../context/AuthContext';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen, returnedLine } from '../../lib/assistantStatus';
 import { todayInManila } from '../../lib/datetime';
@@ -106,7 +107,7 @@ export default function AssistantPayroll() {
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
       )}
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as a Research Assistant yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={payroll} loadingText="Loading payroll…">
           {run && (
             <>

@@ -4,6 +4,7 @@ import { ENDPOINTS } from '../../api/endpoints';
 import { apiUrl } from '../../api/leader';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { RECORD_PAGE } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
@@ -70,7 +71,7 @@ export default function Documents() {
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="ra-documents-project" /></div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as a Research Assistant yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <div className="program-filter-row ld-controls">
           <div className="program-field">
             <label htmlFor="ra-doc-type">Document type</label>

@@ -205,7 +205,7 @@ class PurchaseRequestService
     /** Cancel an approved, unfulfilled request (Project Leader or requester; reason required). */
     public function cancel(PurchaseRequest $request, string $reason, User $actor): PurchaseRequest
     {
-        $isLeader = $request->project && $actor->roleOn($request->project) === 'project-leader';
+        $isLeader = $request->project && $actor->hasRoleOn($request->project, 'project-leader');
         $isRequester = (int) $request->requested_by === (int) $actor->id;
         if (! $isLeader && ! $isRequester) {
             abort(403, 'Only the Project Leader or the person who made this request can cancel it.');

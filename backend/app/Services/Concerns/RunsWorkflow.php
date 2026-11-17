@@ -26,7 +26,7 @@ trait RunsWorkflow
 
     protected function requireRole(?Project $project, User $actor, array $slugs, string $message): void
     {
-        if (! $project || ! in_array($actor->roleOn($project), $slugs, true)) {
+        if (! $project || ! $actor->hasRoleOn($project, $slugs)) {
             abort(403, $message);
         }
     }

@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
 import { formatPct, peso } from '../../components/money';
@@ -56,7 +57,7 @@ export default function ResearcherBudget() {
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="res-budget-project" /></div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as a Researcher yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={summary} loadingText="Loading line items…" emptyText="This project has no line items yet." isEmpty={rows.length === 0}>
           <section className="program-card">
             <div className="ra-table-scroll">

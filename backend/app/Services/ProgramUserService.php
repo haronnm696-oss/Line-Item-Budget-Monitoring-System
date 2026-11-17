@@ -354,35 +354,42 @@ class ProgramUserService
         });
     }
 
+    /**
+     * Change a person's role on a project. Legacy or seeded data may hold
+     * more than one row for the same person and project; they are merged
+     * into ONE row with the new role here (the oldest row is kept, so its pay
+     * rate stays), so what the Program Leader sets is what every page sees.
+     * One audit entry per change; nothing when nothing changes.
+     */
     public function updateAssignment(User $user, Project $project, string $roleSlug, User $actor, ?string $reason = null): ProjectUser
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
         return AuditLogger::transaction(function () use ($user, $project, $role, $actor, $reason) {
-            $assignment = ProjectUser::query()
-                ->where('user_id', $user->id)
-                ->where('project_id', $project->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+            $rows = $this->assignmentRows($user, $project);
+            $assignment = $rows->first();
+            $oldRoles = $rows->map(fn (ProjectUser $row) => $row->role?->slug)->filter()->values()->all();
+            $oldRole = $assignment->role;
 
-            $oldRole = Role::find($assignment->role_id);
-
-            // Same role: nothing changes and nothing is logged.
-            if ((int) $assignment->role_id === (int) $role->id) {
+            // Same single role: nothing changes and nothing is logged.
+            if ($rows->count() === 1 && (int) $assignment->role_id === (int) $role->id) {
                 return $assignment;
             }
 
-            if ($oldRole?->slug === 'project-leader') {
-                $this->ensureNotOnlyProjectLeader($project, $assignment);
+            if (in_array('project-leader', $oldRoles, true) && $role->slug !== 'project-leader') {
+                $this->ensureNotOnlyProjectLeader($project, $user);
             }
 
+            $rows->slice(1)->each(fn (ProjectUser $extra) => $extra->delete());
             $assignment->update(['role_id' => $role->id]);
 
-            AuditTrail::record($actor, 'assignment_updated', $user, [
+            AuditTrail::record($actor, 'assignment_updated', $user, array_filter([
                 'project_id' => $project->id,
                 'role' => $oldRole?->slug,
                 'role_label' => $oldRole?->name,
-            ], [
+                // Only when duplicate rows were merged.
+                'roles' => count($oldRoles) > 1 ? $oldRoles : null,
+            ], fn ($value) => $value !== null), [
                 'project_id' => $project->id,
                 'role' => $role->slug,
                 'role_label' => $role->name,
@@ -392,32 +399,51 @@ class ProgramUserService
         });
     }
 
+    /** Remove the person from the project: every row they have there goes (one audit entry). */
     public function removeAssignment(User $user, Project $project, User $actor, ?string $reason = null): void
     {
         AuditLogger::transaction(function () use ($user, $project, $actor, $reason) {
-            $assignment = ProjectUser::query()
-                ->where('user_id', $user->id)
-                ->where('project_id', $project->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+            $rows = $this->assignmentRows($user, $project);
+            $roles = $rows->map(fn (ProjectUser $row) => $row->role?->slug)->filter()->values()->all();
+            $role = $rows->first()->role;
 
-            $role = Role::find($assignment->role_id);
-
-            if ($role?->slug === 'project-leader') {
-                $this->ensureNotOnlyProjectLeader($project, $assignment);
+            if (in_array('project-leader', $roles, true)) {
+                $this->ensureNotOnlyProjectLeader($project, $user);
             }
 
-            // Only the assignment row goes. Expenses, approvals and audit
+            // Only the assignment rows go. Expenses, approvals and audit
             // entries keep pointing at the person.
-            $assignment->delete();
+            $rows->each(fn (ProjectUser $row) => $row->delete());
 
-            AuditTrail::record($actor, 'assignment_removed', $user, [
+            AuditTrail::record($actor, 'assignment_removed', $user, array_filter([
                 'project_id' => $project->id,
                 'project' => $project->title,
                 'role' => $role?->slug,
                 'role_label' => $role?->name,
-            ], [], $reason);
+                'roles' => count($roles) > 1 ? $roles : null,
+            ], fn ($value) => $value !== null), [], $reason);
         });
+    }
+
+    /**
+     * Every assignment row of the person on the project, oldest first,
+     * locked (404 when there is none).
+     *
+     * @return \Illuminate\Support\Collection<int, ProjectUser>
+     */
+    protected function assignmentRows(User $user, Project $project)
+    {
+        $rows = ProjectUser::query()
+            ->where('user_id', $user->id)
+            ->where('project_id', $project->id)
+            ->with('role')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        abort_if($rows->isEmpty(), 404, 'This person is not assigned to that project.');
+
+        return $rows;
     }
 
     public function setActive(User $user, bool $isActive, ?string $reason, User $actor): User
@@ -513,7 +539,7 @@ class ProgramUserService
     /**
      * An ongoing project must keep at least one Project Leader.
      */
-    protected function ensureNotOnlyProjectLeader(Project $project, ProjectUser $assignment): void
+    protected function ensureNotOnlyProjectLeader(Project $project, User $leaving): void
     {
         if (app(ProjectFinancialService::class)->derivedStatus($project) !== 'ongoing') {
             return;
@@ -521,7 +547,7 @@ class ProgramUserService
 
         $otherLeaders = ProjectUser::query()
             ->where('project_id', $project->id)
-            ->whereKeyNot($assignment->getKey())
+            ->where('user_id', '!=', $leaving->id)
             ->whereHas('role', fn ($query) => $query->where('slug', 'project-leader'))
             ->whereHas('user', fn ($query) => $query->where('is_active', true))
             ->count();

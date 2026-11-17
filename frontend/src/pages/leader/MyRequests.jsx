@@ -5,6 +5,7 @@ import { apiWrite } from '../../api/http';
 import { useRoleBadges } from '../../layouts/roleBadges';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProgramPill from '../../components/program/ProgramPill';
 import ProjectSelect from '../../components/leader/ProjectSelect';
@@ -72,7 +73,7 @@ export default function MyRequests() {
 
       {feedback && <div className={`program-banner ${feedback.tone}`} role="status" aria-live="polite">{feedback.text}</div>}
 
-      <LoadState state={picker.state} emptyText="You do not lead a project yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={list} loadingText="Loading requests…" emptyText="No budget requests yet." isEmpty={rows.length === 0}>
           <section className="program-card">
             <div className="program-scroll">

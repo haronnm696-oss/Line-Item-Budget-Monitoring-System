@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProgramPill from '../../components/program/ProgramPill';
 import ProjectSelect from '../../components/leader/ProjectSelect';
@@ -63,7 +64,7 @@ export default function LineItemBudget() {
         </div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={balancing} loadingText="Loading line items…" emptyText="This project has no line items yet." isEmpty={rows.length === 0}>
           <section className="program-card">
             <div className="program-scroll">

@@ -84,23 +84,77 @@ class User extends Authenticatable
         return $this->hasMany(AuditTrail::class);
     }
 
-    /**
-     * Resolve this user's role slug for a given project.
-     * This is the core RBAC lookup: role is per-project, not global.
+    /*
+     * "My projects" resolver: the ONE rule every page, API, badge count and
+     * notification recipient lookup uses. A person holds role R on project P
+     * when a project_user row (P, person, R) exists, which is exactly what
+     * the Program Leader sets in Projects and in Users and roles. A person may
+     * have more than one row on a project (legacy and seeded data); each row
+     * counts, so no row is ever "hidden" behind another one.
      */
-    public function roleOn(Project $project): ?string
-    {
-        $pivot = $this->projectUsers()
-            ->where('project_id', $project->id)
-            ->with('role')
-            ->first();
 
-        return $pivot?->role?->slug;
+    /**
+     * Every role slug this user holds on the project, oldest row first.
+     *
+     * @return array<int, string>
+     */
+    public function rolesOn(Project|int $project): array
+    {
+        $projectId = $project instanceof Project ? $project->getKey() : $project;
+
+        return $this->projectUsers()
+            ->where('project_id', $projectId)
+            ->with('role')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ProjectUser $row) => $row->role?->slug)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
-    public function hasRoleOn(Project $project, string $roleSlug): bool
+    /**
+     * The one role to show for this project: the user's account role when
+     * they hold it there, otherwise their oldest row's role. Permission checks
+     * use hasRoleOn() instead, so a second row never takes a role away.
+     */
+    public function roleOn(Project|int $project): ?string
     {
-        return $this->roleOn($project) === $roleSlug;
+        return self::displayRole($this->rolesOn($project), $this->primaryRole?->slug);
+    }
+
+    /** @param array<int, string> $roles */
+    public static function displayRole(array $roles, ?string $accountRole): ?string
+    {
+        if ($accountRole !== null && in_array($accountRole, $roles, true)) {
+            return $accountRole;
+        }
+
+        return $roles[0] ?? null;
+    }
+
+    /** True when the user holds (any of) the role(s) on the project. */
+    public function hasRoleOn(Project|int $project, string|array $roleSlugs): bool
+    {
+        return array_intersect((array) $roleSlugs, $this->rolesOn($project)) !== [];
+    }
+
+    /**
+     * "My projects" for one role: the ids of the projects where the user
+     * holds that project role.
+     *
+     * @return array<int, int>
+     */
+    public function projectIdsAs(string $roleSlug): array
+    {
+        return $this->projectUsers()
+            ->whereHas('role', fn ($query) => $query->where('slug', $roleSlug))
+            ->pluck('project_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function isProgramLeader(): bool

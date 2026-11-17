@@ -193,8 +193,8 @@ class ExpenseWorkflowService
      */
     private function requireEncoder(Expense $expense, User $actor, string $verb): bool
     {
-        $role = $expense->project ? $actor->roleOn($expense->project) : null;
-        if ($role === self::LEADER) {
+        $project = $expense->project;
+        if ($project && ! $actor->hasRoleOn($project, self::ENCODERS) && $actor->hasRoleOn($project, self::LEADER)) {
             if ((int) $expense->recorded_by !== (int) $actor->id) {
                 abort(403, "A Project Leader can only {$verb} expenses they recorded.");
             }

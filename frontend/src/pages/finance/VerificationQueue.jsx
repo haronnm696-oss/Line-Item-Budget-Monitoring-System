@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
@@ -64,7 +65,7 @@ export default function VerificationQueue() {
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="fin-queue-project" /></div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You are not assigned to a project as Finance/Admin yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <div className="program-filter-row ld-controls">
           <div className="program-tabs" role="tablist" aria-label="Verification queue">
             {TABS.map(([value, label]) => (

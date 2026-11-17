@@ -6,11 +6,16 @@ import UtilBar from '../components/UtilBar';
 import { peso } from '../components/money';
 import { ENDPOINTS } from '../api/endpoints';
 import { useApiData } from '../lib/useApiData';
+import { useAuth } from '../context/AuthContext';
+import { normalizeRole } from '../lib/roles';
+import { myProjects, notAssignedText, projectRoleFor } from '../lib/myProjects';
 
 export default function Projects() {
-  // Only the projects the user is assigned to (the API scopes the list).
+  // Only the user's projects for their role (lib/myProjects.js, the one rule).
+  const { user } = useAuth();
   const state = useApiData(ENDPOINTS.projects);
-  const projects = Array.isArray(state.data) ? state.data : [];
+  const myRole = projectRoleFor(normalizeRole(user));
+  const projects = myProjects(state.data, myRole);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [agency, setAgency] = useState('All');
@@ -74,7 +79,7 @@ export default function Projects() {
         </select>
       </div>
 
-      <LoadState state={state} loadingText="Loading your projects…" isEmpty={projects.length === 0} emptyText="You are not assigned to any project yet.">
+      <LoadState state={state} loadingText="Loading your projects…" isEmpty={projects.length === 0} emptyText={myRole ? notAssignedText(myRole) : 'You are not assigned to any project yet.'}>
       <div className="panel wide-scroll">
         <table>
           <thead>

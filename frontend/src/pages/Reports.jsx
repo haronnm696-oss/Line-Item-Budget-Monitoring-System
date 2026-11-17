@@ -6,6 +6,9 @@ import { ENDPOINTS } from '../api/endpoints';
 import Chip, { statusTone } from '../components/Chip';
 import UtilBar from '../components/UtilBar';
 import StatCard from '../components/StatCard';
+import { useAuth } from '../context/AuthContext';
+import { normalizeRole } from '../lib/roles';
+import { myProjects, notAssignedText, projectRoleFor } from '../lib/myProjects';
 
 const REPORT_TYPES = [
   {
@@ -114,6 +117,9 @@ function downloadCSV(content, filename) {
 }
 
 export default function Reports({ programMode = false, initialCode = '' }) {
+  const { user } = useAuth();
+  // The one "my projects" rule for this role (the Program Leader: all projects).
+  const myRole = programMode ? null : projectRoleFor(normalizeRole(user));
   const [chosenCode, setChosenCode] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState(PERIODS[0]);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
@@ -131,13 +137,13 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     let alive = true;
     client.get(ENDPOINTS.projects)
       .then((response) => {
-        if (alive) setProjectsResult({ attempt: projectsAttempt, list: Array.isArray(response.data) ? response.data : [] });
+        if (alive) setProjectsResult({ attempt: projectsAttempt, list: myProjects(response.data, myRole) });
       })
       .catch((error) => {
         if (alive) setProjectsResult({ attempt: projectsAttempt, error: messageFor(error, 'Could not load projects') });
       });
     return () => { alive = false; };
-  }, [projectsAttempt]);
+  }, [projectsAttempt, myRole]);
 
   const projectsStatus = projectsResult?.attempt !== projectsAttempt
     ? 'loading'
@@ -696,7 +702,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     const placeholder = {
       loading: 'Loading projects…',
       error: 'Could not load projects',
-      empty: 'No projects yet',
+      empty: myRole ? notAssignedText(myRole) : 'No projects yet',
     }[projectsStatus];
     return (
       <>

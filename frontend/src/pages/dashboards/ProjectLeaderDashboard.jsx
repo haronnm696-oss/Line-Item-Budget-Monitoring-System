@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import { formatDate, formatInManila } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
@@ -61,15 +62,18 @@ export default function ProjectLeaderDashboard() {
         </div>
         <div className="pl-head-actions">
           <ProjectSelect picker={picker} id="overview-project" />
-          <Link className="program-btn" to={`/reports${projectQuery}`}>Generate report</Link>
+          {/* With no project led, these stay hidden; the page shows notAssignedText instead. */}
           {picker.projectId && (
-            <button type="button" className="program-btn" onClick={() => { actions.setFeedback(null); setRecording(true); }}>
-              Record transaction
-            </button>
+            <>
+              <Link className="program-btn" to={`/reports${projectQuery}`}>Generate report</Link>
+              <button type="button" className="program-btn" onClick={() => { actions.setFeedback(null); setRecording(true); }}>
+                Record transaction
+              </button>
+              <Link className="program-btn primary" to={`/my-requests${projectQuery}${projectQuery ? '&' : '?'}new=fund_release`}>
+                Submit budget request
+              </Link>
+            </>
           )}
-          <Link className="program-btn primary" to={`/my-requests${projectQuery}${projectQuery ? '&' : '?'}new=fund_release`}>
-            Submit budget request
-          </Link>
         </div>
       </div>
 
@@ -77,7 +81,7 @@ export default function ProjectLeaderDashboard() {
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
       )}
 
-      <LoadState state={picker.state} emptyText="You do not lead a project yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={overview} loadingText="Loading project data…">
           {data && (
             <>

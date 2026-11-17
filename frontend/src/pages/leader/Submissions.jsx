@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
+import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ReviewRow from '../../components/leader/ReviewRow';
 import RecordPanel from '../../components/leader/RecordPanel';
@@ -90,7 +91,7 @@ export default function Submissions() {
         </div>
       </div>
 
-      <LoadState state={picker.state} emptyText="You do not lead a project yet." isEmpty={picker.state.status === 'ready' && !picker.project}>
+      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <div className="program-filter-row ld-controls">
           <div className="program-tabs" role="tablist" aria-label="Submissions">
             {TABS.map(([value, label]) => (

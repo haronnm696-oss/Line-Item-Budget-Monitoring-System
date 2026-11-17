@@ -400,7 +400,7 @@ class PayrollService
                 return $paid ? 'Waiting for Program Leader (includes your pay)' : "Waiting for Program Leader (includes the Project Leader's pay)";
             }
 
-            if ($paid && $viewer && $batch->project && $viewer->roleOn($batch->project) === 'project-leader') {
+            if ($paid && $viewer && $batch->project && $viewer->hasRoleOn($batch->project, 'project-leader')) {
                 return 'Waiting for another Project Leader (includes your pay)';
             }
 
@@ -414,7 +414,7 @@ class PayrollService
             if ($this->isVerificationBlocked($batch)) {
                 return 'Waiting for verification. ' . self::NO_VERIFIER;
             }
-            if ($paid && $viewer && $batch->project && $viewer->roleOn($batch->project) === 'finance-admin') {
+            if ($paid && $viewer && $batch->project && $viewer->hasRoleOn($batch->project, 'finance-admin')) {
                 return 'Waiting for another Finance/Admin (includes your pay)';
             }
 
