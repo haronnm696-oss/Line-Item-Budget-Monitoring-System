@@ -4,7 +4,7 @@ import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
-import { parseOpen } from '../../lib/assistantStatus';
+import { canResubmit, parseOpen } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
@@ -112,6 +112,13 @@ export default function FinanceExpenses() {
                           <div className={`ra-next${row.receipts_count === 0 ? ' fin-blocked' : ''}`}>
                             {row.receipts_count === 0 ? '⚠ No receipt' : `${row.receipts_count} receipt${row.receipts_count === 1 ? '' : 's'}`}
                           </div>
+                          {canResubmit(row) && (
+                            <div className="fin-row-actions ra-row-resubmit">
+                              <button type="button" className="program-btn sm primary" disabled={actions.busyKey === `expense-${row.id}`} onClick={() => actions.resubmit(row)}>
+                                {actions.busyKey === `expense-${row.id}` ? 'Opening…' : 'Edit and resubmit'}
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

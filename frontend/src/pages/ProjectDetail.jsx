@@ -2,14 +2,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Chip, { statusTone } from '../components/Chip';
 import LoadState from '../components/LoadState';
 import UtilBar from '../components/UtilBar';
-import { peso } from '../components/money';
+import { formatPct, peso } from '../components/money';
 import { ENDPOINTS } from '../api/endpoints';
 import { useAuth } from '../context/AuthContext';
 import { canOpen } from '../routes/access';
 import { useApiData } from '../lib/useApiData';
 
 function sum(rows, key) { return rows.reduce((t, r) => t + (Number(r[key]) || 0), 0); }
-function pct(part, whole) { return whole > 0 ? ((part / whole) * 100).toFixed(1) : '0.0'; }
+function pct(part, whole) { return formatPct(whole > 0 ? (part / whole) * 100 : 0); }
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -70,21 +70,21 @@ function ProjectView({ data }) {
                 <td className="r num">{peso(psAllocated)}</td>
                 <td className="r num">{peso(psSpent)}</td>
                 <td className="r num">{peso(psAllocated - psSpent)}</td>
-                <td className="r num">{pct(psSpent, psAllocated)}%</td>
+                <td className="r num">{pct(psSpent, psAllocated)}</td>
               </tr>
               <tr>
                 <td className="mono-b">MOOE</td>
                 <td className="r num">{peso(mooeAllocated)}</td>
                 <td className="r num">{peso(mooeSpent)}</td>
                 <td className="r num">{peso(mooeAllocated - mooeSpent)}</td>
-                <td className="r num">{pct(mooeSpent, mooeAllocated)}%</td>
+                <td className="r num">{pct(mooeSpent, mooeAllocated)}</td>
               </tr>
               <tr style={{ background: 'color-mix(in srgb, var(--gold) 8%, transparent)' }}>
                 <td className="mono-b">Total</td>
                 <td className="r num mono-b">{peso(totalAllocated)}</td>
                 <td className="r num mono-b">{peso(totalSpent)}</td>
                 <td className="r num mono-b">{peso(totalAllocated - totalSpent)}</td>
-                <td className="r num mono-b">{pct(totalSpent, totalAllocated)}%</td>
+                <td className="r num mono-b">{pct(totalSpent, totalAllocated)}</td>
               </tr>
             </tbody>
           </table>

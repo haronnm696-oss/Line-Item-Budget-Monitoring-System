@@ -17,6 +17,7 @@ import StagePill from '../../components/assistant/StagePill';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
 import { peso } from '../../components/money';
 import { PayRatesCard } from '../../components/payroll/PayRates';
+import RatesLabelBanner from '../../components/payroll/RatesLabelBanner';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const RATES_NOT_SET = 'Deduction rates are not set yet. Ask your Program Leader or Finance/Admin.';
@@ -102,6 +103,8 @@ export default function AssistantPayroll() {
           </div>
         )}
       </div>
+
+      <RatesLabelBanner label={run?.rates_label} />
 
       {actions.feedback && (
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>

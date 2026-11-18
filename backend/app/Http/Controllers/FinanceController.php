@@ -62,7 +62,10 @@ class FinanceController extends Controller
     {
         $this->finance->requireFinance($project, $request->user());
 
-        return response()->json(['batches' => $this->finance->payrollBatches($project, $request->user())]);
+        return response()->json([
+            'batches' => $this->finance->payrollBatches($project, $request->user()),
+            'rates_label' => config('payroll.rates_label'),
+        ]);
     }
 
     /** POST /api/expenses/{expense}/request-receipt — Notify RA about a missing receipt. */

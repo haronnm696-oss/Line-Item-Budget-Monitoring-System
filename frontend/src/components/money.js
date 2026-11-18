@@ -11,9 +11,17 @@ export function compactPeso(amount) {
   return peso(n);
 }
 
-/** One decimal everywhere so 42.8% never drifts to 43%. */
+/**
+ * One decimal everywhere so 42.8% never drifts to 43%. A share above zero
+ * that would round to 0.0% shows "<0.1%", and one just under 100% that
+ * would round to 100.0% shows "99.9%+", so a small amount never reads as
+ * nothing (or everything).
+ */
 export function formatPct(value) {
-  return `${(Number(value) || 0).toFixed(1)}%`;
+  const n = Number(value) || 0;
+  if (n > 0 && n < 0.05) return '<0.1%';
+  if (n >= 99.95 && n < 100) return '99.9%+';
+  return `${n.toFixed(1)}%`;
 }
 
 /** Signed percentage, e.g. -38.8% or +4.2%. */

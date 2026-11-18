@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { peso } from '../components/money';
+import { formatPct, peso } from '../components/money';
+import { ratesLabel, ratesLabelHtml, withRatesLabelCsv } from '../lib/payrollRatesLabel';
 import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
@@ -188,6 +189,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   // The API does not return payroll rows for reports yet, so the payroll
   // register stays unavailable instead of showing sample data.
   const payrollSource = Array.isArray(detail?.payroll) ? detail.payroll : null;
+  // PAYROLL_RATES_LABEL: printed at the top of the Payroll register (PDF and CSV).
+  const payrollRatesLabel = ratesLabel(detail?.payroll_rates_label);
 
   function retryProjects() {
     setProjectsAttempt((value) => value + 1);
@@ -357,7 +360,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         'Allocated': r.allocated,
         'Spent': r.spent,
         'Remaining': r.remaining,
-        'Utilization %': r.util.toFixed(1),
+        'Utilization %': formatPct(r.util).replace('%', ''),
       }));
     } else if (type === 'ledger') {
       previewRows = buildLedgerRows();
@@ -386,7 +389,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }
 
     setPrintReport({ key: type, title: reportTitle });
-    setCsvReport({ key: type, title: reportTitle, content: toCSV(csvRows, csvHeaders), filename: `${type.toLowerCase().replace(/\s+/g, '-')}.csv` });
+    const csv = toCSV(csvRows, csvHeaders);
+    setCsvReport({ key: type, title: reportTitle, content: type === 'payroll-register' ? withRatesLabelCsv(csv, payrollRatesLabel) : csv, filename: `${type.toLowerCase().replace(/\s+/g, '-')}.csv` });
   }
 
   // ---------- Print-ready HTML ----------
@@ -413,7 +417,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                 <td class="r">${money(r.allocated)}</td>
                 <td class="r">${money(r.spent)}</td>
                 <td class="r">${money(r.remaining)}</td>
-                <td class="r">${(Number(r.util) || 0).toFixed(1)}%</td>
+                <td class="r">${formatPct(r.util)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -502,6 +506,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           td.r { text-align: right; }
           tr:nth-child(even) td { background: #FAF9F7; }
           .total-row { font-weight: 700; background: #E4E0D7 !important; }
+          .rates-label { border: 1px solid #9A6B10; background: #F8EFD8; color: #9A6B10; font-weight: 700; padding: 6px 10px; margin: 0 0 12px; }
           .footer { margin-top: 20px; font-size: 9px; color: #6E655E; border-top: 1px solid #CFC9BC; padding-top: 8px; }
         </style>
       </head>
@@ -515,6 +520,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           </div>
         </div>
 
+        ${key === 'payroll-register' ? ratesLabelHtml(payrollRatesLabel, escapeHtml) : ''}
         <div class="report-title">${escapeHtml(title)}</div>
         <div class="report-sub">${escapeHtml(subtitle)}</div>
 
@@ -650,7 +656,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                       if (typeof val === 'number' && (c.key.includes('allocated') || c.key.includes('spent') || c.key.includes('remaining') || c.key.includes('basic') || c.key.includes('gross') || c.key.includes('deductions') || c.key.includes('net') || c.key.includes('total') || c.key === 'ps' || c.key === 'mooe')) {
                         val = formatMoney(val);
                       }
-                      if (c.key === 'util') val = `${r.util.toFixed(1)}%`;
+                      if (c.key === 'util') val = formatPct(r.util);
                       return <td key={c.key} className={(c.key === 'amount' || c.key === 'allocated' || c.key === 'spent' || c.key === 'remaining' || c.key === 'basic' || c.key === 'gross' || c.key === 'deductions' || c.key === 'net' || c.key === 'total' || c.key === 'ps' || c.key === 'mooe' || c.key === 'util') ? 'r' : ''}>{val}</td>;
                     })}
                   </tr>
@@ -692,7 +698,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       filename = 'monthly-financial-summary.csv';
     }
     showToast(`Exporting ${r.title} to CSV…`, 'info');
-    downloadCSV(toCSV(rows, headers), filename);
+    const csv = toCSV(rows, headers);
+    downloadCSV(r.key === 'payroll-register' ? withRatesLabelCsv(csv, payrollRatesLabel) : csv, filename);
   }
 
   // Project / Period / Category selects, shared by both layouts.
@@ -753,8 +760,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     <>
       <StatCard label={`Total ${project?.funding_agency || listRow?.agency || 'Funder'} funding`} value={shown(formatMoney(selectedProject.funding_budget || 0))} sub={`${project?.funding_agency || listRow?.agency || 'External funder'} grant`} />
       <StatCard label="MSU–Main Campus counterpart" value={shown(formatMoney(selectedProject.counterpart_budget || 0))} sub="Implementing agency share" />
-      <StatCard label="Total spent" value={shown(formatMoney(totalSpent))} sub={project ? `${utilization.toFixed(1)}% of total budget` : 'Waiting for project data'} />
-      <StatCard label="Remaining Balance" value={shown(formatMoney(remaining))} sub={project ? `${(totalAlloc ? ((remaining / totalAlloc) * 100) : 0).toFixed(1)}% unspent` : 'Waiting for project data'} />
+      <StatCard label="Total spent" value={shown(formatMoney(totalSpent))} sub={project ? `${formatPct(utilization)} of total budget` : 'Waiting for project data'} />
+      <StatCard label="Remaining Balance" value={shown(formatMoney(remaining))} sub={project ? `${formatPct(totalAlloc ? (remaining / totalAlloc) * 100 : 0)} unspent` : 'Waiting for project data'} />
     </>
   );
 

@@ -250,6 +250,7 @@ Aiven console before you deploy.
 | `DOCUMENTS_DISK` | `database` | Documents are stored in `document_contents`, so they survive Render's ephemeral filesystem. |
 | `RUN_DEMO_ASSIGN` | `1` only for the release that needs it | Runs the idempotent `DemoProjectAssignmentsSeeder` on boot. |
 | `RUN_DOCUMENT_IMPORT` | `1` only for the release that needs it | Copies document files from the old disk into the database on boot (idempotent). |
+| `PAYROLL_RATES_LABEL` | Empty, unless the rates are not official | Optional warning, e.g. `Demo deduction rates, not official`. When set, every Payroll page shows it as a warning banner and the Payroll register PDF and CSV print it at the top. Set it whenever the `PAYROLL_*` rates are demo or test values; clear it (and redeploy) once the official rates are in. |
 | `PAYROLL_*` | **Official values only** | GSIS, PhilHealth, Pag-IBIG and `PAYROLL_WITHHOLDING_TAX_BRACKETS`, as provided by the MSU accounting office. See `backend/.env.example` for the format. |
 
 - **Never** copy the payroll test values from `backend/tests/Feature/PayrollTest.php`

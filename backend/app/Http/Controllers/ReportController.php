@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Percent;
 use App\Services\ProjectFinancialService;
 use App\Models\Project;
 use App\Services\DashboardService;
@@ -64,7 +65,7 @@ class ReportController extends Controller
                 $category['allocated'],
                 $category['spent'],
                 $category['remaining'],
-                $category['utilization_pct'],
+                \App\Support\Percent::label($category['utilization_pct'], ''),
             ];
         }
 
@@ -75,7 +76,7 @@ class ReportController extends Controller
             $summary['kpis']['total_budget'],
             $summary['kpis']['total_spent'],
             $summary['kpis']['remaining'],
-            $summary['kpis']['utilization_pct'],
+            \App\Support\Percent::label($summary['kpis']['utilization_pct'], ''),
         ];
 
         return $rows;
@@ -122,14 +123,14 @@ class ReportController extends Controller
         $ps = $this->bucket($summary['categories']['ps']);
         $mooe = $this->bucket($summary['categories']['mooe']);
         foreach ([['Personnel Services (PS)', $ps], ['MOOE', $mooe]] as [$label, $bucket]) {
-            $rows[] = [$label, $bucket['allocated'], $bucket['spent'], $bucket['remaining'], $bucket['utilization_pct']];
+            $rows[] = [$label, $bucket['allocated'], $bucket['spent'], $bucket['remaining'], \App\Support\Percent::label($bucket['utilization_pct'], '')];
         }
         $rows[] = [
             'GRAND TOTAL',
             $summary['kpis']['total_budget'],
             $summary['kpis']['total_spent'],
             $summary['kpis']['remaining'],
-            $summary['kpis']['utilization_pct'],
+            \App\Support\Percent::label($summary['kpis']['utilization_pct'], ''),
         ];
         $rows[] = [];
         $rows[] = ['RECEIPT COMPLIANCE'];
@@ -159,7 +160,7 @@ class ReportController extends Controller
                 $category['allocated'],
                 $category['spent'],
                 $category['remaining'],
-                $category['utilization_pct'],
+                \App\Support\Percent::label($category['utilization_pct'], ''),
             ];
         }
 
@@ -169,7 +170,7 @@ class ReportController extends Controller
             $summary['kpis']['total_budget'],
             $summary['kpis']['total_spent'],
             $summary['kpis']['remaining'],
-            $summary['kpis']['utilization_pct'],
+            \App\Support\Percent::label($summary['kpis']['utilization_pct'], ''),
         ];
 
         return $rows;
@@ -228,7 +229,7 @@ class ReportController extends Controller
             'allocated' => $allocated,
             'spent' => $spent,
             'remaining' => $allocated - $spent,
-            'utilization_pct' => $allocated > 0 ? round(($spent / $allocated) * 100, 1) : 0,
+            'utilization_pct' => \App\Support\Percent::of($spent, $allocated),
         ];
     }
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
 import { errorText } from '../../api/leader';
+import { fetchMyItem } from '../../api/assistant';
 import { useRoleBadges } from '../../layouts/roleBadges';
 import { peso } from '../money';
 import RecordExpenseDialog from '../leader/RecordExpenseDialog';
@@ -93,6 +94,26 @@ export function useRecordActions({ projectId, onChanged }) {
     setModal({ kind: 'edit', item });
   }
 
+  // "Edit and resubmit" from a list row: list rows carry no edit fields, so
+  // load the full record first (payroll opens its month instead).
+  async function resubmit(item) {
+    setFeedback(null);
+    if (item.type === 'payroll') {
+      edit(item);
+      return;
+    }
+    setBusyKey(item.key);
+    try {
+      const data = await fetchMyItem(projectId, item.type, item.id);
+      if (data?.item?.can_edit) setModal({ kind: 'edit', item: data.item });
+      else setFeedback({ tone: 'error', text: 'This record can no longer be edited.' });
+    } catch (error) {
+      setFeedback({ tone: 'error', text: errorText(error, 'Could not load this record. Please try again.') });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   const close = () => setModal(null);
   const done = (text) => { setModal(null); changed(text); };
   const busy = Boolean(modal && busyKey === modal.item.key);
@@ -150,6 +171,7 @@ export function useRecordActions({ projectId, onChanged }) {
     dialog,
     submit,
     edit,
+    resubmit,
     remove: (item) => { setFeedback(null); setModal({ kind: 'delete', item }); },
     cancel: (item) => { setFeedback(null); setModal({ kind: 'cancel', item }); },
     upload: (item, options = {}) => { setFeedback(null); setModal({ kind: 'upload', item, ...options }); },
