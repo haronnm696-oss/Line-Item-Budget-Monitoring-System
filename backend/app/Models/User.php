@@ -12,6 +12,29 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    /**
+     * Contact number: exactly 11 digits starting with 09 (PH mobile, e.g.
+     * 09171234567). Same rule and message as the frontend
+     * (lib/authValidation.js). "D": no trailing newline sneaks past "$".
+     */
+    public const CONTACT_NUMBER_REGEX = '/^09\d{9}$/D';
+    public const CONTACT_NUMBER_MESSAGE = 'Enter an 11-digit mobile number starting with 09';
+
+    /** Validation rules for a new or changed contact number. */
+    public static function contactNumberRules(bool $required = false): array
+    {
+        return [$required ? 'required' : 'nullable', 'string', 'regex:' . self::CONTACT_NUMBER_REGEX];
+    }
+
+    /** Messages for contactNumberRules(). */
+    public static function contactNumberMessages(): array
+    {
+        return [
+            'contact_number.string' => self::CONTACT_NUMBER_MESSAGE,
+            'contact_number.regex' => self::CONTACT_NUMBER_MESSAGE,
+        ];
+    }
+
     protected $fillable = [
         'name', 'first_name', 'last_name', 'email', 'password', 'employee_id', 'contact_number', 'college', 'department', 'role_id',
         'position', 'email_verified_at', 'is_active', 'registration_reviewed_by', 'registration_rejected_at',

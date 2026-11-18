@@ -7,10 +7,14 @@ import {
   isValidEmployeeId,
   isValidLoginEmail,
   isValidMsuEmail,
-  isValidPhMobile,
+  contactNumberCounter,
+  contactNumberError,
+  CONTACT_NUMBER_MESSAGE,
+  isValidContactNumber,
   isValidStudentEmail,
   mapRegisterFieldErrors,
-  normalizePhMobile,
+  pasteContactNumber,
+  sanitizeContactNumber,
   passwordRules,
 } from './authValidation.js';
 
@@ -40,15 +44,38 @@ test('login accepts Gmail and both MSU email domains', () => {
   assert.equal(isValidLoginEmail(''), false);
 });
 
-test('accepts both PH mobile formats and normalizes +63 to 09', () => {
-  assert.equal(isValidPhMobile('09171234567'), true);
-  assert.equal(isValidPhMobile('+639171234567'), true);
-  assert.equal(isValidPhMobile('+63 917 123 4567'), true);
-  assert.equal(isValidPhMobile('12345678901'), false);
-  assert.equal(normalizePhMobile('+63 917 123 4567'), '09171234567');
-  assert.equal(normalizePhMobile('+639171234567'), '09171234567');
-  assert.equal(normalizePhMobile('639171234567'), '09171234567');
-  assert.equal(normalizePhMobile('09171234567'), '09171234567');
+test('contact number: exactly 11 digits starting with 09', () => {
+  assert.equal(isValidContactNumber('09171234567'), true);
+  assert.equal(isValidContactNumber('0917123456'), false); // 10 digits
+  assert.equal(isValidContactNumber('091712345678'), false); // 12 digits
+  assert.equal(isValidContactNumber('0917123456a'), false); // letters
+  assert.equal(isValidContactNumber('19171234567'), false); // not 09
+  assert.equal(isValidContactNumber('08171234567'), false);
+  assert.equal(isValidContactNumber('+639171234567'), false);
+  assert.equal(isValidContactNumber(''), false);
+});
+
+test('the input keeps digits only and stops at 11', () => {
+  assert.equal(sanitizeContactNumber('0917-123-4567'), '09171234567'); // pasted
+  assert.equal(sanitizeContactNumber('0917 123 4567'), '09171234567');
+  assert.equal(sanitizeContactNumber('09a17b1234567'), '09171234567');
+  assert.equal(sanitizeContactNumber('0917123456789'), '09171234567');
+  assert.equal(sanitizeContactNumber('+63 917 123 4567'), '09171234567');
+  assert.equal(sanitizeContactNumber(''), '');
+  assert.equal(contactNumberCounter('0917123'), '7/11');
+  assert.equal(contactNumberCounter(''), '0/11');
+});
+
+test('contact number errors: optional stays optional, legacy kept only while unchanged', () => {
+  assert.equal(contactNumberError('09171234567'), '');
+  assert.equal(contactNumberError(''), '');
+  assert.equal(contactNumberError('', { required: true }), 'Enter your contact number.');
+  assert.equal(contactNumberError('0917123456'), CONTACT_NUMBER_MESSAGE);
+  assert.equal(CONTACT_NUMBER_MESSAGE, 'Enter an 11-digit mobile number starting with 09');
+  // Edit: an unchanged legacy number is allowed; a changed one must match.
+  assert.equal(contactNumberError('+63 917 123 4567', { original: '+63 917 123 4567' }), '');
+  assert.equal(contactNumberError('639171234', { original: '+63 917 123 4567' }), CONTACT_NUMBER_MESSAGE);
+  assert.equal(contactNumberError('09181234567', { original: '+63 917 123 4567' }), '');
 });
 
 test('requires employee IDs in MSU-##### format', () => {
@@ -90,7 +117,7 @@ test('maps duplicate server messages to clear field errors', () => {
   );
   assert.equal(
     friendlyRegisterError('contact_number', 'Any server text'),
-    'Enter a valid PH mobile number (09XXXXXXXXX or +639XXXXXXXXX).',
+    'Enter an 11-digit mobile number starting with 09',
   );
   assert.equal(
     friendlyRegisterError('email', 'The email field format is invalid.'),
@@ -108,4 +135,11 @@ test('maps the backend error bag to friendly per-field messages', () => {
     email: 'An account with this email already exists.',
     first_name: 'The first name field is required.',
   });
+});
+
+test('a pasted "0917-123-4567" becomes 09171234567 (before maxLength can cut it)', () => {
+  assert.equal(pasteContactNumber('', '0917-123-4567', 0, 0), '09171234567');
+  assert.equal(pasteContactNumber('0917', '-123-4567', 4, 4), '09171234567');
+  assert.equal(pasteContactNumber('09999999999', '0917-123-4567', 0, 11), '09171234567'); // replaces a selection
+  assert.equal(pasteContactNumber('', '+63 917 123 4567'), '09171234567');
 });

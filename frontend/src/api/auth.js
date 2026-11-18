@@ -5,7 +5,7 @@ import {
   isValidLoginEmail,
   isValidStudentEmail,
   mapRegisterFieldErrors,
-  normalizePhMobile,
+  sanitizeContactNumber,
 } from '../lib/authValidation';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
@@ -106,7 +106,7 @@ export async function register({ name: _name, email, password, first_name, last_
     throw new Error('Password must be at least 8 characters.');
   }
 
-  const cleanContact = contact_number ? normalizePhMobile(contact_number) : '';
+  const cleanContact = contact_number ? sanitizeContactNumber(contact_number) : '';
 
   if (USE_MOCK) {
     if (MOCK_USERS.find((u) => u.email === cleanEmail)) {

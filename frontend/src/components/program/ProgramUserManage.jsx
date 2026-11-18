@@ -4,6 +4,8 @@ import { ACCOUNT_ROLE_OPTIONS, PROJECT_ROLE_OPTIONS } from '../../lib/roles';
 import { rateText } from '../../lib/payRate';
 import { peso } from '../money';
 import { PayRateForm } from '../payroll/PayRates';
+import { contactNumberCounter, contactNumberError } from '../../lib/authValidation';
+import ContactNumberInput from '../ContactNumberInput';
 
 const MSU_EMAIL = /^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i;
 const MSU_EMPLOYEE_ID = /^MSU-\d{5}$/i;
@@ -166,6 +168,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
     position: user.position ?? '',
     email: user.email ?? '',
     employee_id: user.employee_id ?? '',
+    contact_number: user.contact_number ?? '',
   });
   const [local, setLocal] = useState({});
   const errors = { ...fieldErrors, ...local };
@@ -183,6 +186,9 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
     if (!email) next.email = 'Email is required.';
     else if (emailChanged && !MSU_EMAIL.test(email)) next.email = 'A new email must end with @msumain.edu.ph.';
     if (idChanged && !MSU_EMPLOYEE_ID.test(employeeId)) next.employee_id = 'A new employee ID must use the format MSU-00000.';
+    // Optional; an unchanged legacy number is kept, a new or changed one must match.
+    const contactError = contactNumberError(form.contact_number, { original: user.contact_number ?? '' });
+    if (contactError) next.contact_number = contactError;
     setLocal(next);
     if (Object.keys(next).length) return;
     onSave({
@@ -190,6 +196,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
       position: form.position.trim() || null,
       email: form.email.trim(),
       employee_id: form.employee_id.trim() || null,
+      contact_number: form.contact_number || null,
     });
   }
 
@@ -219,6 +226,22 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
         {field('position', 'Position / office', 'text', 'Optional')}
         {field('email', 'Email', 'email', 'A new email must end with @msumain.edu.ph. An unchanged email is kept as it is.')}
         {field('employee_id', 'Employee ID', 'text', 'A new employee ID must use the format MSU-00000. An unchanged ID is kept as it is.')}
+        <div className="program-field">
+          <label htmlFor="pu-edit-contact_number">Contact number (optional)</label>
+          <ContactNumberInput
+            id="pu-edit-contact_number"
+            className="program-input"
+            value={form.contact_number}
+            disabled={busy}
+            aria-invalid={Boolean(errors.contact_number) || undefined}
+            aria-describedby={errors.contact_number ? 'pu-edit-contact_number-error pu-edit-contact_number-count' : 'pu-edit-contact_number-count'}
+            onValueChange={(value) => setForm({ ...form, contact_number: value })}
+          />
+          <p className="pu-hint" id="pu-edit-contact_number-count">
+            {contactNumberCounter(form.contact_number)} · 11 digits starting with 09. An unchanged number is kept as it is.
+          </p>
+          <FieldError id="pu-edit-contact_number-error" message={errors.contact_number} />
+        </div>
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>

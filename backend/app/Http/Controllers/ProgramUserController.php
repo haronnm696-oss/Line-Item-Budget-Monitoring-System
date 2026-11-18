@@ -88,7 +88,7 @@ class ProgramUserController extends Controller
             'employee_id' => strtoupper(trim((string) $request->input('employee_id'))) ?: null,
             'name' => trim((string) $request->input('name')),
             'position' => trim((string) $request->input('position')) ?: null,
-        ]);
+        ] + ($request->has('contact_number') ? ['contact_number' => trim((string) $request->input('contact_number')) ?: null] : []));
 
         abort_if($user->role_id === null, 422, 'Pending registrations are reviewed above, not edited here.');
 
@@ -96,6 +96,9 @@ class ProgramUserController extends Controller
         // they are; the format rules apply only to a value that is changed.
         $emailChanged = $request->input('email') !== strtolower(trim((string) $user->email));
         $idChanged = $request->input('employee_id') !== (strtoupper(trim((string) $user->employee_id)) ?: null);
+        // Same for the contact number: a saved number that does not match is
+        // kept only while unchanged; a new or changed one must match.
+        $contactChanged = $request->input('contact_number') !== (trim((string) $user->contact_number) ?: null);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -108,7 +111,9 @@ class ProgramUserController extends Controller
                 [$idChanged ? 'required' : 'nullable', 'string', 'max:50', Rule::unique('users', 'employee_id')->ignore($user->id)],
                 $idChanged ? ['regex:/^MSU-\d{5}$/'] : []
             ),
-        ], [
+            // Optional; sent by the Edit details form (absent = left as it is).
+            'contact_number' => $contactChanged ? array_merge(['sometimes'], User::contactNumberRules()) : ['sometimes', 'nullable', 'string', 'max:50'],
+        ], User::contactNumberMessages() + [
             'email.unique' => 'Another account already uses this email.',
             'email.regex' => 'A new email must end with @msumain.edu.ph.',
             'employee_id.unique' => 'Another account already uses this employee ID.',
@@ -143,9 +148,9 @@ class ProgramUserController extends Controller
             'position' => ['required', 'string', 'max:255'],
             'college' => ['required', 'string', 'max:255'],
             'department' => ['required', 'string', 'max:255'],
-            'contact_number' => ['nullable', 'string', 'size:11', 'regex:/^09[0-9]{9}$/'],
+            'contact_number' => User::contactNumberRules(),
             'role' => ['required', 'string', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
-        ]);
+        ], User::contactNumberMessages());
 
         $user = $this->users->addUser($data, $request->user());
 
@@ -258,6 +263,7 @@ class ProgramUserController extends Controller
             'email' => $user->email,
             'employee_id' => $user->employee_id,
             'position' => $user->position,
+            'contact_number' => $user->contact_number,
             'role' => $slug ? (AuthController::SLUG_TO_CODE[$slug] ?? null) : null,
             'role_slug' => $slug,
             'role_label' => $user->primaryRole?->name,
