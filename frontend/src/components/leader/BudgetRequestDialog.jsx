@@ -19,7 +19,7 @@ const TYPES = [
  * (POST /api/projects/:id/budget-requests), or "Edit and resubmit" a
  * returned one (`request`, a row with `edit` values;
  * POST /api/budget-requests/:id/resubmit). Fund release picks an unreleased
- * tranche; realignment moves money between line items and may not exceed
+ * release ("Release 2"; API fields say tranche); realignment moves money between line items and may not exceed
  * the source's available amount (balancing query; the server checks too);
  * liquidation needs at least one document. Any type may carry supporting
  * documents (e.g. a work plan). On a resubmit the type stays, and the
@@ -61,7 +61,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
   function validate() {
     const next = {};
     if (!justification.trim()) next.justification = 'A justification is required.';
-    if (type === 'fund_release' && !trancheId) next.project_tranche_id = 'Choose the tranche to release.';
+    if (type === 'fund_release' && !trancheId) next.project_tranche_id = 'Choose the release to request.';
     if (type === 'realignment') {
       if (!fromId || !toId) next.from_lib_category_id = 'Choose both line items.';
       else if (fromId === toId) next.to_lib_category_id = 'The source and destination line items must be different.';
@@ -138,7 +138,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
         )}
         {optionsFailed && (
           <div className="program-banner error" role="alert">
-            Could not load the tranches or line items.{' '}
+            Could not load the releases or line items.{' '}
             <button type="button" className="program-btn sm" onClick={() => { tranches.retry(); balancing.retry(); }}>Try again</button>
           </div>
         )}
@@ -163,9 +163,9 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
 
         {type === 'fund_release' && (
           <div className="program-field">
-            <label htmlFor="ld-tranche">Tranche</label>
+            <label htmlFor="ld-tranche">Release</label>
             <select id="ld-tranche" className="program-select" value={trancheId} onChange={set('trancheId')} disabled={busy || loadingOptions}>
-              <option value="">{loadingOptions ? 'Loading…' : unreleased.length ? 'Choose a tranche' : 'Every tranche is released'}</option>
+              <option value="">{loadingOptions ? 'Loading…' : unreleased.length ? 'Choose a release' : 'All released'}</option>
               {unreleased.map((t) => (
                 <option key={t.id} value={t.id} disabled={pendingTranches.has(String(t.id))}>
                   {t.name} · {peso(t.amount)} · planned {formatDate(t.planned_release_date)}
@@ -232,7 +232,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
               {err('amount')}
             </div>
             <div className="program-field">
-              <label htmlFor="ld-liq-tranche">Tranche <span className="ld-muted">optional</span></label>
+              <label htmlFor="ld-liq-tranche">Release <span className="ld-muted">optional</span></label>
               <select id="ld-liq-tranche" className="program-select" value={trancheId} onChange={set('trancheId')} disabled={busy || loadingOptions}>
                 <option value="">None</option>
                 {(tranches.data?.items ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}

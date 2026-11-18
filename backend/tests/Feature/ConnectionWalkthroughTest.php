@@ -94,7 +94,7 @@ class ConnectionWalkthroughTest extends TestCase
 
         $audit = AuditTrail::count();
         $this->tranche = ProjectTranche::findOrFail($this->postJson("/api/program/projects/{$p}/tranches", ['amount' => 250000, 'planned_release_date' => '2026-12-01'])
-            ->assertCreated()->assertJsonPath('tranche.name', 'First tranche')->json('tranche.id'));
+            ->assertCreated()->assertJsonPath('tranche.name', 'Release 1')->json('tranche.id'));
         $this->assertAudit($audit, 'created');
 
         // The leader set at creation has the project at once.

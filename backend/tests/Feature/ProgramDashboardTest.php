@@ -94,7 +94,7 @@ class ProgramDashboardTest extends TestCase
 
         $rows = collect($response->json('projects'))->keyBy('code');
         $this->assertSame('At risk', $rows['MOST-RD-2026-001']['health']);
-        $this->assertSame('Tranche release overdue', $rows['MOST-RD-2026-001']['health_reason']);
+        $this->assertSame('Release overdue', $rows['MOST-RD-2026-001']['health_reason']);
         $this->assertSame('Healthy', $rows['RP-2026-009']['health']);
         $this->assertSame(1, $response->json('kpis.health.at_risk'));
         $this->assertSame(1, $response->json('kpis.health.healthy'));

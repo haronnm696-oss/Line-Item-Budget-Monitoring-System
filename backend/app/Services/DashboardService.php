@@ -210,7 +210,8 @@ class DashboardService
         $project->loadMissing('tranches');
         $today = now()->startOfDay();
 
-        $items = $project->tranches
+        // Listed by planned date; each keeps its stored number.
+        $items = ProjectTranche::sortByPlannedDate($project->tranches)
             ->map(function (ProjectTranche $tranche) use ($today) {
                 $displayStatus = $tranche->status;
                 if ($tranche->status !== 'released'
@@ -222,7 +223,10 @@ class DashboardService
                 return [
                     'id' => $tranche->id,
                     'sequence' => $tranche->sequence,
-                    'name' => $tranche->name,
+                    'release_number' => $tranche->release_number,
+                    // "Release 2", what users read; the stored name only adds a milestone.
+                    'name' => $tranche->releaseLabel(),
+                    'milestone' => $tranche->releaseMilestone(),
                     'amount' => (float) $tranche->amount,
                     'percentage' => $tranche->percentage !== null ? (float) $tranche->percentage : null,
                     'status' => $tranche->status,
@@ -353,10 +357,10 @@ class DashboardService
             'id' => $approval->id,
             'project_id' => $approval->project_id,
             'project_tranche_id' => $approval->project_tranche_id,
-            'tranche_name' => $approval->tranche?->name,
+            'tranche_name' => $approval->tranche?->releaseLabel(),
             'type' => $approval->type,
             'type_label' => $approval->typeLabel(),
-            'title' => $approval->title,
+            'title' => $approval->displayTitle(),
             'description' => $approval->description,
             'amount' => $approval->amount !== null ? (float) $approval->amount : null,
             'status' => $approval->status,

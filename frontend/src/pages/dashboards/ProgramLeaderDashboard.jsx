@@ -134,7 +134,7 @@ export default function ProgramLeaderDashboard() {
   const fundingSources = Array.isArray(data?.funding_sources) ? data.funding_sources : [];
 
   // Spent = verified expenses (same rule as the Projects page).
-  // Released = released tranches. Remaining = budget - spent.
+  // Released = funds of released releases (tranches in the API). Remaining = budget - spent.
   const budget = Number(kpis.portfolio_budget) || 0;
   const spent = Number(kpis.total_spent ?? kpis.total_disbursed) || 0;
   const utilization = Number(kpis.utilization_pct) || 0;
@@ -467,7 +467,7 @@ export default function ProgramLeaderDashboard() {
             <div className="program-card-head">
               <div>
                 <div className="program-card-title">Project health matrix</div>
-                <div className="program-card-sub">Spending, tranche, receipts and overall health</div>
+                <div className="program-card-sub">Spending, releases, receipts and overall health</div>
               </div>
             </div>
 
@@ -476,7 +476,7 @@ export default function ProgramLeaderDashboard() {
                 <thead>
                   <tr>
                     <th>Project</th>
-                    <th>Tranche</th>
+                    <th>Releases</th>
                     <th>Receipts</th>
                     <th>Health</th>
                   </tr>

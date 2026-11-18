@@ -473,6 +473,38 @@ class ProgramAuditTest extends TestCase
         $this->actingAs($researcher)->getJson('/api/program/audit')->assertForbidden();
     }
 
+    public function test_old_entries_read_the_release_by_its_stored_number(): void
+    {
+        // As the backfill numbered them: by planned date, not by the old names.
+        [$late, $early] = AuditLogger::muted(fn () => [
+            ProjectTranche::create([
+                'project_id' => $this->project->id, 'sequence' => 1, 'release_number' => 2, 'name' => 'First tranche',
+                'amount' => 100000, 'status' => 'upcoming', 'planned_release_date' => '2027-03-01',
+            ]),
+            ProjectTranche::create([
+                'project_id' => $this->project->id, 'sequence' => 2, 'release_number' => 1, 'name' => 'Second tranche',
+                'amount' => 50000, 'status' => 'upcoming', 'planned_release_date' => '2026-12-01',
+            ]),
+        ]);
+        // Entries written before the wording change, with the old title and name.
+        $approval = AuditLogger::muted(fn () => tap($this->approval('disbursement', 'Fund release: Second tranche'))
+            ->update(['project_tranche_id' => $early->id]));
+        AuditLogger::write('created', $approval, [], $approval->only(['title', 'project_tranche_id', 'amount']), $this->leader);
+        AuditLogger::write('created', $late, [], ['name' => 'First tranche', 'sequence' => 1, 'amount' => 100000], $this->leader);
+
+        $rows = collect($this->feed()['entries']);
+        $release = $rows->firstWhere('record.type', 'Release · Upcoming');
+        $request = $rows->firstWhere('record.type', 'Approval request · Fund release');
+
+        $this->assertSame('Release 2', $release['record']['label']);
+        $this->assertSame('Release 1', $request['record']['label']);
+        $changes = collect($request['changes'])->keyBy('label');
+        $this->assertSame('Release 1', $changes['Release']['new']);
+        // "Second tranche" in the old title is the release it names: Release 1.
+        $this->assertSame('Fund release: Release 1', $changes['Title']['new']);
+        $this->assertStringNotContainsStringIgnoringCase('tranche', json_encode($rows->all()));
+    }
+
     // -------------------------------------------------------------- helpers
 
     private function feed(array $query = []): array

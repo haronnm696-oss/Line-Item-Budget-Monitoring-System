@@ -158,6 +158,9 @@ return [
     |
     */
 
-    'attributes' => [],
+    'attributes' => [
+        // Users read "release"; the field keeps its data-model name.
+        'project_tranche_id' => 'release',
+    ],
 
 ];

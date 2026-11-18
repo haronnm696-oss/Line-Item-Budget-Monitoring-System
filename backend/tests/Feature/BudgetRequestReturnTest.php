@@ -220,13 +220,13 @@ class BudgetRequestReturnTest extends TestCase
         $this->actingAs($this->projectLeader)
             ->postJson("/api/budget-requests/{$old}/resubmit", ['project_tranche_id' => $this->tranche->id, 'justification' => 'Again.'])
             ->assertStatus(422)
-            ->assertJsonPath('errors.project_tranche_id.0', 'A fund release request for this tranche is already pending.');
+            ->assertJsonPath('errors.project_tranche_id.0', 'This release already has a pending fund release request.');
 
         $this->actingAs($this->programLeader)->postJson($this->decisionUrl($new), ['decision' => 'approved'])->assertOk();
         $this->actingAs($this->projectLeader)
             ->postJson("/api/budget-requests/{$old}/resubmit", ['project_tranche_id' => $this->tranche->id, 'justification' => 'Again.'])
             ->assertStatus(422)
-            ->assertJsonPath('errors.project_tranche_id.0', 'This tranche has already been released.');
+            ->assertJsonPath('errors.project_tranche_id.0', 'The funds for this release have already been released.');
     }
 
     public function test_a_legacy_rejected_row_shows_as_returned_and_can_be_resubmitted(): void

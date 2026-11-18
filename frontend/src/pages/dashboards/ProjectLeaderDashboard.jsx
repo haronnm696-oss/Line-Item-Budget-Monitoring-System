@@ -221,7 +221,7 @@ function BudgetAlerts({ alerts, projectQuery }) {
   const burn = alerts.burn_rate;
   const [tone, icon] = BURN_PILL[burn.tone] ?? BURN_PILL.neutral;
   const next = alerts.next_tranche;
-  // With zero tranches, "no next tranche" must not read as "all released".
+  // With zero releases, "no next release" must not read as "all released".
   const noTranches = Number(alerts.tranche_count) === 0;
   const missing = alerts.missing_receipts;
 
@@ -230,7 +230,7 @@ function BudgetAlerts({ alerts, projectQuery }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Budget alerts</div>
-          <div className="program-card-sub">Spending, tranches and receipts</div>
+          <div className="program-card-sub">Spending, releases and receipts</div>
         </div>
       </div>
 
@@ -249,8 +249,8 @@ function BudgetAlerts({ alerts, projectQuery }) {
       </AlertRow>
 
       <AlertRow
-        title="Next tranche"
-        pill={noTranches ? <ProgramPill value="Not set" label="No tranches set yet" tone="neutral" icon="•" />
+        title="Next release"
+        pill={noTranches ? <ProgramPill value="Not set" label="No releases set yet" tone="neutral" icon="•" />
           : !next ? <ProgramPill value="All released" tone="healthy" icon="✓" />
           : next.display_status === 'overdue' ? <ProgramPill value="Overdue" />
           : next.requested ? <ProgramPill value="Pending" label="Release requested" />
@@ -264,7 +264,7 @@ function BudgetAlerts({ alerts, projectQuery }) {
             )}
           </p>
         ) : (
-          <p className="ld-muted">{noTranches ? 'No tranches set yet. The Program Leader schedules them on the project page.' : 'Every tranche of this project is released.'}</p>
+          <p className="ld-muted">{noTranches ? 'No releases set yet. The Program Leader schedules them on the project page.' : 'All released. Every release of this project has been paid out.'}</p>
         )}
       </AlertRow>
 
@@ -339,8 +339,8 @@ function RequestSummary({ requests, nextTranche, projectQuery }) {
           {showTranche && (
             <li>
               <div>
-                <b>Fund release: {nextTranche.name}</b>
-                <span>{peso(nextTranche.amount)} · planned {formatDate(nextTranche.planned_release_date)}</span>
+                <b>{nextTranche.name}</b>
+                <span><ProgramPill value="Fund release" /> {peso(nextTranche.amount)} · planned {formatDate(nextTranche.planned_release_date)}</span>
               </div>
               <div className="ld-mini-side">
                 <ProgramPill value="Not yet requested" />
@@ -355,6 +355,8 @@ function RequestSummary({ requests, nextTranche, projectQuery }) {
               <div>
                 <b>{request.title}</b>
                 <span>
+                  {/* The type badge names the kind; a fund release title is only "Release 2". */}
+                  <ProgramPill value={request.type_label} />{' '}
                   {request.amount != null ? `${peso(request.amount)} · ` : ''}
                   {request.status === 'pending'
                     ? `sent ${formatDate(request.created_at)}`

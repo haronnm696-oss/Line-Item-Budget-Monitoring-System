@@ -11,7 +11,7 @@ export default function ReleaseForecast({ forecast }) {
   return (
     <Panel
       title="Release forecast"
-      hint="Scheduled tranches · next four months"
+      hint="Scheduled releases · next four months"
       action={<Chip tone="neutral">{compactPeso(total)}</Chip>}
       style={{ height: '100%' }}
     >
@@ -65,7 +65,7 @@ export default function ReleaseForecast({ forecast }) {
             </div>
           )}
           <div className="pd-forecast-foot">
-            <span>Overdue tranches are counted in the current month.</span>
+            <span>Overdue releases are counted in the current month.</span>
             <b>{peso(total)}</b>
           </div>
         </>

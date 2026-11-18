@@ -24,7 +24,7 @@ const FEATURES = [
   {
     icon: 'flag',
     title: 'Fund releases',
-    text: 'Follow each tranche from its target date to release, with clear overdue alerts.',
+    text: 'Follow each release from its target date to payout, with clear overdue alerts.',
   },
   {
     icon: 'shield',

@@ -59,11 +59,11 @@ class ApprovalDetailTest extends TestCase
         $detail = $this->detail($id);
         $this->assertSame('fund_release', $detail['details']['kind']);
         $this->assertSame(
-            ['Second tranche', 250000.0, '2026-12-01'],
+            ['Release 2', 250000.0, '2026-12-01'],
             [$detail['details']['tranche']['name'], (float) $detail['details']['tranche']['amount'], $detail['details']['tranche']['planned_release_date']]
         );
         $this->assertEquals(300000, $detail['details']['released']['total']);
-        $this->assertSame(['First tranche'], array_column($detail['details']['released']['tranches'], 'name'));
+        $this->assertSame(['Release 1'], array_column($detail['details']['released']['tranches'], 'name'));
         $this->assertEquals(['budget' => 1000000, 'spent' => 4000, 'remaining' => 996000], $detail['details']['budget']);
 
         $this->assertCount(1, $detail['documents']);
@@ -130,7 +130,7 @@ class ApprovalDetailTest extends TestCase
         $detail = $this->detail($id);
         $details = $detail['details'];
         $this->assertSame('liquidation', $details['kind']);
-        $this->assertSame('First tranche', $details['tranche']['name']);
+        $this->assertSame('Release 1', $details['tranche']['name']);
         $this->assertEquals(300000, $details['released_amount']);
         $this->assertSame(['from' => '2026-01-01', 'to' => '2026-05-31', 'starts' => 'project_start'], $details['period']);
         $this->assertSame([$early->id, $in->id, $in2->id], array_column($details['expenses'], 'id'));

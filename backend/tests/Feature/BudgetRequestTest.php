@@ -59,7 +59,7 @@ class BudgetRequestTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('budget_request.status', 'pending')
             ->assertJsonPath('budget_request.type', 'fund_release')
-            ->assertJsonPath('budget_request.title', 'Fund release: Second tranche')
+            ->assertJsonPath('budget_request.title', 'Release 1')
             ->assertJsonPath('budget_request.amount', 250000)
             ->json('budget_request.id');
 
@@ -83,7 +83,7 @@ class BudgetRequestTest extends TestCase
         $this->actingAs($this->projectLeader)
             ->postJson("/api/projects/{$this->project->id}/budget-requests", ['type' => 'fund_release', 'project_tranche_id' => $this->tranche->id, 'justification' => 'Again.'])
             ->assertStatus(422)
-            ->assertJsonPath('errors.project_tranche_id.0', 'A fund release request for this tranche is already pending.');
+            ->assertJsonPath('errors.project_tranche_id.0', 'This release already has a pending fund release request.');
     }
 
     public function test_realignment_is_limited_to_what_the_source_line_has_available(): void

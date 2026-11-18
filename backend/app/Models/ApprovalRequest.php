@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Contracts\HasDocuments;
+use App\Support\ReleaseWording;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -67,6 +68,31 @@ class ApprovalRequest extends Model implements HasDocuments
     public function tranche(): BelongsTo
     {
         return $this->belongsTo(ProjectTranche::class, 'project_tranche_id');
+    }
+
+    /**
+     * The title users read. A fund release is named by its release
+     * ("Release 2", its stored number; the "Fund release" type badge sits
+     * beside it), whatever title was stored ("Fund release: Second tranche"
+     * on older rows). A liquidation reads its liquidation's title. Other
+     * text goes through ReleaseWording, which gives an old number reference
+     * the linked release's stored number.
+     */
+    public function displayTitle(): string
+    {
+        $release = $this->project_tranche_id ? $this->tranche : null;
+        if ($this->type === 'disbursement' && $release) {
+            return $release->releaseLabel();
+        }
+        if ($this->type === 'liquidation' && $this->liquidation_id && $this->liquidation?->title) {
+            return (string) ReleaseWording::apply($this->liquidation->title, $release ?? $this->liquidation->tranche);
+        }
+        $title = (string) ReleaseWording::apply((string) $this->title, $release);
+        if ($this->type === 'disbursement') {
+            $title = preg_replace('/^Fund release:\s*/i', '', $title) ?: $title;
+        }
+
+        return $title;
     }
 
     public function liquidation(): BelongsTo

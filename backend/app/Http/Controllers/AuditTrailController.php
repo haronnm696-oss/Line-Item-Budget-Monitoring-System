@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditTrail;
 use App\Models\Project;
+use App\Models\ProjectTranche;
+use App\Support\ReleaseWording;
 use Illuminate\Http\Request;
 
 /**
@@ -126,15 +128,21 @@ class AuditTrailController extends Controller
         } elseif ($type === 'Expense') {
             $label = 'Expense: ' . ($new['description'] ?? 'Expense');
         } elseif ($type === 'ProjectTranche') {
-            $label = 'Tranche: ' . ($new['name'] ?? 'Tranche');
+            // Users read "Release N" (its stored number), not the stored name.
+            $label = ProjectTranche::find($entry->model_id)?->releaseLabel() ?? 'Deleted release';
         } elseif ($type === 'User') {
             $label = $new['name'] ?? $old['name'] ?? 'User';
         } elseif ($type === 'Project') {
             $label = $new['title'] ?? $old['title'] ?? 'Project';
         }
 
-        return $type . ' #' . $entry->model_id
-            . ($label ? ' — ' . $label : '');
+        $noun = $type === 'ProjectTranche' ? 'Release' : $type;
+        // Old titles name a release by an old number; show its stored one.
+        $trancheId = $new['project_tranche_id'] ?? $old['project_tranche_id'] ?? null;
+        $release = is_numeric($trancheId) ? ProjectTranche::find((int) $trancheId) : null;
+
+        return $noun . ' #' . $entry->model_id
+            . ($label ? ' — ' . ReleaseWording::apply($label, $release) : '');
     }
 
     private function projectLabel(AuditTrail $entry, array $old, array $new): ?string

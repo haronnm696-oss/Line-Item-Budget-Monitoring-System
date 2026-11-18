@@ -12,6 +12,7 @@ use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\ProjectReport;
 use App\Models\ProjectTranche;
+use App\Support\ReleaseWording;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -496,9 +497,7 @@ class ProgramDashboardService
             'kind' => $kind,
             'type' => $approval->type,
             'type_label' => $approval->typeLabel(),
-            'title' => $approval->type === 'liquidation'
-                ? ($approval->liquidation?->title ?? $approval->title)
-                : $approval->title,
+            'title' => $approval->displayTitle(),
             'description' => $approval->description,
             'project_id' => $approval->project_id,
             'project' => $approval->project?->title,
@@ -913,7 +912,7 @@ class ProgramDashboardService
         }
 
         if ($overdue) {
-            return ['At risk', 'Tranche release overdue'];
+            return ['At risk', 'Release overdue'];
         }
 
         if ($spentPct >= 95) {
@@ -964,9 +963,7 @@ class ProgramDashboardService
                     'kind' => $kind,
                     'type' => $approval->type,
                     'type_label' => $approval->typeLabel(),
-                    'title' => $approval->type === 'liquidation'
-                        ? ($approval->liquidation?->title ?? $approval->title)
-                        : $approval->title,
+                    'title' => $approval->displayTitle(),
                     'description' => $approval->description,
                     'project_id' => $approval->project_id,
                     'project' => $project['title'] ?? 'Unknown project',
@@ -1013,7 +1010,7 @@ class ProgramDashboardService
                     $totals[$key] += (float) $tranche->amount;
                     $releases[$key][] = [
                         'id' => $tranche->id,
-                        'name' => $tranche->name,
+                        'name' => $tranche->releaseLabel(),
                         'project' => $project->title,
                         'project_code' => $project->code,
                         'amount' => round((float) $tranche->amount, 2),
@@ -1107,7 +1104,7 @@ class ProgramDashboardService
                 }
                 $items->push($this->deadline(
                     'liquidation',
-                    $liquidation->title,
+                    ReleaseWording::apply($liquidation->title, $project->tranches->firstWhere('id', $liquidation->project_tranche_id)),
                     $project->title,
                     $liquidation->due_date,
                     $today
@@ -1120,7 +1117,7 @@ class ProgramDashboardService
                 }
                 $items->push($this->deadline(
                     'tranche',
-                    $tranche->name,
+                    $tranche->releaseLabel(),
                     $project->title,
                     $tranche->planned_release_date,
                     $today
@@ -1379,8 +1376,7 @@ class ProgramDashboardService
      */
     protected function trancheRows(Project $project, Carbon $today): array
     {
-        return $project->tranches
-            ->sortBy('sequence')
+        return ProjectTranche::sortByPlannedDate($project->tranches)
             ->map(function (ProjectTranche $tranche) use ($project, $today) {
                 $released = $tranche->status === 'released';
                 $overdue = ! $released
@@ -1394,7 +1390,9 @@ class ProgramDashboardService
                 return [
                     'id' => $tranche->id,
                     'sequence' => $tranche->sequence,
-                    'name' => $tranche->name,
+                    // "Release 2" (its stored number); the stored name only adds a milestone.
+                    'name' => $tranche->releaseLabel(),
+                    'milestone' => $tranche->releaseMilestone(),
                     'planned_release_date' => $tranche->planned_release_date?->toDateString(),
                     'released_at' => $tranche->released_at?->toDateString(),
                     'amount' => round((float) $tranche->amount, 2),

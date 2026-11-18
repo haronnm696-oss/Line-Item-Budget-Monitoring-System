@@ -322,12 +322,13 @@ class ProjectLeaderService
     }
 
     /**
-     * The first unreleased tranche (by sequence), with whether a fund release
+     * The first unreleased release (by planned date), with whether a fund release
      * for it is already pending.
      */
     private function nextTranche(array $tranches, Collection $requests): ?array
     {
-        $next = collect($tranches)->where('is_released', false)->sortBy('sequence')->first();
+        // Rows are in planned-date order (DashboardService::trancheRows).
+        $next = collect($tranches)->where('is_released', false)->first();
         if (! $next) {
             return null;
         }
@@ -341,14 +342,14 @@ class ProjectLeaderService
     {
         return $project->approvalRequests()
             ->whereIn('type', array_values(BudgetRequestService::TYPES))
-            ->with(['reviewedBy'])
+            ->with(['reviewedBy', 'tranche'])
             ->orderByDesc('id')
             ->get()
             ->map(fn (ApprovalRequest $approval) => [
                 'id' => $approval->id,
                 'type' => array_search($approval->type, BudgetRequestService::TYPES, true) ?: $approval->type,
                 'type_label' => $approval->typeLabel(),
-                'title' => $approval->title,
+                'title' => $approval->displayTitle(),
                 'amount' => $approval->amount !== null ? (float) $approval->amount : null,
                 'project_tranche_id' => $approval->project_tranche_id,
                 // pending | approved | returned | withdrawn

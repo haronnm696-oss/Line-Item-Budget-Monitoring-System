@@ -397,7 +397,7 @@ export default function ProgramProjects() {
         <ProjectFormDialog
           mode="create"
           onClose={() => setCreating(false)}
-          // Straight to the new project's page to set up its line items and tranches.
+          // Straight to the new project's page to set up its line items and releases.
           onSaved={(_, data) => navigate(`/program-projects/${data.project.id}`, { state: detailState })}
         />
       )}
