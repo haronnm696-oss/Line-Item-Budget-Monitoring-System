@@ -169,6 +169,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::get('/users/pending', [UserApprovalController::class, 'index']);
     Route::patch('/users/{user}/approve', [UserApprovalController::class, 'approve']);
 
+    Route::get('/projects/{project}/payroll-register', [ReportController::class, 'payrollRegister']);
     Route::get('/projects/{project}/reports/{type}', [ReportController::class, 'export']);
 
     // Program-wide dashboard: all projects visible to a Program Leader.

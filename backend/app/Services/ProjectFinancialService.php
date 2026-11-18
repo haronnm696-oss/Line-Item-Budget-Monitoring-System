@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Percent;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Project;
@@ -352,6 +353,6 @@ class ProjectFinancialService
 
     protected function pct(float $part, float $whole): float
     {
-        return $whole > 0 ? round(($part / $whole) * 100, 1) : 0.0;
+        return Percent::of($part, $whole);
     }
 }

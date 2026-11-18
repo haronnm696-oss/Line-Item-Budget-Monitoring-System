@@ -293,13 +293,14 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
               {groupLineItems(lineItems).map((group) => (
                 <optgroup key={group.type} label={group.type}>
                   {group.items.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name} — {peso(lineItemAvailable(item))} available</option>
+                    <option key={item.id} value={item.id}>
+                      {item.name} — {peso(item === chosen ? available : lineItemAvailable(item))} available{item === chosen && heldForThis > 0 ? ' (incl. amount held for the request)' : ''}
+                    </option>
                   ))}
                 </optgroup>
               ))}
             </select>
             {chosen?.type === 'PS' && <div className="ld-hint" role="note">{PS_NOTE}</div>}
-            {chosen && <div className="ld-hint">{peso(available)} available on this line item{heldForThis > 0 ? ' (including the amount held for the purchase request)' : ''}.</div>}
             {chosen && Number(form.amount) > available && (
               <div className="ld-hint is-risk" role="status">⚠ More than the {peso(available)} available on this line item.</div>
             )}

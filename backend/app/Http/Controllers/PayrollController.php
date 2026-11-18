@@ -139,6 +139,8 @@ class PayrollController extends Controller
             ],
             // Deduction rules whose rates are not set yet (config/payroll.php).
             'unset_rules' => $this->calculator->unsetRules(),
+            // PAYROLL_RATES_LABEL (e.g. demo rates): shown as a warning when set.
+            'rates_label' => config('payroll.rates_label'),
             'rated_members' => $this->payroll->ratedMembers($project)->count(),
             // Assigned people left out (no rate, or 0.00): named, never computed as 0.00.
             'unrated_members' => $this->payroll->unratedMembers($project),

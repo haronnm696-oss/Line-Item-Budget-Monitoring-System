@@ -97,6 +97,13 @@ $percent = fn (string $type, string $prefix) => [
 ];
 
 return [
+    /*
+    | Optional warning shown on every Payroll page and printed at the top of
+    | the Payroll register (PDF and CSV), e.g. "Demo deduction rates, not
+    | official". Empty (the default) shows nothing.
+    */
+    'rates_label' => trim((string) env('PAYROLL_RATES_LABEL', '')) ?: null,
+
     'deductions' => [
         $percent('GSIS', 'GSIS'),
         $percent('PhilHealth', 'PHILHEALTH'),

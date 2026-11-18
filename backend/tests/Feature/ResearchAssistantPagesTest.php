@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Support\Percent;
 use App\Http\Controllers\DocumentController;
 use App\Models\AuditTrail;
 use App\Models\Expense;
@@ -124,6 +125,91 @@ class ResearchAssistantPagesTest extends TestCase
         $this->resubmitWithNewReceipt($id);
         $this->assertSame('submitted', Expense::find($id)->workflow_status);
         $this->assertSame(1, Expense::find($id)->receipts()->count());
+    }
+
+    public function test_edit_and_resubmit_is_offered_on_returned_rows_for_the_maker_only(): void
+    {
+        $expenseId = $this->recordAndSubmit();
+        $requestId = $this->purchaseRequestSubmitted();
+        $batch = $this->submittedBatch();
+        $this->actingAs($this->projectLeader)->postJson("/api/expenses/{$expenseId}/return", ['reason' => 'Receipt is unclear.'])->assertOk();
+        $this->postJson("/api/purchase-requests/{$requestId}/return", ['reason' => 'Attach a second quotation.'])->assertOk();
+        $this->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Check the allowance.'])->assertOk();
+
+        // The maker's Returned tab (the list rows the button reads) flags every one as editable.
+        $rows = collect($this->actingAs($this->assistant)->getJson($this->url('my-submissions?tab=returned'))->assertOk()->json('items'));
+        $this->assertEqualsCanonicalizing(['expense', 'purchase_request', 'payroll'], $rows->pluck('type')->all());
+        foreach ($rows as $row) {
+            $this->assertSame('returned', $row['workflow_status'], $row['key']);
+            $this->assertTrue($row['can_edit'], $row['key']);
+        }
+        // Expenses and receipts (status Returned) uses the same rows.
+        $expenses = $this->getJson($this->url('my-submissions?tab=returned&type=expense'))->assertOk()->json('items');
+        $this->assertCount(1, $expenses);
+        $this->assertTrue($expenses[0]['can_edit']);
+
+        // Another Research Assistant of the project: no row, and the record is not editable.
+        $other = $this->member('research-assistant');
+        $this->assertSame([], $this->actingAs($other)->getJson($this->url('my-submissions?tab=returned'))->assertOk()->json('items'));
+        foreach (['expense' => $expenseId, 'purchase_request' => $requestId, 'payroll' => $batch->id] as $type => $id) {
+            $this->getJson($this->url("my-submissions/{$type}/{$id}"))->assertOk()
+                ->assertJsonPath('item.can_edit', false)
+                ->assertJsonPath('item.edit', null);
+        }
+    }
+
+    public function test_the_finance_expense_list_offers_resubmit_to_the_recorder_only(): void
+    {
+        $mine = $this->expenseIn('returned', $this->finance, true, ['return_reason' => 'Wrong OR number.']);
+        $theirs = $this->expenseIn('returned', null, true, ['return_reason' => 'Blurred.']);
+        $submitted = $this->expenseIn('submitted', $this->finance);
+
+        $rows = collect($this->actingAs($this->finance)->getJson($this->url('expenses'))->assertOk()->json('expenses'))->keyBy('id');
+        $this->assertTrue($rows[$mine->id]['can_resubmit']);
+        $this->assertFalse($rows[$theirs->id]['can_resubmit']);
+        $this->assertFalse($rows[$submitted->id]['can_resubmit']);
+
+        $this->actingAs($this->projectLeader)->getJson($this->url('expenses'))->assertOk()
+            ->assertJsonMissing(['can_resubmit' => true]);
+    }
+
+    public function test_the_payroll_rates_label_is_sent_only_when_set(): void
+    {
+        $this->submittedBatch();
+        $urls = [
+            [$this->assistant, $this->url('payroll?month=2026-11'), 'rates_label'],
+            [$this->finance, $this->url('payroll-batches'), 'rates_label'],
+            [$this->finance, $this->url(), 'payroll_rates_label'], // Reports: Payroll register
+        ];
+
+        config(['payroll.rates_label' => null]);
+        foreach ($urls as [$user, $url, $key]) {
+            $this->assertNull($this->actingAs($user)->getJson($url)->assertOk()->json($key), $url);
+        }
+
+        config(['payroll.rates_label' => 'Demo deduction rates, not official']);
+        foreach ($urls as [$user, $url, $key]) {
+            $this->actingAs($user)->getJson($url)->assertOk()->assertJsonPath($key, 'Demo deduction rates, not official');
+        }
+    }
+
+    public function test_dashboards_keep_a_tiny_spent_share_above_zero(): void
+    {
+        // ₱300 verified of the project budget: rounds to 0.0%, must not read as nothing.
+        $this->expenseIn('verified', null, true, ['amount' => 300]);
+
+        $kpis = $this->actingAs($this->assistant)->getJson($this->url())->assertOk()->json('kpis');
+        $this->assertGreaterThan(0, $kpis['utilization_pct']);
+        $this->assertLessThan(0.05, $kpis['utilization_pct']);
+
+        // The CSV keeps the plain number (spreadsheets sum and sort it), never "<0.1".
+        $csv = $this->actingAs($this->projectLeader)->get($this->url('reports/utilization'))->assertOk()->getContent();
+        $total = collect(preg_split('/
+/', ltrim($csv, "ï»¿")))->first(fn ($line) => str_starts_with($line, 'GRAND TOTAL'));
+        $cell = str_getcsv($total)[5];
+        $this->assertIsNumeric($cell);
+        $this->assertEqualsWithDelta($kpis['utilization_pct'], (float) $cell, 1e-6);
+        $this->assertStringNotContainsString('<', $csv);
     }
 
     public function test_edit_and_resubmit_after_a_finance_rejection(): void

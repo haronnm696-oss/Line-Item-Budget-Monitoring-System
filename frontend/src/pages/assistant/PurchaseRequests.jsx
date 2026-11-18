@@ -74,7 +74,7 @@ export default function PurchaseRequests() {
           isEmpty={items.length === 0}
         >
           <section className="program-card ld-list-card">
-            <SubmissionTable items={items} pillType="purchase_request" caption="My purchase requests" onOpen={(item) => update({ open: item.key, request: '' })} />
+            <SubmissionTable items={items} pillType="purchase_request" caption="My purchase requests" onOpen={(item) => update({ open: item.key, request: '' })} onResubmit={actions.resubmit} busyKey={actions.busyKey} />
           </section>
         </LoadState>
 

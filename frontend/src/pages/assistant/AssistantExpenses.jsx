@@ -86,7 +86,7 @@ export default function AssistantExpenses() {
             {list.status === 'ready' && items.length === 0 && (
               <p className="ld-empty">{status === 'all' ? 'You have not recorded an expense yet.' : 'No expense in this status.'}</p>
             )}
-            {items.length > 0 && <SubmissionTable items={items} caption="My expenses" onOpen={(item) => update({ open: item.key, expense: '' })} />}
+            {items.length > 0 && <SubmissionTable items={items} caption="My expenses" onOpen={(item) => update({ open: item.key, expense: '' })} onResubmit={actions.resubmit} busyKey={actions.busyKey} />}
           </section>
 
           <section className="program-card">

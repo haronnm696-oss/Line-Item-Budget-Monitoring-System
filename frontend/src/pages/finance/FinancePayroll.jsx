@@ -13,6 +13,7 @@ import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { peso } from '../../components/money';
 import { PayRatesCard } from '../../components/payroll/PayRates';
+import RatesLabelBanner from '../../components/payroll/RatesLabelBanner';
 
 /**
  * Payroll (Finance/Admin): every monthly batch of the project with its
@@ -48,6 +49,8 @@ export default function FinancePayroll() {
           {picker.projectId && <Link className="program-btn" to={`/verification-queue${q}${q ? '&' : '?'}type=payroll`}>Payroll to verify</Link>}
         </div>
       </div>
+
+      <RatesLabelBanner label={list.data?.rates_label} />
 
       {actions.feedback && (
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>

@@ -87,7 +87,7 @@ export default function MySubmissions() {
 
         <LoadState state={list} loadingText="Loading your submissions…" emptyText={EMPTY[tab]} isEmpty={items.length === 0}>
           <section className="program-card ld-list-card">
-            <SubmissionTable items={items} showType caption="My submissions" onOpen={(item) => update({ open: item.key })} />
+            <SubmissionTable items={items} showType caption="My submissions" onOpen={(item) => update({ open: item.key })} onResubmit={actions.resubmit} busyKey={actions.busyKey} />
           </section>
         </LoadState>
 

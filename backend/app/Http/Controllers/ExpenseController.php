@@ -143,6 +143,9 @@ class ExpenseController extends Controller
             'return_reason' => $expense->return_reason,
             'receipts_count' => (int) $receipts,
             'recorded_by' => $expense->recordedBy ? ['id' => $expense->recordedBy->id, 'name' => $expense->recordedBy->name] : null,
+            // Maker only: a returned expense its recorder may edit and resubmit.
+            'can_resubmit' => $expense->workflow_status === 'returned' && auth()->id() !== null
+                && (int) $expense->recorded_by === (int) auth()->id(),
             'pl_reviewed_by' => $expense->plReviewedBy ? ['id' => $expense->plReviewedBy->id, 'name' => $expense->plReviewedBy->name] : null,
             'verified_by' => $expense->verifiedBy ? ['id' => $expense->verifiedBy->id, 'name' => $expense->verifiedBy->name] : null,
             'submitted_at' => $expense->submitted_at?->toIso8601String(),

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Percent;
 use App\Models\ApprovalRequest;
 use App\Models\Project;
 use App\Models\ProjectTranche;
@@ -468,6 +469,6 @@ class DashboardService
 
     protected function pct(float $part, float $whole): float
     {
-        return $whole > 0 ? round(($part / $whole) * 100, 1) : 0.0;
+        return Percent::of($part, $whole);
     }
 }

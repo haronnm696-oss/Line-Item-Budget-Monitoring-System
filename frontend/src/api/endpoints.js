@@ -25,13 +25,15 @@
  *
  * Projects:
  *   GET  /api/projects                      -> list (Program Leader: all; others: assigned projects only)
- *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups and expenses (403 if not assigned)
+ *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups and expenses (403 if not assigned);
+ *          payroll_rates_label (PAYROLL_RATES_LABEL or null, printed on the Payroll register)
  *   POST /api/projects                      -> create (not built yet)
  *   PUT  /api/projects/:id                  -> update (not built yet)
  *
  * Expenses (workflow: draft -> submitted -> endorsed "Approved by Project
  * Leader" -> verified, or returned; only verified counts as spent):
  *   GET    /api/projects/:id/expenses?workflow_status=draft|submitted|endorsed|returned|verified
+ *          rows carry can_resubmit (returned and recorded by this user)
  *   POST   /api/projects/:id/expenses       -> { lib_category_id, description, amount, expense_date, reference_no?, payee? }
  *          creates a DRAFT (RA / FIN of the project)
  *   PATCH  /api/expenses/:id                -> same fields; draft or returned only
@@ -60,7 +62,7 @@
  *
  * Payroll (same workflow as expenses; not part of LIB spent):
  *   GET    /api/projects/:id/payroll?month=YYYY-MM
- *          -> { month, month_label, rows, deductionBreakdown, totals, unset_rules, rated_members, ps_line_items }
+ *          -> { month, month_label, rows, deductionBreakdown, totals, unset_rules, rates_label, rated_members, ps_line_items }
  *   POST   /api/projects/:id/payroll          -> { month, lib_category_id (PS) } create + compute the month (RA / FIN)
  *   POST   /api/projects/:id/payroll/compute  -> { month } recompute draft / returned rows (RA / FIN)
  *   PATCH  /api/payroll/:id                   -> { basic_rate?, allowance?, lib_category_id? } while the batch is draft / returned
@@ -96,8 +98,13 @@
  *          -> { line_items: [{ allocated, spent, pending_expenses, pending_purchase_requests, pending, available }], totals }
  *
  * Reports:
- *   GET /api/projects/:id/reports/:type     -> type = utilization | ledger | payroll-register | monthly-summary
- *       returns a signed PDF URL or streams the file
+ *   GET /api/projects/:id/reports/:type     -> CSV; type = form-b | form-c | utilization | liquidation | payroll-register
+ *       (percent cells are plain numbers, never "<0.1")
+ *   GET /api/projects/:id/payroll-register?period=all|year|90d&month=YYYY-MM
+ *       -> { project, period, period_label, rates_label, deduction_types,
+ *            months: [{ month, month_label, batch_id, verified_at, verified_by, rows, totals }], totals }
+ *       VERIFIED payroll batches only; CSV: /reports/payroll-register with the same params.
+ *       Any user of the project (and the Program Leader); 403 otherwise.
  *
  * Audit trail:
  *   GET /api/audit?project_id=&action=&type=&date=
@@ -138,7 +145,7 @@
  *   GET  /api/projects/:id/verification-queue?tab=waiting|verified|rejected&type=expense|payroll
  *                                            -> { counts, items, late_receipts }
  *   GET  /api/projects/:id/verification-queue/:type/:id -> { item } (can_verify, blocked_text, fields)
- *   GET  /api/projects/:id/payroll-batches   -> { batches } (every month, with next step)
+ *   GET  /api/projects/:id/payroll-batches   -> { batches, rates_label } (every month, with next step)
  *   POST /api/expenses/:id/request-receipt   -> Notify RA (verified expense without a receipt; one audit entry)
  * Read-only for any project member:
  *   GET  /api/projects/:id/budget-summary    -> { project, kpis, monthly_expenses, category_summary, line_items, transactions }
@@ -247,6 +254,7 @@ export const ENDPOINTS = {
   // Read-only budget summary for any project member (Researcher, Finance/Admin).
   budgetSummary: (projectId) => `/api/projects/${projectId}/budget-summary`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
+  payrollRegister: (projectId) => `/api/projects/${projectId}/payroll-register`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,
   roles: '/api/roles',

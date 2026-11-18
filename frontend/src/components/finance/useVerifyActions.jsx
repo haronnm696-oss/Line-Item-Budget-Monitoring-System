@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
-import { apiWrite } from '../../api/http';
+import { apiGet, apiWrite } from '../../api/http';
 import { errorText } from '../../api/leader';
 import { useRoleBadges } from '../../layouts/roleBadges';
 import { peso } from '../money';
@@ -77,6 +77,22 @@ export function useVerifyActions({ projectId, onChanged }) {
     }
   }
 
+  // "Edit and resubmit" from a list row: load the full record (edit fields) first.
+  async function resubmit(row) {
+    const key = `expense-${row.id}`;
+    setFeedback(null);
+    setBusyKey(key);
+    try {
+      const data = await apiGet(ENDPOINTS.verificationItem(projectId, 'expense', row.id));
+      if (data?.item?.can_edit) setModal({ kind: 'edit', item: data.item });
+      else setFeedback({ tone: 'error', text: 'This expense can no longer be edited.' });
+    } catch (error) {
+      setFeedback({ tone: 'error', text: errorText(error, 'Could not load this expense. Please try again.') });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   let dialog = null;
   if (modal?.kind === 'reject') {
     dialog = (
@@ -113,6 +129,7 @@ export function useVerifyActions({ projectId, onChanged }) {
     verify,
     notifyRa,
     reject: (item) => { setFeedback(null); setModal({ kind: 'reject', item }); },
+    resubmit,
     edit: (item) => { setFeedback(null); setModal({ kind: 'edit', item }); },
   };
 }

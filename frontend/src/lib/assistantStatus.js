@@ -49,6 +49,14 @@ export function returnedLine(item) {
   return item.return_reason ? `${who}: “${item.return_reason}”` : `Returned by ${who}`;
 }
 
+/**
+ * "Edit and resubmit" on a list row: only a returned record the server says
+ * this user may edit (can_edit / can_resubmit are true for the maker only).
+ */
+export function canResubmit(item) {
+  return Boolean(item && item.workflow_status === 'returned' && (item.can_edit === true || item.can_resubmit === true));
+}
+
 /** ?open=expense-12 -> { type: 'expense', id: 12 } (null when not a record key). */
 export function parseOpen(value) {
   const match = /^(expense|payroll|purchase_request)-(\d+)$/.exec(value ?? '');
