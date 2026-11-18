@@ -6,6 +6,9 @@ import { peso } from '../money';
 import { PayRateForm } from '../payroll/PayRates';
 import { contactNumberCounter, contactNumberError } from '../../lib/authValidation';
 import ContactNumberInput from '../ContactNumberInput';
+import AcademicUnitFields from '../AcademicUnitFields';
+import { academicUnitErrors, academicUnitPayload, unitFormFromUser } from '../../lib/academicUnits';
+import { useAcademicUnits } from '../../lib/useAcademicUnits';
 
 const MSU_EMAIL = /^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i;
 const MSU_EMPLOYEE_ID = /^MSU-\d{5}$/i;
@@ -172,6 +175,11 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
   });
   const [local, setLocal] = useState({});
   const errors = { ...fieldErrors, ...local };
+  // College / unit: starts from the saved values (shown as they are, even if
+  // not in the list); a changed pair must come from the list.
+  const units = useAcademicUnits();
+  const [unitEdit, setUnitEdit] = useState(null);
+  const unitForm = unitEdit ?? (units.status === 'ready' ? unitFormFromUser(user, units.data) : null);
 
   function submit(event) {
     event.preventDefault();
@@ -189,6 +197,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
     // Optional; an unchanged legacy number is kept, a new or changed one must match.
     const contactError = contactNumberError(form.contact_number, { original: user.contact_number ?? '' });
     if (contactError) next.contact_number = contactError;
+    if (unitForm) Object.assign(next, academicUnitErrors(unitForm, units.data, { required: false, original: user }));
     setLocal(next);
     if (Object.keys(next).length) return;
     onSave({
@@ -197,6 +206,8 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
       email: form.email.trim(),
       employee_id: form.employee_id.trim() || null,
       contact_number: form.contact_number || null,
+      // Sent only once the list has loaded; otherwise the saved values are left alone.
+      ...(unitForm ? academicUnitPayload(unitForm, units.data) : {}),
     });
   }
 
@@ -242,6 +253,16 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
           </p>
           <FieldError id="pu-edit-contact_number-error" message={errors.contact_number} />
         </div>
+        <AcademicUnitFields
+          units={units}
+          form={unitForm ?? { college: '', department: '', officeName: '' }}
+          onChange={(next) => { setUnitEdit(next); setLocal(({ college: _c, department: _d, office_name: _o, ...rest }) => rest); }}
+          errors={errors}
+          disabled={busy}
+          idPrefix="pu-edit"
+          original={user}
+          required={false}
+        />
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>

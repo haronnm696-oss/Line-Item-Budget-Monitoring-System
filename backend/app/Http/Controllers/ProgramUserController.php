@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\ProgramUserService;
+use App\Support\AcademicUnits;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -100,7 +101,9 @@ class ProgramUserController extends Controller
         // kept only while unchanged; a new or changed one must match.
         $contactChanged = $request->input('contact_number') !== (trim((string) $user->contact_number) ?: null);
 
-        $data = $request->validate([
+        // College / department only when the form sends them; a saved pair not
+        // in the list is kept while unchanged (AcademicUnits::check).
+        $data = AcademicUnits::validateRequest($request, [
             'name' => ['required', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],
             'email' => array_merge(
@@ -119,7 +122,7 @@ class ProgramUserController extends Controller
             'employee_id.unique' => 'Another account already uses this employee ID.',
             'employee_id.required' => 'A new employee ID must use the format MSU-00000.',
             'employee_id.regex' => 'A new employee ID must use the format MSU-00000.',
-        ]);
+        ], required: false, existing: $user);
 
         $user = $this->users->updateDetails($user, $data, $request->user());
 
@@ -136,7 +139,7 @@ class ProgramUserController extends Controller
             'employee_id' => strtoupper(trim((string) $request->input('employee_id'))),
         ]);
 
-        $data = $request->validate([
+        $data = AcademicUnits::validateRequest($request, [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'email' => [
@@ -146,8 +149,6 @@ class ProgramUserController extends Controller
             ],
             'employee_id' => ['required', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
             'position' => ['required', 'string', 'max:255'],
-            'college' => ['required', 'string', 'max:255'],
-            'department' => ['required', 'string', 'max:255'],
             'contact_number' => User::contactNumberRules(),
             'role' => ['required', 'string', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
         ], User::contactNumberMessages());
@@ -263,6 +264,8 @@ class ProgramUserController extends Controller
             'email' => $user->email,
             'employee_id' => $user->employee_id,
             'position' => $user->position,
+            'college' => $user->college,
+            'department' => $user->department,
             'contact_number' => $user->contact_number,
             'role' => $slug ? (AuthController::SLUG_TO_CODE[$slug] ?? null) : null,
             'role_slug' => $slug,

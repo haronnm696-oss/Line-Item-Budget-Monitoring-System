@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\NewRegistrationPendingNotification;
 use App\Notifications\PasswordChangedNotification;
 use App\Rules\StrongPassword;
+use App\Support\AcademicUnits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -108,7 +109,8 @@ class AuthController extends Controller
             'email' => strtolower(trim((string) $request->input('email'))),
         ]);
 
-        $data = $request->validate([
+        // College / department: one list (config/academic_units.php), checked with the other fields.
+        $data = AcademicUnits::validateRequest($request, [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email:rfc', 'max:255', 'regex:/^[^@\s]+@s\.msumain\.edu\.ph$/i', 'unique:users,email'],
@@ -123,8 +125,6 @@ class AuthController extends Controller
             ],
             'employee_id' => ['nullable', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
             'contact_number' => User::contactNumberRules(required: true),
-            'college' => ['nullable', 'string', 'max:255'],
-            'department' => ['nullable', 'string', 'max:255'],
             'position' => ['required', 'string', 'max:255'],
         ], [
             'contact_number.required' => 'Ang numero ng tawag ay kailangan. (Contact number is required.)',

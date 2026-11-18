@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { contactNumberCounter, contactNumberError, isValidMsuEmail } from '../../lib/authValidation';
 import ContactNumberInput from '../ContactNumberInput';
+import AcademicUnitFields from '../AcademicUnitFields';
+import { academicUnitErrors, academicUnitPayload } from '../../lib/academicUnits';
+import { useAcademicUnits } from '../../lib/useAcademicUnits';
 
 const ROLES = [
   ['program-leader', 'Program Leader'],
@@ -19,11 +22,14 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
     position: '',
     college: '',
     department: '',
+    officeName: '',
     contactNumber: '',
     role: '',
   });
   const [localError, setLocalError] = useState('');
   const [contactTouched, setContactTouched] = useState(false);
+  const units = useAcademicUnits();
+  const [unitErrors, setUnitErrors] = useState({});
   // Shown once the field is left (or on submit); optional, so empty is fine.
   const contactError = contactTouched ? contactNumberError(form.contactNumber) : '';
 
@@ -45,8 +51,14 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       setLocalError('Employee ID must be in format MSU-XXXXX (e.g., MSU-09999).');
       return;
     }
-    if (!form.college || !form.department) {
-      setLocalError('College and department are required.');
+    if (units.status !== 'ready') {
+      setLocalError('The list of colleges and units has not loaded yet.');
+      return;
+    }
+    const nextUnitErrors = academicUnitErrors(form, units.data);
+    setUnitErrors(nextUnitErrors);
+    if (Object.keys(nextUnitErrors).length) {
+      setLocalError(Object.values(nextUnitErrors)[0]);
       return;
     }
     if (contactNumberError(form.contactNumber)) {
@@ -61,8 +73,7 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       email: form.email.trim().toLowerCase(),
       employee_id: form.empId.trim().toUpperCase(),
       position: form.position.trim(),
-      college: form.college.trim(),
-      department: form.department.trim(),
+      ...(units.status === 'ready' ? academicUnitPayload(form, units.data) : {}),
       contact_number: form.contactNumber || null,
       role: form.role,
     });
@@ -110,14 +121,14 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
                 ))}
               </select>
             </div>
-            <div className="program-field">
-              <label htmlFor="pu-college">College</label>
-              <input id="pu-college" className="program-input" value={form.college} disabled={busy} onChange={(event) => setForm({ ...form, college: event.target.value })} placeholder="College of Natural Sciences and Mathematics" />
-            </div>
-            <div className="program-field">
-              <label htmlFor="pu-department">Department</label>
-              <input id="pu-department" className="program-input" value={form.department} disabled={busy} onChange={(event) => setForm({ ...form, department: event.target.value })} placeholder="Computer Science" />
-            </div>
+            <AcademicUnitFields
+              units={units}
+              form={form}
+              onChange={(next) => { setForm(next); setUnitErrors({}); }}
+              errors={unitErrors}
+              disabled={busy}
+              idPrefix="pu"
+            />
             <div className="program-field full">
               <label htmlFor="pu-contact">Contact number (optional)</label>
               <ContactNumberInput

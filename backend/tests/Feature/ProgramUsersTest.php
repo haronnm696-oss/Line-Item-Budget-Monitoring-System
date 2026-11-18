@@ -379,8 +379,8 @@ class ProgramUsersTest extends TestCase
             'email' => 'new.leader@msumain.edu.ph',
             'employee_id' => 'MSU-54321',
             'position' => 'Assistant Professor',
-            'college' => 'College of Natural Sciences and Mathematics',
-            'department' => 'Computer Science',
+            'college' => 'College of Information and Computing Sciences',
+            'department' => 'Computing Sciences',
             'role' => 'project-leader',
         ];
     }
