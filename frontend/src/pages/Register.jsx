@@ -11,13 +11,14 @@ import {
   CheckIcon,
 } from '../components/auth/AuthPage';
 import {
+  contactNumberCounter,
+  contactNumberError,
   isValidEmployeeId,
-  isValidPhMobile,
   isValidStudentEmail,
   mapRegisterFieldErrors,
-  normalizePhMobile,
   passwordRules,
 } from '../lib/authValidation';
+import ContactNumberInput from '../components/ContactNumberInput';
 
 const COLLEGES = [
   { name: 'College of Computing and Information Sciences', departments: ['Computer Science', 'Information Technology', 'Data Science'] },
@@ -75,10 +76,7 @@ function fieldError(name, data) {
       if (!value) return 'Enter your email address.';
       return isValidStudentEmail(value) ? '' : 'Use your @s.msumain.edu.ph student email address.';
     case 'contactNumber':
-      if (!value) return 'Enter your contact number.';
-      return isValidPhMobile(value)
-        ? ''
-        : 'Enter a valid PH mobile number (09XXXXXXXXX or +639XXXXXXXXX).';
+      return contactNumberError(value, { required: true });
     case 'employeeId':
       if (!value) return 'Enter your employee ID.';
       return isValidEmployeeId(value) ? '' : 'Use the format MSU-##### (5 digits).';
@@ -218,7 +216,7 @@ export default function Register() {
         email: formData.email.trim(),
         password: formData.password,
         employee_id: formData.employeeId.trim(),
-        contact_number: normalizePhMobile(formData.contactNumber),
+        contact_number: formData.contactNumber,
         college: formData.college,
         department: formData.department,
         position: formData.position.trim(),
@@ -363,20 +361,18 @@ export default function Register() {
               label="Contact number"
               icon="phone"
               error={errorFor('contactNumber')}
+              hint={contactNumberCounter(formData.contactNumber)}
+              hintId="reg-contact-count"
             >
-              <input
+              <ContactNumberInput
                 id="reg-contact"
                 className={inputClass('contactNumber')}
-                type="tel"
                 name="contactNumber"
                 value={formData.contactNumber}
-                onChange={handleChange}
+                onValueChange={(value) => handleChange({ target: { name: 'contactNumber', value } })}
                 onBlur={handleBlur}
-                placeholder="+63 917 123 4567"
-                autoComplete="tel"
-                inputMode="tel"
                 aria-invalid={Boolean(errorFor('contactNumber'))}
-                aria-describedby={describedBy('contactNumber', 'reg-contact-error')}
+                aria-describedby={describedBy('contactNumber', 'reg-contact-error', ['reg-contact-count'])}
                 required
               />
             </AuthField>

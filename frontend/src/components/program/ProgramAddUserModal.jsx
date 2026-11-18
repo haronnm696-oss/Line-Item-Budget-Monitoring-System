@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { isValidMsuEmail } from '../../lib/authValidation';
+import { contactNumberCounter, contactNumberError, isValidMsuEmail } from '../../lib/authValidation';
+import ContactNumberInput from '../ContactNumberInput';
 
 const ROLES = [
   ['program-leader', 'Program Leader'],
@@ -22,6 +23,9 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
     role: '',
   });
   const [localError, setLocalError] = useState('');
+  const [contactTouched, setContactTouched] = useState(false);
+  // Shown once the field is left (or on submit); optional, so empty is fine.
+  const contactError = contactTouched ? contactNumberError(form.contactNumber) : '';
 
   if (!open) return null;
 
@@ -45,8 +49,9 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       setLocalError('College and department are required.');
       return;
     }
-    if (form.contactNumber && !/^09[0-9]{9}$/.test(form.contactNumber.trim())) {
-      setLocalError('Contact number must be 11 digits starting with 09.');
+    if (contactNumberError(form.contactNumber)) {
+      setContactTouched(true);
+      setLocalError(contactNumberError(form.contactNumber));
       return;
     }
 
@@ -58,7 +63,7 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       position: form.position.trim(),
       college: form.college.trim(),
       department: form.department.trim(),
-      contact_number: form.contactNumber.trim() || null,
+      contact_number: form.contactNumber || null,
       role: form.role,
     });
   }
@@ -115,7 +120,18 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
             </div>
             <div className="program-field full">
               <label htmlFor="pu-contact">Contact number (optional)</label>
-              <input id="pu-contact" className="program-input" value={form.contactNumber} disabled={busy} onChange={(event) => setForm({ ...form, contactNumber: event.target.value })} placeholder="09XXXXXXXXX" autoComplete="tel" />
+              <ContactNumberInput
+                id="pu-contact"
+                className="program-input"
+                value={form.contactNumber}
+                disabled={busy}
+                onValueChange={(value) => setForm({ ...form, contactNumber: value })}
+                onBlur={() => setContactTouched(true)}
+                aria-invalid={Boolean(contactError) || undefined}
+                aria-describedby={contactError ? 'pu-contact-error pu-contact-count' : 'pu-contact-count'}
+              />
+              <div className="ld-hint" id="pu-contact-count">{contactNumberCounter(form.contactNumber)}</div>
+              {contactError && <div className="ld-hint is-risk" id="pu-contact-error" role="alert">{contactError}</div>}
             </div>
           </div>
 
