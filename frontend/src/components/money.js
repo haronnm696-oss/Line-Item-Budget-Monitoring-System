@@ -24,6 +24,20 @@ export function formatPct(value) {
   return `${n.toFixed(1)}%`;
 }
 
+/**
+ * A percent for a CSV cell: always a plain number (no "<0.1", no "%") so
+ * spreadsheets can sum and sort. One decimal like the screen, except when
+ * that would hide a real share (0.0 or 100.0): then up to 6 decimals, e.g.
+ * 0.04. "<0.1%" / "99.9%+" are for screens and PDFs only (formatPct).
+ */
+export function csvPct(value) {
+  const n = Number(value) || 0;
+  const rounded = Math.round(n * 10) / 10;
+  const hidden = (rounded === 0 && n !== 0) || (rounded === 100 && n !== 100);
+  const text = (hidden ? n.toFixed(6) : rounded.toFixed(1)).replace(/\.?0+$/, '');
+  return text === '-0' || text === '' ? '0' : text;
+}
+
 /** Signed percentage, e.g. -38.8% or +4.2%. */
 export function signedPct(value) {
   const n = Number(value) || 0;

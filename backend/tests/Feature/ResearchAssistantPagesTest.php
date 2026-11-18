@@ -201,7 +201,15 @@ class ResearchAssistantPagesTest extends TestCase
         $kpis = $this->actingAs($this->assistant)->getJson($this->url())->assertOk()->json('kpis');
         $this->assertGreaterThan(0, $kpis['utilization_pct']);
         $this->assertLessThan(0.05, $kpis['utilization_pct']);
-        $this->assertSame('<0.1%', \App\Support\Percent::label($kpis['utilization_pct']));
+
+        // The CSV keeps the plain number (spreadsheets sum and sort it), never "<0.1".
+        $csv = $this->actingAs($this->projectLeader)->get($this->url('reports/utilization'))->assertOk()->getContent();
+        $total = collect(preg_split('/
+/', ltrim($csv, "ï»¿")))->first(fn ($line) => str_starts_with($line, 'GRAND TOTAL'));
+        $cell = str_getcsv($total)[5];
+        $this->assertIsNumeric($cell);
+        $this->assertEqualsWithDelta($kpis['utilization_pct'], (float) $cell, 1e-6);
+        $this->assertStringNotContainsString('<', $csv);
     }
 
     public function test_edit_and_resubmit_after_a_finance_rejection(): void

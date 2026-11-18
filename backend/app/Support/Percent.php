@@ -8,7 +8,8 @@ namespace App\Support;
  * Values are rounded to one decimal, except when rounding would hide a real
  * amount: a share above zero that rounds to 0.0, or a share just under the
  * whole that rounds to 100.0. Those keep their precision so every screen
- * (and the frontend formatPct) can show "<0.1%" / "99.9%+" instead.
+ * (and the frontend formatPct) can show "<0.1%" / "99.9%+" instead; CSV
+ * exports keep the number itself (csv()).
  * Amounts are decimal(15,2), so differences under half a centavo are float
  * noise and count as zero.
  */
@@ -35,21 +36,20 @@ class Percent
         return $rounded;
     }
 
-    /** "42.8%", "<0.1%", "99.9%+" (pass $unit '' for a "Spent %" column). */
-    public static function label($value, string $unit = '%'): string
+    /**
+     * A CSV cell: always a plain number so spreadsheets can sum and sort.
+     * Keeps the precision of(…) kept (e.g. 0.04), capped at 6 decimals.
+     * "<0.1%" / "99.9%+" are for screens and PDFs only.
+     */
+    public static function csv(float|int|string|null $value): ?string
     {
         if ($value === null || $value === '') {
-            return '';
-        }
-        $n = (float) $value;
-
-        if ($n > 0 && $n < 0.05) {
-            return '<0.1' . $unit;
-        }
-        if ($n >= 99.95 && $n < 100) {
-            return '99.9' . $unit . '+';
+            return null;
         }
 
-        return number_format($n, 1, '.', '') . $unit;
+        // Plain decimal (never 1.0E-5): "42.8", "0.04", "100".
+        $text = rtrim(rtrim(number_format(round((float) $value, 6), 6, '.', ''), '0'), '.');
+
+        return $text === '-0' ? '0' : $text;
     }
 }

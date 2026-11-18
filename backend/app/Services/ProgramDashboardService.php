@@ -1481,6 +1481,6 @@ class ProgramDashboardService
 
     protected function pct(float $part, float $whole): float
     {
-        return \App\Support\Percent::of($part, $whole);
+        return Percent::of($part, $whole);
     }
 }

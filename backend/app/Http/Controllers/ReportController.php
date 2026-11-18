@@ -6,26 +6,56 @@ use App\Support\Percent;
 use App\Services\ProjectFinancialService;
 use App\Models\Project;
 use App\Services\DashboardService;
+use App\Services\PayrollRegisterService;
 use App\Support\Csv;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
-    public function __construct(private DashboardService $dashboard)
+    public function __construct(private DashboardService $dashboard, private PayrollRegisterService $register)
     {
     }
 
     /**
+     * GET /api/projects/{project}/payroll-register?period=all|year|90d&month=YYYY-MM
+     * Verified payroll batches only, per month and per person (Reports PDF,
+     * the Research Assistant's Payroll page). Project access is enforced by
+     * EnsureProjectAccess: the Program Leader, or a user assigned to it.
+     */
+    public function payrollRegister(Request $request, Project $project)
+    {
+        return response()->json($this->registerFor($request, $project));
+    }
+
+    private function registerFor(Request $request, Project $project): array
+    {
+        $data = $request->validate([
+            'period' => ['nullable', 'in:' . implode(',', array_keys(PayrollRegisterService::PERIODS))],
+            'month' => ['nullable', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+        ]);
+
+        return $this->register->build($project, $data['period'] ?? 'all', $data['month'] ?? null);
+    }
+
+    /**
      * Export official monitoring reports as CSV. Supported types:
-     * form-b (LIB), form-c (financial/fund-release), utilization, liquidation.
+     * form-b (LIB), form-c (financial/fund-release), utilization, liquidation,
+     * payroll-register (verified batches; ?period= / ?month= as above).
      */
     public function export(Request $request, Project $project, string $type)
     {
         $type = strtolower($type);
-        $allowed = ['form-b', 'form-c', 'utilization', 'liquidation'];
+        $allowed = ['form-b', 'form-c', 'utilization', 'liquidation', 'payroll-register'];
 
         abort_unless(in_array($type, $allowed, true), 404, 'Unknown report type.');
+
+        if ($type === 'payroll-register') {
+            $register = $this->registerFor($request, $project);
+            $filename = Str::slug($project->code . '-payroll-register-' . $register['period'] . '-' . now()->format('Ymd')) . '.csv';
+
+            return response(Csv::render($this->register->csvRows($register)), 200, Csv::headers($filename));
+        }
 
         $compliance = (string) $request->query('compliance', 'all');
         $summary = $this->dashboard->build($project);
@@ -65,7 +95,7 @@ class ReportController extends Controller
                 $category['allocated'],
                 $category['spent'],
                 $category['remaining'],
-                \App\Support\Percent::label($category['utilization_pct'], ''),
+                Percent::csv($category['utilization_pct']),
             ];
         }
 
@@ -76,7 +106,7 @@ class ReportController extends Controller
             $summary['kpis']['total_budget'],
             $summary['kpis']['total_spent'],
             $summary['kpis']['remaining'],
-            \App\Support\Percent::label($summary['kpis']['utilization_pct'], ''),
+            Percent::csv($summary['kpis']['utilization_pct']),
         ];
 
         return $rows;
@@ -123,14 +153,14 @@ class ReportController extends Controller
         $ps = $this->bucket($summary['categories']['ps']);
         $mooe = $this->bucket($summary['categories']['mooe']);
         foreach ([['Personnel Services (PS)', $ps], ['MOOE', $mooe]] as [$label, $bucket]) {
-            $rows[] = [$label, $bucket['allocated'], $bucket['spent'], $bucket['remaining'], \App\Support\Percent::label($bucket['utilization_pct'], '')];
+            $rows[] = [$label, $bucket['allocated'], $bucket['spent'], $bucket['remaining'], Percent::csv($bucket['utilization_pct'])];
         }
         $rows[] = [
             'GRAND TOTAL',
             $summary['kpis']['total_budget'],
             $summary['kpis']['total_spent'],
             $summary['kpis']['remaining'],
-            \App\Support\Percent::label($summary['kpis']['utilization_pct'], ''),
+            Percent::csv($summary['kpis']['utilization_pct']),
         ];
         $rows[] = [];
         $rows[] = ['RECEIPT COMPLIANCE'];
@@ -160,7 +190,7 @@ class ReportController extends Controller
                 $category['allocated'],
                 $category['spent'],
                 $category['remaining'],
-                \App\Support\Percent::label($category['utilization_pct'], ''),
+                Percent::csv($category['utilization_pct']),
             ];
         }
 
@@ -170,7 +200,7 @@ class ReportController extends Controller
             $summary['kpis']['total_budget'],
             $summary['kpis']['total_spent'],
             $summary['kpis']['remaining'],
-            \App\Support\Percent::label($summary['kpis']['utilization_pct'], ''),
+            Percent::csv($summary['kpis']['utilization_pct']),
         ];
 
         return $rows;
@@ -229,7 +259,7 @@ class ReportController extends Controller
             'allocated' => $allocated,
             'spent' => $spent,
             'remaining' => $allocated - $spent,
-            'utilization_pct' => \App\Support\Percent::of($spent, $allocated),
+            'utilization_pct' => Percent::of($spent, $allocated),
         ];
     }
 

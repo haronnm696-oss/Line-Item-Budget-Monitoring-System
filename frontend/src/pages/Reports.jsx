@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatPct, peso } from '../components/money';
-import { ratesLabel, ratesLabelHtml, withRatesLabelCsv } from '../lib/payrollRatesLabel';
+import { csvPct, formatPct, peso } from '../components/money';
+import { ratesLabel, ratesLabelHtml } from '../lib/payrollRatesLabel';
+import { REGISTER_PERIOD, registerCell, registerColumns, registerRows, registerTableHtml } from '../lib/payrollRegister';
+import { printHtmlDocument, saveBlob } from '../lib/download';
+import { downloadPayrollRegisterCsv, fetchPayrollRegister } from '../api/reports';
 import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
@@ -83,26 +86,6 @@ function money(value) {
   return `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Opens the browser print dialog (where "Save as PDF" is available) for a
-// standalone HTML document, using a hidden iframe so no pop-up is needed.
-function printHtmlDocument(html) {
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.tabIndex = -1;
-  Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
-  frame.onload = () => {
-    const view = frame.contentWindow;
-    if (!view) return;
-    const cleanup = () => window.setTimeout(() => frame.remove(), 0);
-    view.addEventListener('afterprint', cleanup, { once: true });
-    view.focus();
-    view.print();
-    // Fallback for browsers that do not fire afterprint.
-    window.setTimeout(() => { if (frame.isConnected) frame.remove(); }, 60000);
-  };
-  frame.srcdoc = html;
-  document.body.appendChild(frame);
-}
 
 function downloadCSV(content, filename) {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -186,11 +169,26 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const psCategories = Array.isArray(detail?.categories?.ps) ? detail.categories.ps : [];
   const mooeCategories = Array.isArray(detail?.categories?.mooe) ? detail.categories.mooe : [];
   const expenseRows = Array.isArray(detail?.expenses) ? detail.expenses : [];
-  // The API does not return payroll rows for reports yet, so the payroll
-  // register stays unavailable instead of showing sample data.
-  const payrollSource = Array.isArray(detail?.payroll) ? detail.payroll : null;
+  // ---------- Payroll register (server: verified batches only) ----------
+  const registerParams = { period: REGISTER_PERIOD[selectedPeriod] ?? 'all' };
+  const registerKey = listRow ? `${listRow.id}:${registerParams.period}:${detailAttempt}` : '';
+  const [registerResult, setRegisterResult] = useState(null); // { key, data } | { key, error }
+
+  useEffect(() => {
+    if (!registerKey) return undefined;
+    const [projectId, period] = registerKey.split(':');
+    let alive = true;
+    fetchPayrollRegister(projectId, { period })
+      .then((data) => { if (alive) setRegisterResult({ key: registerKey, data }); })
+      .catch(() => { if (alive) setRegisterResult({ key: registerKey, error: 'Could not load the payroll register.' }); });
+    return () => { alive = false; };
+  }, [registerKey]);
+
+  const registerStatus = !registerKey ? 'idle'
+    : registerResult?.key !== registerKey ? 'loading' : registerResult.error ? 'error' : 'ready';
+  const register = registerStatus === 'ready' ? registerResult.data : null;
   // PAYROLL_RATES_LABEL: printed at the top of the Payroll register (PDF and CSV).
-  const payrollRatesLabel = ratesLabel(detail?.payroll_rates_label);
+  const payrollRatesLabel = ratesLabel(register?.rates_label ?? detail?.payroll_rates_label);
 
   function retryProjects() {
     setProjectsAttempt((value) => value + 1);
@@ -201,7 +199,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   }
 
   function reportAvailable(key) {
-    return reportsReady && (key !== 'payroll-register' || payrollSource !== null);
+    return reportsReady && (key !== 'payroll-register' || register !== null);
   }
 
   // ---------- Filtering ----------
@@ -237,7 +235,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   }
 
   const expensesForPreview = filterExpenses();
-  const payrollForPreview = payrollSource ?? [];
 
   // ---------- Report data builders ----------
   function buildUtilizationRows() {
@@ -298,20 +295,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }));
   }
 
-  function buildPayrollRows() {
-    return payrollForPreview.map((r) => ({
-      name: r.name,
-      position: r.position,
-      category: r.category,
-      basic: r.basic,
-      gross: r.gross,
-      deductions: r.deductions,
-      net: r.net,
-      status: r.status,
-      chip: <Chip key={r.id} tone={statusTone(r.status)}>{r.status}</Chip>,
-    }));
-  }
-
   function buildMonthlySummaryRows() {
     const data = {};
     expensesForPreview.forEach((e) => {
@@ -343,54 +326,69 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     setTimeout(() => setToast(null), 3500);
   }
 
-  function handleGenerate(type) {
-    if (!reportAvailable(type)) return;
-    const projectName = selectedProject.title;
-    showToast(`Generating report preview for ${projectName}…`, 'info');
-
-    let previewRows, reportTitle, csvHeaders, csvRows;
-
+  // CSV columns and rows for one report type (the preview and the direct export).
+  function csvFor(type) {
     if (type === 'utilization') {
-      previewRows = buildUtilizationRows();
-      reportTitle = 'Budget Utilization Report';
-      csvHeaders = ['Category Type', 'Line Item', 'Allocated', 'Spent', 'Remaining', 'Utilization %'];
-      csvRows = previewRows.map((r) => ({
-        'Category Type': r.group || '',
-        'Line Item': r.item,
-        'Allocated': r.allocated,
-        'Spent': r.spent,
-        'Remaining': r.remaining,
-        'Utilization %': formatPct(r.util).replace('%', ''),
-      }));
-    } else if (type === 'ledger') {
-      previewRows = buildLedgerRows();
-      reportTitle = 'Expense Ledger';
-      csvHeaders = ['Date', 'Reference', 'Description', 'Category', 'Amount', 'Status', 'Recorded By', 'Verified By'];
-      csvRows = previewRows.map((r) => ({
-        Date: r.date, Reference: r.ref, Description: r.description, Category: r.category,
-        Amount: r.amount, Status: r.status, 'Recorded By': r.recordedBy, 'Verified By': r.verifiedBy,
-      }));
-    } else if (type === 'payroll-register') {
-      previewRows = buildPayrollRows();
-      reportTitle = 'Payroll Register';
-      csvHeaders = ['Name', 'Position', 'Category', 'Basic', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'];
-      csvRows = previewRows.map((r) => ({
-        Name: r.name, Position: r.position, Category: r.category, Basic: r.basic,
-        'Gross Pay': r.gross, Deductions: r.deductions, 'Net Pay': r.net, Status: r.status,
-      }));
-    } else {
-      previewRows = buildMonthlySummaryRows();
-      reportTitle = 'Monthly Financial Summary';
-      csvHeaders = ['Month', 'Personnel Services (PS)', 'Maintenance & Other Operating Expenses (MOOE)', 'Total'];
-      csvRows = previewRows.map((r) => ({
+      return {
+        title: 'Budget Utilization Report',
+        filename: 'budget-utilization.csv',
+        headers: ['Category Type', 'Line Item', 'Allocated', 'Spent', 'Remaining', 'Utilization %'],
+        rows: buildUtilizationRows().map((r) => ({
+          'Category Type': r.group || '',
+          'Line Item': r.item,
+          'Allocated': r.allocated,
+          'Spent': r.spent,
+          'Remaining': r.remaining,
+          // A plain number (spreadsheets sum and sort it), never "<0.1".
+          'Utilization %': csvPct(r.util),
+        })),
+      };
+    }
+    if (type === 'ledger') {
+      return {
+        title: 'Expense Ledger',
+        filename: 'expense-ledger.csv',
+        headers: ['Date', 'Reference', 'Description', 'Category', 'Amount', 'Status', 'Recorded By', 'Verified By'],
+        rows: buildLedgerRows().map((r) => ({
+          Date: r.date, Reference: r.ref, Description: r.description, Category: r.category,
+          Amount: r.amount, Status: r.status, 'Recorded By': r.recordedBy, 'Verified By': r.verifiedBy,
+        })),
+      };
+    }
+    return {
+      title: 'Monthly Financial Summary',
+      filename: 'monthly-financial-summary.csv',
+      headers: ['Month', 'Personnel Services (PS)', 'Maintenance & Other Operating Expenses (MOOE)', 'Total'],
+      rows: buildMonthlySummaryRows().map((r) => ({
         Month: r.month, 'Personnel Services (PS)': r.ps,
         'Maintenance & Other Operating Expenses (MOOE)': r.mooe, Total: r.total,
-      }));
-    }
+      })),
+    };
+  }
 
-    setPrintReport({ key: type, title: reportTitle });
-    const csv = toCSV(csvRows, csvHeaders);
-    setCsvReport({ key: type, title: reportTitle, content: type === 'payroll-register' ? withRatesLabelCsv(csv, payrollRatesLabel) : csv, filename: `${type.toLowerCase().replace(/\s+/g, '-')}.csv` });
+  // The payroll register CSV comes from the backend (same data and label).
+  async function downloadRegisterCsv() {
+    showToast('Exporting Payroll Register to CSV…', 'info');
+    try {
+      const { blob, filename } = await downloadPayrollRegisterCsv(listRow.id, registerParams);
+      saveBlob(blob, filename);
+    } catch {
+      showToast('Could not export the payroll register. Please try again.', 'error');
+    }
+  }
+
+  function handleGenerate(type) {
+    if (!reportAvailable(type)) return;
+    showToast(`Generating report preview for ${selectedProject.title}…`, 'info');
+
+    if (type === 'payroll-register') {
+      setPrintReport({ key: type, title: 'Payroll Register' });
+      setCsvReport({ key: type, title: 'Payroll Register', server: true });
+      return;
+    }
+    const csv = csvFor(type);
+    setPrintReport({ key: type, title: csv.title });
+    setCsvReport({ key: type, title: csv.title, content: toCSV(csv.rows, csv.headers), filename: csv.filename });
   }
 
   // ---------- Print-ready HTML ----------
@@ -444,25 +442,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         </table>
       `;
     } else if (key === 'payroll-register') {
-      const rows = buildPayrollRows();
-      subtitle = 'Monthly payroll per personnel';
-      tableHtml = `
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Position</th><th>Category</th><th class="r">Basic</th><th class="r">Gross Pay</th><th class="r">Deductions</th><th class="r">Net Pay</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map((r) => `
-              <tr>
-                <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.position)}</td><td>${escapeHtml(r.category)}</td>
-                <td class="r">${money(r.basic)}</td><td class="r">${money(r.gross)}</td>
-                <td class="r">${money(r.deductions)}</td><td class="r">${money(r.net)}</td>
-                <td><span style="display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:#${statusTone(r.status)==='ok'?'E9F3EE':'F8EFD8'};color:#${statusTone(r.status)==='ok'?'2F7D5B':'9A6B10'}">${escapeHtml(r.status)}</span></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
+      subtitle = `Verified payroll batches only · per month and per person · ${register?.period_label ?? selectedPeriod}`;
+      tableHtml = registerTableHtml(register, escapeHtml, money);
     } else {
       const rows = buildMonthlySummaryRows();
       subtitle = 'Expense trend, category comparison, and alerts for the selected month';
@@ -490,7 +471,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         <meta charset="utf-8" />
         <title>${escapeHtml(title)}</title>
         <style>
-          @page { size: A4; margin: 1.5cm; }
+          @page { size: A4${key === 'payroll-register' ? ' landscape' : ''}; margin: 1.5cm; }
           body { font-family: 'Public Sans', system-ui, sans-serif; font-size: 11px; color: #221D1A; line-height: 1.4; }
           .no-print { display: none !important; }
           .letterhead { border-bottom: 3px solid #5E1B25; padding-bottom: 10px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
@@ -551,6 +532,10 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
   function handleCSV() {
     if (!csvReport || !reportAvailable(csvReport.key)) return;
+    if (csvReport.server) {
+      downloadRegisterCsv();
+      return;
+    }
     showToast(`Exporting ${csvReport.title} to CSV…`, 'info');
     downloadCSV(csvReport.content, csvReport.filename);
   }
@@ -583,17 +568,15 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         { key: 'status', label: 'Status' },
       ];
     } else if (key === 'payroll-register') {
-      rows = buildPayrollRows();
-      columns = [
-        { key: 'name', label: 'Name' },
-        { key: 'position', label: 'Position' },
-        { key: 'category', label: 'Category' },
-        { key: 'basic', label: 'Basic' },
-        { key: 'gross', label: 'Gross Pay' },
-        { key: 'deductions', label: 'Deductions' },
-        { key: 'net', label: 'Net Pay' },
-        { key: 'status', label: 'Status' },
-      ];
+      // The register's own columns (one per deduction) and month totals.
+      rows = registerRows(register).map((row) => ({
+        bold: row.kind !== 'person',
+        cells: registerColumns(register).map((column) => {
+          const value = registerCell(row, column);
+          return { key: column.key, value: column.money ? formatMoney(value) : value, money: column.money };
+        }),
+      }));
+      columns = registerColumns(register).map((column) => ({ key: column.key, label: column.label, money: column.money }));
     } else {
       rows = buildMonthlySummaryRows();
       columns = [
@@ -609,6 +592,9 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         <div className="panel-head">
           <h3>Live Report Preview</h3>
           <span className="hint">{printReport?.title} · {rows.length} row(s)</span>
+          {key === 'payroll-register' && payrollRatesLabel && (
+            <div className="program-banner warn" role="note"><b><span aria-hidden="true">⚠</span> {payrollRatesLabel}</b></div>
+          )}
           <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {detailStatus === 'error' ? (
               <span className="rp-error" role="alert">
@@ -639,7 +625,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
             <thead>
               <tr>
                 {columns.map((c) => (
-                  <th key={c.key} className={c.key === 'amount' || c.key === 'allocated' || c.key === 'spent' || c.key === 'remaining' || c.key === 'basic' || c.key === 'gross' || c.key === 'deductions' || c.key === 'net' || c.key === 'total' || c.key === 'util' ? 'r' : ''}>{c.label}</th>
+                  <th key={c.key} className={c.money || c.key === 'amount' || c.key === 'allocated' || c.key === 'spent' || c.key === 'remaining' || c.key === 'basic' || c.key === 'gross' || c.key === 'deductions' || c.key === 'net' || c.key === 'total' || c.key === 'util' ? 'r' : ''}>{c.label}</th>
                 ))}
               </tr>
             </thead>
@@ -647,6 +633,13 @@ export default function Reports({ programMode = false, initialCode = '' }) {
               {rows.map((r, i) => {
                 const isBold = r.bold;
                 const isTotalRow = r.item === 'Grand Total (PS + MOOE)' || r.item === 'PS Subtotal' || r.item === 'MOOE Subtotal';
+                if (r.cells) {
+                  return (
+                    <tr key={i} style={{ fontWeight: isBold ? 700 : 400 }}>
+                      {r.cells.map((cell) => <td key={cell.key} className={cell.money ? 'r' : ''}>{cell.value}</td>)}
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={i} style={{ fontWeight: isBold || isTotalRow ? 700 : 400, background: isTotalRow ? 'color-mix(in srgb, var(--gold) 8%, transparent)' : 'inherit' }}>
                     {columns.map((c) => {
@@ -675,31 +668,16 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const remaining = Number(selectedProject.remaining ?? (totalAlloc - totalSpent)) || 0;
   const utilization = Number(selectedProject.utilization_pct) || 0;
 
-  // Direct CSV export for one report type (same rows as the PDF preview).
+  // Direct CSV export for one report type (same rows as the preview).
   function exportReportCsv(r) {
     if (!reportAvailable(r.key)) return;
-    // Build CSV on the fly for direct export
-    let rows, headers, filename;
-    if (r.key === 'utilization') {
-      rows = buildUtilizationRows();
-      headers = ['Category Type', 'Line Item', 'Allocated', 'Spent', 'Remaining', 'Utilization %'];
-      filename = 'budget-utilization.csv';
-    } else if (r.key === 'ledger') {
-      rows = buildLedgerRows();
-      headers = ['Date', 'Reference', 'Description', 'Category', 'Amount', 'Status', 'Recorded By', 'Verified By'];
-      filename = 'expense-ledger.csv';
-    } else if (r.key === 'payroll-register') {
-      rows = buildPayrollRows();
-      headers = ['Name', 'Position', 'Category', 'Basic', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'];
-      filename = 'payroll-register.csv';
-    } else {
-      rows = buildMonthlySummaryRows();
-      headers = ['Month', 'Personnel Services (PS)', 'Maintenance & Other Operating Expenses (MOOE)', 'Total'];
-      filename = 'monthly-financial-summary.csv';
+    if (r.key === 'payroll-register') {
+      downloadRegisterCsv();
+      return;
     }
+    const csv = csvFor(r.key);
     showToast(`Exporting ${r.title} to CSV…`, 'info');
-    const csv = toCSV(rows, headers);
-    downloadCSV(r.key === 'payroll-register' ? withRatesLabelCsv(csv, payrollRatesLabel) : csv, filename);
+    downloadCSV(toCSV(csv.rows, csv.headers), csv.filename);
   }
 
   // Project / Period / Category selects, shared by both layouts.
@@ -772,7 +750,19 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       <button type="button" className={programMode ? 'program-btn' : 'btn sm'} onClick={retryDetail}>Try again</button>
     </div>
   );
-  const payrollNote = 'Not available yet: the server does not provide payroll records for reports.';
+  // Payroll register state under its card (verified batches only).
+  const payrollNote = registerStatus === 'error'
+    ? (
+      <p className="rp-note" role="alert">
+        {registerResult?.error}{' '}
+        <button type="button" className={programMode ? 'program-btn sm' : 'btn sm'} onClick={retryDetail}>Try again</button>
+      </p>
+    )
+    : registerStatus === 'loading' ? <p className="rp-note">Loading payroll…</p>
+      : register && register.months.length === 0
+        ? <p className="rp-note">No verified payroll for this period. Draft, waiting and returned batches are not included.</p>
+        : register ? <p className="rp-note">{register.months.length} verified {register.months.length === 1 ? 'month' : 'months'} · {payrollRatesLabel ? `⚠ ${payrollRatesLabel}` : 'verified batches only'}</p>
+          : null;
 
   // ?report=<key>&format=pdf|csv (the PDF / CSV buttons on the role
   // Overviews): run that export once the project's data is loaded, with the
@@ -784,6 +774,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     const report = REPORT_TYPES.find((r) => r.key === params.get('report'));
     const format = params.get('format');
     if (!report || !['pdf', 'csv'].includes(format)) return;
+    // The payroll register loads separately: wait for it.
+    if (report.key === 'payroll-register' && registerStatus === 'loading') return;
     autoExport.current = true;
     if (!reportAvailable(report.key)) return;
     if (format === 'pdf') handleGenerate(report.key);
@@ -837,9 +829,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                 <div className="prr-text">
                   <b>{r.title}</b>
                   <p>{r.desc}</p>
-                  {r.key === 'payroll-register' && reportsReady && payrollSource === null && (
-                    <p className="rp-note">{payrollNote}</p>
-                  )}
+                  {r.key === 'payroll-register' && reportsReady && payrollNote}
                 </div>
                 <div className="prr-actions">
                   <button type="button" className="program-btn" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
@@ -863,9 +853,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                 <div style={{ flex: 1 }}>
                   <b>{r.title}</b>
                   <p>{r.desc}</p>
-                  {r.key === 'payroll-register' && reportsReady && payrollSource === null && (
-                    <p className="rp-note">{payrollNote}</p>
-                  )}
+                  {r.key === 'payroll-register' && reportsReady && payrollNote}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                   <button className="btn sm" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>

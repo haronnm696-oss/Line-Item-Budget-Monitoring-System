@@ -8,7 +8,10 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen, returnedLine } from '../../lib/assistantStatus';
-import { todayInManila } from '../../lib/datetime';
+import { formatDate, todayInManila } from '../../lib/datetime';
+import { downloadPayrollRegisterCsv, fetchPayrollRegister } from '../../api/reports';
+import { printHtmlDocument, saveBlob } from '../../lib/download';
+import { registerDocumentHtml } from '../../lib/payrollRegister';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
 import DocumentList from '../../components/leader/DocumentList';
@@ -80,6 +83,31 @@ export default function AssistantPayroll() {
   const prepare = () => act('prepare', () => apiWrite('post', ENDPOINTS.payroll(projectId), { month, lib_category_id: Number(chosenLine) }), (data) => `${data?.message ?? `Payroll for ${label} prepared and computed.`} Review the rows, upload the payroll file, then submit.`);
   const recompute = () => act('compute', () => apiWrite('post', ENDPOINTS.computePayroll(projectId), { month }), (data) => data?.message ?? `Payroll for ${label} recomputed from the current pay rates.`);
   const submit = () => act('submit', () => apiWrite('post', ENDPOINTS.payrollBatchStep(batch.id, 'submit')), `Payroll for ${label} submitted.`);
+  // Payroll register of this month: offered only once the batch is verified
+  // (the server lists verified batches only).
+  const verified = batch?.workflow_status === 'verified';
+  const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  async function download(key, send, okText) {
+    setBusy(key);
+    actions.setFeedback(null);
+    try {
+      await send();
+      actions.setFeedback({ tone: 'ok', text: okText });
+    } catch {
+      actions.setFeedback({ tone: 'error', text: 'Could not download the payroll register. Please try again.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+  const registerPdf = () => download('register-pdf', async () => {
+    const register = await fetchPayrollRegister(projectId, { month });
+    printHtmlDocument(registerDocumentHtml(register, { escape: escapeHtml, money: peso, generated: formatDate(new Date()) }));
+  }, `Payroll register for ${label} opened for printing. Choose "Save as PDF" to keep a copy.`);
+  const registerCsv = () => download('register-csv', async () => {
+    const { blob, filename } = await downloadPayrollRegisterCsv(projectId, { month });
+    saveBlob(blob, filename);
+  }, `Payroll register for ${label} downloaded (CSV).`);
+
   const batchRecord = batch ? { key: `payroll-${batch.id}`, type: 'payroll', id: batch.id, type_label: 'Payroll', reference: `PAY-${month}`, title: `Payroll ${label}` } : null;
 
   return (
@@ -168,6 +196,19 @@ export default function AssistantPayroll() {
                     ) : (record?.next_step || batch.waiting_text) && (
                       <p className="ld-waiting"><span aria-hidden="true">◷</span> {batch.escalated_step ? batch.waiting_text : (record?.next_step ?? batch.waiting_text)}</p>
                     )}
+
+                    {verified && (
+                      <div className="ra-inline-form" role="group" aria-label="Download payroll register">
+                        <span className="ld-muted">Download payroll register</span>
+                        <button type="button" className="program-btn" disabled={busy !== null} onClick={registerPdf}>
+                          {busy === 'register-pdf' ? 'Preparing…' : 'PDF'}
+                        </button>
+                        <button type="button" className="program-btn" disabled={busy !== null} onClick={registerCsv}>
+                          {busy === 'register-csv' ? 'Downloading…' : 'CSV'}
+                        </button>
+                      </div>
+                    )}
+                    {!verified && <p className="ld-hint">The payroll register for {label} can be downloaded once this month is verified.</p>}
 
                     <div className="ra-payroll-totals">
                       <div className="ra-balance"><span>Gross</span><b>{peso(run.totals.gross)}</b></div>

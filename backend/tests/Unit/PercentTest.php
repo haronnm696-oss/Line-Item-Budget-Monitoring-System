@@ -17,18 +17,17 @@ class PercentTest extends TestCase
 
     public function test_a_tiny_share_keeps_its_precision_instead_of_0_0(): void
     {
-        // ₱300 of ₱1,000,000 = 0.03%: above zero, so not flattened to 0.0.
-        $value = Percent::of(300, 1000000);
-        $this->assertGreaterThan(0, $value);
-        $this->assertSame('<0.1%', Percent::label($value));
-        $this->assertSame('<0.1', Percent::label($value, ''));
+        // ₱400 of ₱1,000,000 = 0.04%: above zero, so not flattened to 0.0.
+        $value = Percent::of(400, 1000000);
+        $this->assertEqualsWithDelta(0.04, $value, 1e-9);
+        $this->assertSame('0.04', Percent::csv($value));
     }
 
     public function test_a_share_just_under_the_whole_is_not_shown_as_100(): void
     {
-        $value = Percent::of(999700, 1000000); // 99.97% remaining
-        $this->assertLessThan(100, $value);
-        $this->assertSame('99.9%+', Percent::label($value));
+        $value = Percent::of(999700, 1000000); // 99.97%
+        $this->assertEqualsWithDelta(99.97, $value, 1e-9);
+        $this->assertSame('99.97', Percent::csv($value));
     }
 
     public function test_float_noise_under_half_a_centavo_counts_as_zero(): void
@@ -37,12 +36,19 @@ class PercentTest extends TestCase
         $this->assertSame(100.0, Percent::of(999999.999, 1000000));
     }
 
-    public function test_labels(): void
+    public function test_csv_cells_are_plain_numbers_never_text_or_exponents(): void
     {
-        $this->assertSame('0.0%', Percent::label(0));
-        $this->assertSame('100.0%', Percent::label(100));
-        $this->assertSame('42.8%', Percent::label(42.84));
-        $this->assertSame('112.5%', Percent::label(112.5));
-        $this->assertSame('', Percent::label(null));
+        $this->assertSame('42.8', Percent::csv(42.8));
+        $this->assertSame('0', Percent::csv(0));
+        $this->assertSame('100', Percent::csv(100.0));
+        $this->assertSame('112.5', Percent::csv(112.5));
+        $this->assertSame('0.00001', Percent::csv(0.00001));
+        $this->assertSame('0.123457', Percent::csv(0.1234567));
+        $this->assertNull(Percent::csv(null));
+        foreach ([0.04, 99.97, 0.00001, 42.8] as $value) {
+            $this->assertIsNumeric(Percent::csv($value));
+            $this->assertStringNotContainsString('<', Percent::csv($value));
+            $this->assertStringNotContainsString('+', Percent::csv($value));
+        }
     }
 }

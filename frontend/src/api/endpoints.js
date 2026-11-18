@@ -98,8 +98,13 @@
  *          -> { line_items: [{ allocated, spent, pending_expenses, pending_purchase_requests, pending, available }], totals }
  *
  * Reports:
- *   GET /api/projects/:id/reports/:type     -> type = utilization | ledger | payroll-register | monthly-summary
- *       returns a signed PDF URL or streams the file
+ *   GET /api/projects/:id/reports/:type     -> CSV; type = form-b | form-c | utilization | liquidation | payroll-register
+ *       (percent cells are plain numbers, never "<0.1")
+ *   GET /api/projects/:id/payroll-register?period=all|year|90d&month=YYYY-MM
+ *       -> { project, period, period_label, rates_label, deduction_types,
+ *            months: [{ month, month_label, batch_id, verified_at, verified_by, rows, totals }], totals }
+ *       VERIFIED payroll batches only; CSV: /reports/payroll-register with the same params.
+ *       Any user of the project (and the Program Leader); 403 otherwise.
  *
  * Audit trail:
  *   GET /api/audit?project_id=&action=&type=&date=
@@ -249,6 +254,7 @@ export const ENDPOINTS = {
   // Read-only budget summary for any project member (Researcher, Finance/Admin).
   budgetSummary: (projectId) => `/api/projects/${projectId}/budget-summary`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
+  payrollRegister: (projectId) => `/api/projects/${projectId}/payroll-register`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,
   roles: '/api/roles',

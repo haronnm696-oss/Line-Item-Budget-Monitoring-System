@@ -56,7 +56,7 @@ class ProgramProjectController extends Controller
             return ($value === null || $value === '') ? $fallback : (string) $value;
         };
         $money = fn ($value) => $value === null ? self::MISSING : number_format((float) $value, 2, '.', '');
-        $pct = fn ($value) => $value === null ? self::MISSING : \App\Support\Percent::label($value, '');
+        $pct = fn ($value) => $value === null ? self::MISSING : Percent::csv($value);
 
         $rows = [
             ['Program projects'],
@@ -98,8 +98,8 @@ class ProgramProjectController extends Controller
         $rows[] = ['Summary'];
         $rows[] = ['Projects', (int) $summary['projects'], $summary['ongoing'] . ' ongoing · ' . $summary['completed'] . ' completed'];
         $rows[] = ['Total allocated', $money($summary['allocated'])];
-        $rows[] = ['Total spent', $money($summary['spent']), ($summary['spent_pct'] === null ? self::MISSING : \App\Support\Percent::label($summary['spent_pct'])) . ' of allocated'];
-        $rows[] = ['Remaining', $money($summary['remaining']), ($summary['remaining_pct'] === null ? self::MISSING : \App\Support\Percent::label($summary['remaining_pct'])) . ' still available'];
+        $rows[] = ['Total spent', $money($summary['spent']), $pct($summary['spent_pct']), '% of allocated'];
+        $rows[] = ['Remaining', $money($summary['remaining']), $pct($summary['remaining_pct']), '% still available'];
 
         return $rows;
     }
