@@ -19,12 +19,11 @@ import {
   passwordRules,
 } from '../lib/authValidation';
 import ContactNumberInput from '../components/ContactNumberInput';
+import { academicUnitErrors, academicUnitPayload, unitFieldsFor } from '../lib/academicUnits';
+import { useAcademicUnits } from '../lib/useAcademicUnits';
 
-const COLLEGES = [
-  { name: 'College of Computing and Information Sciences', departments: ['Computer Science', 'Information Technology', 'Data Science'] },
-  { name: 'College of Business and Finance', departments: ['Finance', 'Accounting'] },
-  { name: 'College of Social Sciences and Humanities', departments: ['Research', 'Education'] },
-];
+// Colleges / units and departments come from the one list on the server
+// (GET /api/academic-units), never typed here.
 
 const BRAND = {
   title: 'Request access',
@@ -46,6 +45,7 @@ const FIELD_IDS = {
   position: 'reg-position',
   college: 'reg-college',
   department: 'reg-department',
+  officeName: 'reg-office',
   password: 'reg-password',
   confirmPassword: 'reg-confirm-password',
 };
@@ -57,6 +57,7 @@ const SERVER_FIELD_MAP = {
   last_name: 'lastName',
   email: 'email',
   contact_number: 'contactNumber',
+  office_name: 'officeName',
   employee_id: 'employeeId',
   position: 'position',
   college: 'college',
@@ -64,7 +65,14 @@ const SERVER_FIELD_MAP = {
   password: 'password',
 };
 
-function fieldError(name, data) {
+// College / department / office name: the shared rule (lib/academicUnits).
+const UNIT_ERROR_KEY = { college: 'college', department: 'department', officeName: 'office_name' };
+
+function fieldError(name, data, units) {
+  if (UNIT_ERROR_KEY[name]) {
+    if (!units) return name === 'college' ? 'The list of colleges and units has not loaded yet.' : '';
+    return academicUnitErrors(data, units)[UNIT_ERROR_KEY[name]] ?? '';
+  }
   const value = String(data[name] || '').trim();
 
   switch (name) {
@@ -82,10 +90,6 @@ function fieldError(name, data) {
       return isValidEmployeeId(value) ? '' : 'Use the format MSU-##### (5 digits).';
     case 'position':
       return value ? '' : 'Enter your position.';
-    case 'college':
-      return value ? '' : 'Select your college.';
-    case 'department':
-      return value ? '' : 'Select your department.';
     case 'password': {
       if (!value) return 'Enter a password.';
       const rules = passwordRules(data.password, data.firstName, data.lastName, data.email);
@@ -121,6 +125,7 @@ export default function Register() {
     position: '',
     college: '',
     department: '',
+    officeName: '',
     password: '',
     confirmPassword: '',
   });
@@ -133,13 +138,14 @@ export default function Register() {
   const [submittedEmail, setSubmittedEmail] = useState('');
   const [showPasswords, setShowPasswords] = useState(false);
 
-  const selectedCollege = COLLEGES.find((college) => college.name === formData.college);
-  const departments = selectedCollege ? selectedCollege.departments : [];
+  const unitList = useAcademicUnits();
+  const units = unitList.status === 'ready' ? unitList.data : null;
+  const { showDepartment, showOffice, departments, officeLabel, officeMax } = unitFieldsFor(units, formData.college);
   const rules = passwordRules(formData.password, formData.firstName, formData.lastName, formData.email);
   const showPasswordFeedback = formData.password.length > 0;
 
   function errorFor(name) {
-    return serverErrors[name] || (touched[name] ? fieldError(name, formData) : '');
+    return serverErrors[name] || (touched[name] ? fieldError(name, formData, units) : '');
   }
 
   function isValidField(name) {
@@ -172,15 +178,16 @@ export default function Register() {
 
     setFormData((prev) => {
       const next = { ...prev, [name]: value };
-      if (name === 'college') next.department = '';
+      // A new college clears the department (and the office name).
+      if (name === 'college') { next.department = ''; next.officeName = ''; }
       return next;
     });
 
     setServerErrors((prev) => {
-      if (!prev[name] && !(name === 'college' && prev.department)) return prev;
+      if (!prev[name] && !(name === 'college' && (prev.department || prev.officeName))) return prev;
       const next = { ...prev };
       delete next[name];
-      if (name === 'college') delete next.department;
+      if (name === 'college') { delete next.department; delete next.officeName; }
       return next;
     });
   }
@@ -201,7 +208,7 @@ export default function Register() {
     setServerErrors({});
     setSubmitError('');
 
-    const firstInvalid = FIELD_NAMES.find((name) => fieldError(name, formData)) || (!agree ? 'agree' : null);
+    const firstInvalid = FIELD_NAMES.find((name) => fieldError(name, formData, units)) || (!agree ? 'agree' : null);
     if (firstInvalid) {
       focusField(firstInvalid);
       return;
@@ -217,8 +224,7 @@ export default function Register() {
         password: formData.password,
         employee_id: formData.employeeId.trim(),
         contact_number: formData.contactNumber,
-        college: formData.college,
-        department: formData.department,
+        ...academicUnitPayload(formData, units),
         position: formData.position.trim(),
       });
 
@@ -425,9 +431,15 @@ export default function Register() {
             </AuthField>
           </div>
 
+          {unitList.status === 'error' && (
+            <p className="signin-error" role="alert">
+              Could not load the list of colleges and units.{' '}
+              <button type="button" className="signin-link" onClick={unitList.retry}>Try again</button>
+            </p>
+          )}
           <AuthField
             id="reg-college"
-            label="College"
+            label="College or unit"
             icon="building"
             trailingIcon="chevron"
             error={errorFor('college')}
@@ -439,42 +451,69 @@ export default function Register() {
               value={formData.college}
               onChange={handleChange}
               onBlur={handleBlur}
+              disabled={!units}
+              aria-busy={unitList.status === 'loading' || undefined}
               aria-invalid={Boolean(errorFor('college'))}
               aria-describedby={describedBy('college', 'reg-college-error')}
               required
             >
-              <option value="">Select a college</option>
-              {COLLEGES.map((college) => (
-                <option key={college.name} value={college.name}>{college.name}</option>
+              <option value="">{units ? 'Select a college or unit' : 'Loading colleges and units…'}</option>
+              {(units?.units ?? []).map((unit) => (
+                <option key={unit.name} value={unit.name}>{unit.name}</option>
               ))}
             </select>
           </AuthField>
 
-          <AuthField
-            id="reg-department"
-            label="Department"
-            icon="building"
-            trailingIcon="chevron"
-            error={errorFor('department')}
-          >
-            <select
+          {/* Units without departments hide the field; "Other office / unit" asks for its name. */}
+          {showDepartment && (
+            <AuthField
               id="reg-department"
-              className={inputClass('department')}
-              name="department"
-              value={formData.department}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              disabled={!formData.college}
-              aria-invalid={Boolean(errorFor('department'))}
-              aria-describedby={describedBy('department', 'reg-department-error')}
-              required
+              label="Department"
+              icon="building"
+              trailingIcon="chevron"
+              error={errorFor('department')}
             >
-              <option value="">{formData.college ? 'Select a department' : 'Select a college first'}</option>
-              {departments.map((department) => (
-                <option key={department} value={department}>{department}</option>
-              ))}
-            </select>
-          </AuthField>
+              <select
+                id="reg-department"
+                className={inputClass('department')}
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                aria-invalid={Boolean(errorFor('department'))}
+                aria-describedby={describedBy('department', 'reg-department-error')}
+                required
+              >
+                <option value="">Select a department</option>
+                {departments.map((department) => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
+              </select>
+            </AuthField>
+          )}
+
+          {showOffice && (
+            <AuthField
+              id="reg-office"
+              label={officeLabel}
+              icon="building"
+              error={errorFor('officeName')}
+            >
+              <input
+                id="reg-office"
+                className={inputClass('officeName')}
+                name="officeName"
+                value={formData.officeName}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                maxLength={officeMax}
+                placeholder="e.g. Office of the Vice Chancellor for Research and Extension"
+                aria-invalid={Boolean(errorFor('officeName'))}
+                aria-describedby={describedBy('officeName', 'reg-office-error')}
+                required
+              />
+            </AuthField>
+          )}
         </AuthSection>
 
         <AuthSection title="Security">

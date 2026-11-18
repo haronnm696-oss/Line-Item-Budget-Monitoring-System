@@ -90,7 +90,7 @@ export async function login(email, password) {
   }
 }
 
-export async function register({ name: _name, email, password, first_name, last_name, employee_id, contact_number, college, department, position } = {}) {
+export async function register({ name: _name, email, password, first_name, last_name, employee_id, contact_number, college, department, office_name, position } = {}) {
   const cleanEmail = normalizeEmail(email);
   const cleanFirstName = (first_name || '').trim();
   const cleanLastName = (last_name || '').trim();
@@ -143,6 +143,7 @@ export async function register({ name: _name, email, password, first_name, last_
       contact_number: cleanContact || undefined,
       college: college || undefined,
       department: department || undefined,
+      office_name: office_name || undefined,
       position: position || undefined,
     });
     return res.data;

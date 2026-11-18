@@ -292,7 +292,7 @@ class ProgramUserService
     {
         return AuditLogger::transaction(function () use ($user, $data, $actor) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
-            $fields = ['name', 'position', 'email', 'employee_id', 'contact_number'];
+            $fields = ['name', 'position', 'email', 'employee_id', 'contact_number', 'college', 'department'];
             $old = $locked->only($fields);
 
             $locked->update(array_intersect_key($data, array_flip($fields)));

@@ -43,8 +43,8 @@ class ContactNumberTest extends TestCase
         return [
             'first_name' => 'Ana', 'last_name' => 'Cruz', 'email' => 'ana.' . uniqid() . '@s.msumain.edu.ph',
             'password' => 'Str0ng!Pass2026', 'employee_id' => 'MSU-' . random_int(10000, 99999),
-            'contact_number' => $contact, 'college' => 'College of Business and Finance',
-            'department' => 'Finance', 'position' => 'Instructor',
+            'contact_number' => $contact, 'college' => 'College of Business Administration and Accountancy',
+            'department' => 'Accountancy', 'position' => 'Instructor',
         ];
     }
 
@@ -53,7 +53,7 @@ class ContactNumberTest extends TestCase
         return [
             'first_name' => 'New', 'last_name' => 'Person', 'email' => 'new.' . uniqid() . '@msumain.edu.ph',
             'employee_id' => 'MSU-' . random_int(10000, 99999), 'position' => 'Staff',
-            'college' => 'College of Natural Sciences and Mathematics', 'department' => 'Computer Science',
+            'college' => 'College of Natural Sciences and Mathematics', 'department' => 'Mathematics',
             'role' => 'researcher', 'contact_number' => $contact,
         ];
     }

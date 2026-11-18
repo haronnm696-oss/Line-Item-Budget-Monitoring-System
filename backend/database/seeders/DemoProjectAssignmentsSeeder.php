@@ -49,10 +49,10 @@ class DemoProjectAssignmentsSeeder extends Seeder
 
     /** Same profiles as DemoUsersSeeder, used only when the account is missing. */
     private const LEADER_PROFILES = [
-        'project.leader@gmail.com' => ['Aminah', 'Macarambon', 'Dr. Aminah Macarambon', 'MSU-04182', 'Project Leader, Urban Mobility', 'College of Social Sciences and Humanities', 'Research'],
-        'project.leader2@gmail.com' => ['Sittie Ayesah', 'Alonto', 'Dr. Sittie Ayesah Alonto', 'MSU-04183', 'Project Leader, Halal Goat Value Chain', 'College of Business and Finance', 'Finance'],
-        'project.leader3@gmail.com' => ['Jamal', 'Macaraya', 'Engr. Jamal Macaraya', 'MSU-04184', 'Project Leader, Weaving Heritage Archive', 'College of Computing and Information Sciences', 'Information Technology'],
-        'project.leader4@gmail.com' => ['Norhaya', 'Dimakaling', 'Dr. Norhaya Dimakaling', 'MSU-04185', 'Project Leader, Community Nutrition', 'College of Social Sciences and Humanities', 'Education'],
+        'project.leader@gmail.com' => ['Aminah', 'Macarambon', 'Dr. Aminah Macarambon', 'MSU-04182', 'Project Leader, Urban Mobility', 'College of Social Sciences and Humanities', 'Sociology'],
+        'project.leader2@gmail.com' => ['Sittie Ayesah', 'Alonto', 'Dr. Sittie Ayesah Alonto', 'MSU-04183', 'Project Leader, Halal Goat Value Chain', 'College of Business Administration and Accountancy', 'Management'],
+        'project.leader3@gmail.com' => ['Jamal', 'Macaraya', 'Engr. Jamal Macaraya', 'MSU-04184', 'Project Leader, Weaving Heritage Archive', 'College of Information and Computing Sciences', 'Information Sciences'],
+        'project.leader4@gmail.com' => ['Norhaya', 'Dimakaling', 'Dr. Norhaya Dimakaling', 'MSU-04185', 'Project Leader, Community Nutrition', 'College of Health Sciences', 'Nursing'],
     ];
 
     private bool $dryRun = false;

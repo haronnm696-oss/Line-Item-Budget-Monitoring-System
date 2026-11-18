@@ -22,8 +22,8 @@ class RegistrationTest extends TestCase
             'password' => 'Str0ng!Pass2026',
             'employee_id' => 'MSU-99999',
             'contact_number' => '09096254046',
-            'college' => 'College of Business and Finance',
-            'department' => 'Finance',
+            'college' => 'College of Business Administration and Accountancy',
+            'department' => 'Accountancy',
             'position' => 'Professor VI',
         ], $overrides);
     }

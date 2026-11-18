@@ -159,6 +159,8 @@ export const ENDPOINTS = {
   csrf: '/sanctum/csrf-cookie',
   login: '/api/login',
   register: '/api/register',
+  // The one list of MSU-Main colleges / units and departments (public): { units: [{ name, departments, other }], other: { name, office_label, office_max } }.
+  academicUnits: '/api/academic-units',
   logout: '/api/logout',
   me: '/api/me',
   forgotPassword: '/api/forgot-password',
