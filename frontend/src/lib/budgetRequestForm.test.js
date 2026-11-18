@@ -10,7 +10,7 @@ test('statuses read Returned / Withdrawn; a legacy rejected row reads Returned',
 });
 
 test('edit and resubmit starts from the returned request', () => {
-  const form = initialForm({ type: 'fund_release', project_tranche_id: 4, amount: 250000, title: 'Fund release: T2', justification: 'Fieldwork.' });
+  const form = initialForm({ type: 'fund_release', project_tranche_id: 4, amount: 250000, title: 'Release 2', justification: 'Fieldwork.' });
   assert.deepEqual(form, { type: 'fund_release', trancheId: '4', fromId: '', toId: '', amount: '250000', title: '', justification: 'Fieldwork.' });
 
   const realign = initialForm({ type: 'realignment', from_lib_category_id: 1, to_lib_category_id: 2, amount: 1000, justification: null });

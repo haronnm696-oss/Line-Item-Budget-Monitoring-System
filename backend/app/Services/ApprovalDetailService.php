@@ -48,7 +48,7 @@ class ApprovalDetailService
             'id' => $approval->id,
             'type' => $approval->type,
             'type_label' => $approval->typeLabel(),
-            'title' => $approval->type === 'liquidation' ? ($approval->liquidation?->title ?? $approval->title) : $approval->title,
+            'title' => $approval->displayTitle(),
             'description' => $approval->description,
             'justification' => $approval->justification,
             'amount' => $approval->amount !== null ? (float) $approval->amount : null,
@@ -153,7 +153,7 @@ class ApprovalDetailService
     private function fundRelease(ApprovalRequest $approval, Project $project): array
     {
         $tranches = ProjectTranche::query()->where('project_id', $project->id)->orderBy('sequence')->orderBy('id')->get();
-        $released = $tranches->where('status', 'released');
+        $released = ProjectTranche::sortByPlannedDate($tranches->where('status', 'released'));
         $metrics = $this->financials->financials($project);
 
         return [
@@ -310,7 +310,8 @@ class ApprovalDetailService
     {
         return [
             'id' => $tranche->id,
-            'name' => $tranche->name,
+            // "Release 2": its stored number (see ProjectTranche::releaseLabel).
+            'name' => $tranche->releaseLabel(),
             'sequence' => $tranche->sequence,
             'amount' => round((float) $tranche->amount, 2),
             'planned_release_date' => $tranche->planned_release_date?->toDateString(),

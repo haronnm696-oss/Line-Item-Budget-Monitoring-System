@@ -28,7 +28,7 @@ export default function ProjectHealthMatrix({ projects }) {
                   <th className="r">Approved budget</th>
                   <th className="r">Spent vs budget</th>
                   <th className="r">Time elapsed</th>
-                  <th>Tranche</th>
+                  <th>Releases</th>
                   <th>Reporting</th>
                   <th className="r">Receipts</th>
                 </tr>

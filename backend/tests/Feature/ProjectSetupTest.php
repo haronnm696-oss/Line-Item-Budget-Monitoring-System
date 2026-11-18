@@ -182,7 +182,7 @@ class ProjectSetupTest extends TestCase
 
         $audit = AuditTrail::count();
         $id = $this->postJson($url, ['amount' => 400000, 'planned_release_date' => '2026-12-01'])->assertCreated()
-            ->assertJsonPath('tranche.name', 'First tranche')->assertJsonPath('tranche.sequence', 1)->json('tranche.id');
+            ->assertJsonPath('tranche.name', 'Release 1')->assertJsonPath('tranche.sequence', 1)->json('tranche.id');
         $this->assertStep($audit, 'created', 'ProjectTranche');
         $this->postJson($url, ['amount' => 600000.01, 'planned_release_date' => '2027-01-01'])->assertStatus(422)->assertJsonValidationErrors(['amount']);
 
@@ -200,11 +200,11 @@ class ProjectSetupTest extends TestCase
         $this->postJson("/api/program/approvals/{$request->id}/decision", ['decision' => 'approved'])->assertOk();
         $this->assertSame('released', ProjectTranche::find($id)->status);
         $this->patchJson("/api/program/tranches/{$id}", ['amount' => 1])->assertStatus(422)
-            ->assertJsonPath('errors.tranche.0', 'A released tranche cannot be changed.');
+            ->assertJsonPath('errors.tranche.0', 'The funds for this release are already released, so it cannot be changed.');
         $this->deleteJson("/api/program/tranches/{$id}")->assertStatus(422);
 
         $second = $this->postJson($url, ['amount' => 100000, 'planned_release_date' => '2027-03-01'])->assertCreated()
-            ->assertJsonPath('tranche.name', 'Second tranche')->json('tranche.id');
+            ->assertJsonPath('tranche.name', 'Release 2')->json('tranche.id');
         $audit = AuditTrail::count();
         $this->deleteJson("/api/program/tranches/{$second}")->assertOk();
         $this->assertStep($audit, 'deleted', 'ProjectTranche');

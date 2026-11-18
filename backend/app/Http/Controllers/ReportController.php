@@ -93,13 +93,13 @@ class ReportController extends Controller
             ['Generated', now()->toDateTimeString()],
             [],
             ['FUND RELEASES'],
-            ['Tranche', 'Milestone', 'Amount', 'Status', 'Planned Release', 'Actual Release'],
+            ['Release', 'Milestone', 'Amount', 'Status', 'Planned Release', 'Actual Release'],
         ];
 
         foreach ($summary['tranches']['items'] as $tranche) {
             $rows[] = [
-                $tranche['sequence'],
                 $tranche['name'],
+                $tranche['milestone'] ?? '',
                 $tranche['amount'],
                 ucfirst($tranche['display_status']),
                 $tranche['planned_release_date'] ?? '',

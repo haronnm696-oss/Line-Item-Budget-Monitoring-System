@@ -12,7 +12,7 @@ use Illuminate\Validation\Rule;
 /**
  * Program Leader only (routes under the role.program-leader middleware):
  * create a project and set up its details, Project Leader, Line-Item Budget
- * and planned tranches. Rules and audit entries: ProjectSetupService.
+ * and planned releases (tranches in the data model). Rules and audit entries: ProjectSetupService.
  */
 class ProgramProjectSetupController extends Controller
 {
@@ -96,7 +96,7 @@ class ProgramProjectSetupController extends Controller
         $data = $request->validate($this->trancheRules(true), $this->messages());
         $tranche = $this->setup->addTranche($project, $data, $request->user());
 
-        return response()->json(['message' => 'Tranche added.', 'tranche' => $this->tranche($tranche)], 201);
+        return response()->json(['message' => 'Release added.', 'tranche' => $this->tranche($tranche)], 201);
     }
 
     /** PATCH /api/program/tranches/{projectTranche} */
@@ -105,7 +105,7 @@ class ProgramProjectSetupController extends Controller
         $data = $request->validate($this->trancheRules(false), $this->messages());
         $tranche = $this->setup->updateTranche($projectTranche, $data, $request->user());
 
-        return response()->json(['message' => 'Tranche saved.', 'tranche' => $this->tranche($tranche)]);
+        return response()->json(['message' => 'Release saved.', 'tranche' => $this->tranche($tranche)]);
     }
 
     /** DELETE /api/program/tranches/{projectTranche} */
@@ -113,7 +113,7 @@ class ProgramProjectSetupController extends Controller
     {
         $this->setup->removeTranche($projectTranche, $request->user());
 
-        return response()->json(['message' => 'Tranche removed.']);
+        return response()->json(['message' => 'Release removed.']);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -148,7 +148,7 @@ class ProgramProjectSetupController extends Controller
             '*.regex' => 'Use at most two decimals.',
             'allocated_amount.min' => 'The allocated amount cannot be negative.',
             'total_approved_budget.gt' => 'The total budget must be more than zero.',
-            'amount.gt' => 'The tranche amount must be more than zero.',
+            'amount.gt' => 'The release amount must be more than zero.',
         ];
     }
 
@@ -160,7 +160,7 @@ class ProgramProjectSetupController extends Controller
     private function tranche(ProjectTranche $tranche): array
     {
         return [
-            'id' => $tranche->id, 'sequence' => (int) $tranche->sequence, 'name' => $tranche->name,
+            'id' => $tranche->id, 'sequence' => (int) $tranche->sequence, 'name' => $tranche->releaseLabel(),
             'amount' => round((float) $tranche->amount, 2), 'planned_release_date' => $tranche->planned_release_date?->toDateString(),
         ];
     }

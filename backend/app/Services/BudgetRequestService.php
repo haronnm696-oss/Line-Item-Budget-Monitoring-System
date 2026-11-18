@@ -95,8 +95,8 @@ class BudgetRequestService
             'event' => $approved ? 'approved' : 'returned',
             'title' => $approved ? 'Budget request approved' : 'Budget request returned',
             'message' => $approved
-                ? "{$actor->name} approved your {$approval->typeLabel()} request: {$approval->title}.{$because}"
-                : "{$actor->name} returned your {$approval->typeLabel()} request for changes: {$approval->title}.{$because} Edit and resubmit it, or withdraw it, from My requests.",
+                ? "{$actor->name} approved your {$approval->typeLabel()} request: {$approval->displayTitle()}.{$because}"
+                : "{$actor->name} returned your {$approval->typeLabel()} request for changes: {$approval->displayTitle()}.{$because} Edit and resubmit it, or withdraw it, from My requests.",
             'approval_id' => $approval->id,
             'project_id' => $approval->project_id,
             'project' => $approval->project?->title,
@@ -204,21 +204,22 @@ class BudgetRequestService
     {
         $tranche = ProjectTranche::query()->where('project_id', $project->id)->find($data['project_tranche_id'] ?? 0);
         if (! $tranche) {
-            throw ValidationException::withMessages(['project_tranche_id' => ['Choose a tranche of this project.']]);
+            throw ValidationException::withMessages(['project_tranche_id' => ['Choose a release of this project.']]);
         }
         if ($tranche->status === 'released') {
-            throw ValidationException::withMessages(['project_tranche_id' => ['This tranche has already been released.']]);
+            throw ValidationException::withMessages(['project_tranche_id' => ['The funds for this release have already been released.']]);
         }
         $pending = ApprovalRequest::query()
             ->where('project_tranche_id', $tranche->id)->where('type', 'disbursement')->where('status', 'pending')
             ->exists();
         if ($pending) {
-            throw ValidationException::withMessages(['project_tranche_id' => ['A fund release request for this tranche is already pending.']]);
+            throw ValidationException::withMessages(['project_tranche_id' => ['This release already has a pending fund release request.']]);
         }
 
         return [
             'project_tranche_id' => $tranche->id,
-            'title' => 'Fund release: ' . $tranche->name,
+            // Stored for the record; users read displayTitle() ("Release 2").
+            'title' => 'Fund release: ' . $tranche->releaseLabel(),
             'amount' => $tranche->amount,
         ];
     }
@@ -261,7 +262,7 @@ class BudgetRequestService
 
         $trancheId = $data['project_tranche_id'] ?? null;
         if ($trancheId && ! ProjectTranche::query()->where('project_id', $project->id)->whereKey($trancheId)->exists()) {
-            throw ValidationException::withMessages(['project_tranche_id' => ['Choose a tranche of this project.']]);
+            throw ValidationException::withMessages(['project_tranche_id' => ['Choose a release of this project.']]);
         }
 
         return [
@@ -306,8 +307,8 @@ class BudgetRequestService
             'event' => $resubmitted ? 'resubmitted' : 'requested',
             'title' => $resubmitted ? 'Budget request resubmitted' : 'New budget request',
             'message' => $resubmitted
-                ? "{$actor->name} edited and resubmitted a returned {$approval->typeLabel()} for {$approval->project?->title}: {$approval->title}{$amount}."
-                : "{$actor->name} requested a {$approval->typeLabel()} for {$approval->project?->title}: {$approval->title}{$amount}.",
+                ? "{$actor->name} edited and resubmitted a returned {$approval->typeLabel()} for {$approval->project?->title}: {$approval->displayTitle()}{$amount}."
+                : "{$actor->name} requested a {$approval->typeLabel()} for {$approval->project?->title}: {$approval->displayTitle()}{$amount}.",
             'approval_id' => $approval->id,
             'project_id' => $approval->project_id,
             'project' => $approval->project?->title,

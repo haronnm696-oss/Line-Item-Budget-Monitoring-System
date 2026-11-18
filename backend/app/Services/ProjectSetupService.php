@@ -175,7 +175,8 @@ class ProjectSetupService
             $tranche = ProjectTranche::create([
                 'project_id' => $locked->id,
                 'sequence' => $sequence,
-                'name' => ($data['name'] ?? null) ?: $this->trancheName($sequence),
+                // The number is assigned by the model (release_number); the name is only an optional milestone.
+                'name' => trim((string) ($data['name'] ?? '')),
                 'amount' => $data['amount'],
                 'planned_release_date' => $data['planned_release_date'],
                 'status' => 'upcoming',
@@ -197,7 +198,14 @@ class ProjectSetupService
             }
 
             $old = $this->trancheSnapshot($locked);
-            $locked->update(array_intersect_key($data, array_flip(['name', 'amount', 'planned_release_date'])));
+            $changes = array_intersect_key($data, array_flip(['name', 'amount', 'planned_release_date']));
+            // The name is only an optional milestone (users read "Release N"); the
+            // column needs a value, so a cleared one is stored empty. The
+            // release number never changes here.
+            if (array_key_exists('name', $changes)) {
+                $changes['name'] = trim((string) $changes['name']);
+            }
+            $locked->update($changes);
             AuditLogger::write('updated', $locked, $old, $this->trancheSnapshot($locked->fresh()), $actor);
 
             return $locked->fresh();
@@ -210,7 +218,7 @@ class ProjectSetupService
             $locked = ProjectTranche::whereKey($tranche->id)->lockForUpdate()->firstOrFail();
             $this->requireOpenTranche($locked, 'removed');
             if ($locked->approvalRequests()->exists()) {
-                throw ValidationException::withMessages(['tranche' => ['This tranche has fund release requests on record, so it cannot be removed.']]);
+                throw ValidationException::withMessages(['tranche' => ['This release has fund release requests on record, so it cannot be removed.']]);
             }
             $old = $this->trancheSnapshot($locked);
             $locked->delete();
@@ -332,7 +340,7 @@ class ProjectSetupService
         $others = (float) $project->tranches()->when($exceptId, fn ($q) => $q->whereKeyNot($exceptId))->sum('amount');
         if ($budget > 0 && round($others + $amount, 2) > $budget) {
             throw ValidationException::withMessages(['amount' => [
-                'Tranches would total ₱' . number_format($others + $amount, 2) . ', more than the total budget of ₱' . number_format($budget, 2) . '.',
+                'Releases would total ₱' . number_format($others + $amount, 2) . ', more than the total budget of ₱' . number_format($budget, 2) . '.',
             ]]);
         }
     }
@@ -352,13 +360,13 @@ class ProjectSetupService
     private function requireOpenTranche(ProjectTranche $tranche, string $verb): void
     {
         if ($tranche->isReleased()) {
-            throw ValidationException::withMessages(['tranche' => ["A released tranche cannot be {$verb}."]]);
+            throw ValidationException::withMessages(['tranche' => ["The funds for this release are already released, so it cannot be {$verb}."]]);
         }
         $pending = ApprovalRequest::query()
             ->where('project_tranche_id', $tranche->id)->where('type', 'disbursement')->where('status', 'pending')
             ->exists();
         if ($pending) {
-            throw ValidationException::withMessages(['tranche' => ["A fund release request for this tranche is pending, so it cannot be {$verb}."]]);
+            throw ValidationException::withMessages(['tranche' => ["A fund release request for this release is pending, so it cannot be {$verb}."]]);
         }
     }
 
@@ -409,17 +417,10 @@ class ProjectSetupService
         return [
             'project_id' => (int) $tranche->project_id,
             'sequence' => (int) $tranche->sequence,
+            'release_number' => $tranche->release_number,
             'name' => $tranche->name,
             'amount' => round((float) $tranche->amount, 2),
             'planned_release_date' => $tranche->planned_release_date?->toDateString(),
         ];
-    }
-
-    /** "First tranche", "Second tranche", … then "Tranche 7". */
-    private function trancheName(int $n): string
-    {
-        $word = [1 => 'First', 2 => 'Second', 3 => 'Third', 4 => 'Fourth', 5 => 'Fifth', 6 => 'Sixth'][$n] ?? null;
-
-        return $word ? "{$word} tranche" : "Tranche {$n}";
     }
 }

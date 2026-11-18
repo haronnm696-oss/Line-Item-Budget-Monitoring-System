@@ -12,8 +12,9 @@ function messageFor(error, fallback) {
   return error?.response?.data?.errors?.remarks?.[0] || error?.response?.data?.message || fallback;
 }
 
-function trancheName(tranche) {
-  return tranche.sequence ? `${tranche.name} (tranche ${tranche.sequence})` : tranche.name;
+/** "Release 2": the API gives each release its stored number (fields keep "tranche"). */
+function releaseName(tranche) {
+  return tranche.name;
 }
 
 function FundRelease({ details }) {
@@ -21,11 +22,11 @@ function FundRelease({ details }) {
   return (
     <>
       <dl className="ld-fields">
-        <div><dt>Tranche</dt><dd>{tranche ? trancheName(tranche) : '—'}</dd></div>
-        <div><dt>Tranche amount</dt><dd>{tranche ? peso(tranche.amount) : '—'}</dd></div>
-        <div><dt>Planned release</dt><dd>{tranche?.planned_release_date ? formatDate(tranche.planned_release_date) : '—'}</dd></div>
-        <div><dt>Tranche status</dt><dd>{tranche ? TRANCHE_STATUS[tranche.status] ?? tranche.status : '—'}</dd></div>
-        <div><dt>Already released</dt><dd>{peso(released.total)}{released.tranches.length ? ` · ${released.tranches.length} tranche${released.tranches.length === 1 ? '' : 's'}` : ''}</dd></div>
+        <div><dt>Release</dt><dd>{tranche ? releaseName(tranche) : '—'}</dd></div>
+        <div><dt>Release amount</dt><dd>{tranche ? peso(tranche.amount) : '—'}</dd></div>
+        <div><dt>Planned date</dt><dd>{tranche?.planned_release_date ? formatDate(tranche.planned_release_date) : '—'}</dd></div>
+        <div><dt>Release status</dt><dd>{tranche ? TRANCHE_STATUS[tranche.status] ?? tranche.status : '—'}</dd></div>
+        <div><dt>Already released</dt><dd>{peso(released.total)}{released.tranches.length ? ` · ${released.tranches.length} release${released.tranches.length === 1 ? '' : 's'}` : ''}</dd></div>
         <div><dt>Project budget</dt><dd>{peso(budget.budget)}</dd></div>
         <div><dt>Spent (verified)</dt><dd>{peso(budget.spent)}</dd></div>
         <div><dt>Remaining budget</dt><dd><b>{peso(budget.remaining)}</b></dd></div>
@@ -33,7 +34,7 @@ function FundRelease({ details }) {
       {released.tranches.length > 0 && (
         <ul className="pa-history">
           {released.tranches.map((row) => (
-            <li key={row.id}>{trancheName(row)}: {peso(row.amount)}{row.released_at ? ` · released ${formatDate(row.released_at)}` : ''}</li>
+            <li key={row.id}>{releaseName(row)}: {peso(row.amount)}{row.released_at ? ` · released ${formatDate(row.released_at)}` : ''}</li>
           ))}
         </ul>
       )}
@@ -83,23 +84,23 @@ function Liquidation({ details }) {
   return (
     <>
       <dl className="ld-fields">
-        <div><dt>Tranche liquidated</dt><dd>{tranche ? trancheName(tranche) : 'No tranche linked'}</dd></div>
+        <div><dt>Release liquidated</dt><dd>{tranche ? releaseName(tranche) : 'No release linked'}</dd></div>
         <div><dt>Released amount</dt><dd>{tranche?.status === 'released' ? `${peso(details.released_amount)}${tranche.released_at ? ` · ${formatDate(tranche.released_at)}` : ''}` : 'Not released'}</dd></div>
       </dl>
       {period && (
         <p className="ld-muted">
           Verified expenses dated {formatDate(period.from)} to {period.to ? formatDate(period.to) : 'today'}
           {period.starts === 'project_start'
-            ? ' (first tranche: from the project start to the next release).'
-            : ' (from this tranche’s release to the next one).'}
+            ? ' (first release: from the project start to the next release).'
+            : ' (from this release to the next one).'}
         </p>
       )}
       {expenses.length === 0 ? (
-        <p className="ld-muted">{period ? 'No verified expenses in this period.' : 'Expenses are shown once the tranche is released.'}</p>
+        <p className="ld-muted">{period ? 'No verified expenses in this period.' : 'Expenses are shown once the funds for this release are released.'}</p>
       ) : (
         <div className="ra-table-wrap">
           <table className="program-table ld-table">
-            <caption className="pa-sr-only">Verified expenses charged against the tranche</caption>
+            <caption className="pa-sr-only">Verified expenses charged against the release</caption>
             <thead>
               <tr>
                 <th scope="col">Date</th>

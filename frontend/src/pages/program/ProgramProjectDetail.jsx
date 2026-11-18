@@ -204,15 +204,15 @@ export default function ProgramProjectDetail() {
       <section className="program-card">
         <div className="program-card-head">
           <div>
-            <div className="program-card-title">Tranches</div>
-            <div className="program-card-sub">Planned releases and their liquidation. Releasing goes through the fund release approval.</div>
+            <div className="program-card-title">Releases</div>
+            <div className="program-card-sub">Planned releases, listed by planned date, and their liquidation. A release keeps its number for good. Releasing the funds goes through the fund release approval.</div>
           </div>
           {setup && (
-            <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'tranche' }); }}>Add tranche</button>
+            <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'tranche' }); }}>Add release</button>
           )}
         </div>
         {tranches.length === 0 ? (
-          <p className="pl-inbox-empty">No tranches scheduled.</p>
+          <p className="pl-inbox-empty">No releases scheduled.</p>
         ) : (
           <div className="program-scroll">
             <table className="program-table pd-table">
@@ -230,8 +230,8 @@ export default function ProgramProjectDetail() {
                 {tranches.map((tranche) => (
                   <tr key={tranche.id}>
                     <td>
-                      <div className="project-name">Tranche {tranche.sequence}</div>
-                      <div className="project-code">{tranche.name}</div>
+                      <div className="project-name">{tranche.name}</div>
+                      {tranche.milestone && <div className="project-code">{tranche.milestone}</div>}
                     </td>
                     <td>{formatDate(tranche.planned_release_date)}</td>
                     <td className="num">{peso(tranche.amount)}</td>
@@ -256,10 +256,10 @@ export default function ProgramProjectDetail() {
                         {setup.editable_tranches.includes(tranche.id) ? (
                           <>
                             <button type="button" className="program-btn sm" onClick={() => { setNotice(''); setDialog({ kind: 'tranche', item: tranche }); }}>
-                              Edit<span className="pa-sr-only"> tranche {tranche.sequence}</span>
+                              Edit<span className="pa-sr-only"> {tranche.name}</span>
                             </button>
                             <button type="button" className="program-btn sm danger" onClick={() => { setNotice(''); setDialog({ kind: 'removeTranche', item: tranche }); }}>
-                              Remove<span className="pa-sr-only"> tranche {tranche.sequence}</span>
+                              Remove<span className="pa-sr-only"> {tranche.name}</span>
                             </button>
                           </>
                         ) : (
@@ -387,7 +387,7 @@ export default function ProgramProjectDetail() {
       )}
       {dialog?.kind === 'removeTranche' && (
         <RemoveDialog
-          title="Remove tranche"
+          title="Remove release"
           text={`Remove ${dialog.item.name} (${peso(dialog.item.amount)}, planned ${formatDate(dialog.item.planned_release_date)})?`}
           url={ENDPOINTS.programTranche(dialog.item.id)}
           onClose={() => setDialog(null)}

@@ -111,13 +111,13 @@ class BudgetRequestController extends Controller
         return DocumentController::fileMessages('files.*') + [
             'justification.required' => 'A justification is required.',
             'justification.not_regex' => 'A justification is required.',
-            'project_tranche_id.required_if' => 'Choose the tranche to release.',
+            'project_tranche_id.required_if' => 'Choose the release to request.',
         ];
     }
 
     private function row(ApprovalRequest $approval, $viewer = null): array
     {
-        $approval->loadMissing(['requestedBy', 'reviewedBy', 'withdrawnBy']);
+        $approval->loadMissing(['requestedBy', 'reviewedBy', 'withdrawnBy', 'tranche']);
         $viewer ??= request()->user();
         $mine = $viewer && (int) $approval->requested_by === (int) $viewer->id;
         $payload = $approval->payload ?? [];
@@ -128,7 +128,7 @@ class BudgetRequestController extends Controller
             'project_id' => $approval->project_id,
             'type' => $type,
             'type_label' => $approval->typeLabel(),
-            'title' => $approval->title,
+            'title' => $approval->displayTitle(),
             'amount' => $approval->amount !== null ? (float) $approval->amount : null,
             'payload' => $approval->payload,
             'project_tranche_id' => $approval->project_tranche_id,

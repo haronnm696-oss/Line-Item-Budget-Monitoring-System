@@ -14,6 +14,7 @@ use App\Models\Liquidation;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\ProjectTranche;
+use App\Support\ReleaseWording;
 use App\Models\ProjectUser;
 use App\Models\Role;
 use App\Models\User;
@@ -37,7 +38,7 @@ class AuditEntryPresenter
         'ApprovalRequest' => 'Approval request',
         'Expense' => 'Expense',
         'LibCategory' => 'Line item',
-        'ProjectTranche' => 'Tranche',
+        'ProjectTranche' => 'Release',
         'Payroll' => 'Payroll',
         'Project' => 'Project',
         'User' => 'User account',
@@ -113,7 +114,7 @@ class AuditEntryPresenter
         'user_id' => 'Person',
         'project_id' => 'Project',
         'lib_category_id' => 'Line item',
-        'project_tranche_id' => 'Tranche',
+        'project_tranche_id' => 'Release',
         'funding_agency_id' => 'Funder',
         'review_notes' => 'Remark',
         'remarks' => 'Remarks',
@@ -143,7 +144,7 @@ class AuditEntryPresenter
         'line_item_code' => 'Line item code',
         'category_type' => 'Category',
         'type' => 'Type',
-        'sequence' => 'Tranche number',
+        'sequence' => 'Release number',
         'pay_month' => 'Month',
         'pay_year' => 'Year',
         'funder_reference' => 'Funder reference',
@@ -191,6 +192,8 @@ class AuditEntryPresenter
     private array $projects = [];
     private array $lineItems = [];
     private array $tranches = [];
+    /** The release the entry being presented is about, if any (see releaseOf). */
+    private ?ProjectTranche $entryRelease = null;
     /** @var array<string, array<int, \Illuminate\Database\Eloquent\Model>> */
     private array $records = [];
     /** @var array<string, array<int, array<string, mixed>>> values from "added" / "deleted" entries */
@@ -234,15 +237,19 @@ class AuditEntryPresenter
             ->map(fn ($v) => (int) $v)
             ->all();
 
+        $approvals = ApprovalRequest::query()->whereIn('id', $ids('ApprovalRequest'))->get()->keyBy('id');
         $this->records = [
-            'ApprovalRequest' => ApprovalRequest::query()->whereIn('id', $ids('ApprovalRequest'))->get()->keyBy('id')->all(),
+            'ApprovalRequest' => $approvals->all(),
             // Deleted (soft-deleted) expenses still name the record.
             'Expense' => Expense::withTrashed()->whereIn('id', $ids('Expense'))->get()->keyBy('id')->all(),
             'Document' => Document::query()->whereIn('id', $ids('Document'))->get()->keyBy('id')->all(),
             'PurchaseRequest' => PurchaseRequest::withTrashed()->whereIn('id', $ids('PurchaseRequest'))->get()->keyBy('id')->all(),
             'PayrollBatch' => PayrollBatch::query()->whereIn('id', $ids('PayrollBatch'))->get()->keyBy('id')->all(),
             'Payroll' => Payroll::query()->whereIn('id', $ids('Payroll'))->get()->keyBy('id')->all(),
-            'Liquidation' => Liquidation::query()->whereIn('id', $ids('Liquidation'))->get()->keyBy('id')->all(),
+            // Also the approvals' liquidations: their titles name the request.
+            'Liquidation' => Liquidation::query()
+                ->whereIn('id', array_unique(array_merge($ids('Liquidation'), $approvals->pluck('liquidation_id')->filter()->all())))
+                ->get()->keyBy('id')->all(),
             'ProjectUser' => ProjectUser::query()->whereIn('id', $ids('ProjectUser'))->get()->keyBy('id')->all(),
         ];
 
@@ -266,8 +273,22 @@ class AuditEntryPresenter
         );
         $this->lineItems = LibCategory::query()->whereIn('id', array_unique(array_filter($lineItemIds)))->get()->keyBy('id')->all();
 
-        $trancheIds = array_merge($ids('ProjectTranche'), $values('project_tranche_id'));
+        $trancheIds = array_merge(
+            $ids('ProjectTranche'),
+            $values('project_tranche_id'),
+            $approvals->pluck('project_tranche_id')->filter()->all(),
+            collect($this->records['Liquidation'])->pluck('project_tranche_id')->filter()->all()
+        );
         $this->tranches = ProjectTranche::query()->whereIn('id', array_unique($trancheIds))->get()->keyBy('id')->all();
+
+        // Titles read the stored release number (displayTitle) without a query per row.
+        foreach ($this->records['Liquidation'] as $liquidation) {
+            $liquidation->setRelation('tranche', $this->tranches[(int) $liquidation->project_tranche_id] ?? null);
+        }
+        foreach ($approvals as $approval) {
+            $approval->setRelation('tranche', $this->tranches[(int) $approval->project_tranche_id] ?? null);
+            $approval->setRelation('liquidation', $this->records['Liquidation'][(int) $approval->liquidation_id] ?? null);
+        }
 
         $userIds = array_merge(
             $entries->pluck('user_id')->filter()->all(),
@@ -428,7 +449,7 @@ class AuditEntryPresenter
                 $status = $status === 'rejected' ? 'returned' : $status;
 
                 return [
-                    'label' => $approval?->title ?? $pick('title') ?? 'Deleted approval request',
+                    'label' => $approval?->displayTitle() ?? ReleaseWording::apply($pick('title'), $this->releaseOf($entry, $type, $old, $new)) ?? 'Deleted approval request',
                     'type' => 'Approval request' . (isset(self::APPROVAL_TYPES[$kind]) ? ' · ' . self::APPROVAL_TYPES[$kind] : ''),
                     'link' => [
                         'kind' => 'approval',
@@ -494,8 +515,13 @@ class AuditEntryPresenter
                 $status = $tranche?->status ?? $pick('status');
 
                 return [
-                    'label' => $tranche?->name ?? $pick('name') ?? 'Deleted tranche',
-                    'type' => 'Tranche' . ($status ? ' · ' . self::humanize($status) : ''),
+                    // "Release 2" from the stored number; a removed release keeps
+                    // the number its last entry recorded.
+                    'label' => $tranche?->releaseLabel()
+                        ?? ($pick('release_number') ? ReleaseWording::label((int) $pick('release_number')) : null)
+                        ?? ReleaseWording::apply($pick('name'))
+                        ?? 'Deleted release',
+                    'type' => 'Release' . ($status ? ' · ' . self::humanize($status) : ''),
                     'link' => $projectLink,
                 ];
 
@@ -527,7 +553,7 @@ class AuditEntryPresenter
                 $status = $liquidation?->status ?? $pick('status');
 
                 return [
-                    'label' => $liquidation?->title ?? $pick('title') ?? 'Deleted liquidation',
+                    'label' => ReleaseWording::apply($liquidation?->title ?? $pick('title'), $this->releaseOf($entry, $type, $old, $new)) ?? 'Deleted liquidation',
                     'type' => 'Liquidation' . ($status ? ' · ' . self::humanize($status) : ''),
                     'link' => $projectLink,
                 ];
@@ -545,13 +571,34 @@ class AuditEntryPresenter
         }
 
         return [
-            'label' => $pick('title') ?? $pick('name') ?? $noun,
+            'label' => ReleaseWording::apply($pick('title') ?? $pick('name'), $this->releaseOf($entry, $type, $old, $new)) ?? $noun,
             'type' => $noun,
             'link' => $projectLink,
         ];
     }
 
     // --------------------------------------------------------------- changes
+
+    /**
+     * The release an entry is about: the release itself, the one its values
+     * name, or the one its approval request or liquidation is linked to.
+     */
+    private function releaseOf(AuditTrail $entry, string $type, array $old, array $new): ?ProjectTranche
+    {
+        $id = (int) $entry->model_id;
+        if ($type === 'ProjectTranche') {
+            return $this->tranches[$id] ?? null;
+        }
+        $trancheId = $new['project_tranche_id'] ?? $old['project_tranche_id']
+            ?? $this->snapshots[$type][$id]['project_tranche_id'] ?? null;
+        if ($trancheId === null && in_array($type, ['ApprovalRequest', 'Liquidation'], true)) {
+            $record = $this->records[$type][$id] ?? null;
+            $trancheId = $record?->project_tranche_id
+                ?? ($type === 'ApprovalRequest' ? $record?->liquidation?->project_tranche_id : null);
+        }
+
+        return is_numeric($trancheId) ? ($this->tranches[(int) $trancheId] ?? null) : null;
+    }
 
     private function reasonOf(AuditTrail $entry, array $old, array $new): ?string
     {
@@ -583,6 +630,8 @@ class AuditEntryPresenter
 
         $keys = array_values(array_unique(array_merge(array_keys($old), array_keys($new))));
         $lines = [];
+        // Old titles name a release by an old number; show its stored one.
+        $this->entryRelease = $this->releaseOf($entry, $type, $old, $new);
 
         foreach ($keys as $key) {
             if (! is_string($key) || $this->isHidden($key, $entry, $type)) {
@@ -637,6 +686,11 @@ class AuditEntryPresenter
             return true;
         }
         if ($key === 'user_id' && $type === 'User') {
+            return true;
+        }
+        // A release is shown as "Release N" from its stored number; its
+        // stored name ("Second tranche") and add order would contradict that.
+        if ($type === 'ProjectTranche' && in_array($key, ['name', 'sequence', 'release_number'], true)) {
             return true;
         }
 
@@ -708,7 +762,7 @@ class AuditEntryPresenter
             return ($this->lineItems[(int) $value] ?? null)?->line_item_name ?? 'Deleted line item';
         }
         if ($key === 'project_tranche_id') {
-            return ($this->tranches[(int) $value] ?? null)?->name ?? 'Deleted tranche';
+            return ($this->tranches[(int) $value] ?? null)?->releaseLabel() ?? 'Deleted release';
         }
         if ($key === 'status' || $key === 'category_type') {
             return self::humanize((string) $value);
@@ -724,6 +778,10 @@ class AuditEntryPresenter
         }
         if (is_array($value)) {
             return null;
+        }
+        if (in_array($key, ['title', 'name'], true)) {
+            // Older titles and names read "tranche"; users read "release".
+            return ReleaseWording::apply((string) $value, $this->entryRelease);
         }
 
         return (string) $value;

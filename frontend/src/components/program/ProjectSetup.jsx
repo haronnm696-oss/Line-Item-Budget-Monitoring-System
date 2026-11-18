@@ -7,7 +7,7 @@ import { peso } from '../money';
 
 /*
  * Program Leader project set-up dialogs (New project, Edit details, line
- * items, tranches). The server (ProjectSetupService) enforces every rule and
+ * items, releases). The server (ProjectSetupService) enforces every rule and
  * writes one audit entry per change; the checks here only give early,
  * clear messages.
  */
@@ -276,11 +276,16 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
 
 // ------------------------------------------------------------------ tranches
 
-/** Add (tranche null) or edit a planned tranche (not released). */
+/**
+ * Add (tranche null) or edit a planned release (not released). Releases are
+ * numbered "Release 1", "Release 2"… in the order added and keep that
+ * number (stored by the server), so the only name
+ * field is an optional milestone. API fields keep the name "tranche".
+ */
 export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSaved }) {
   const editing = Boolean(tranche);
   const [form, setForm] = useState({
-    name: tranche?.name ?? '',
+    milestone: tranche?.milestone ?? '',
     amount: tranche ? String(tranche.amount) : '',
     planned_release_date: tranche?.planned_release_date ?? '',
   });
@@ -296,19 +301,19 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
     const amountError = moneyError(form.amount, { positive: true });
     if (amountError) next.amount = amountError;
     else if (Number(setup.total_budget) > 0 && others + Number(form.amount) > Number(setup.total_budget) + 0.001) {
-      next.amount = `Tranches would total ${peso(others + Number(form.amount))}, more than the total budget of ${peso(setup.total_budget)}.`;
+      next.amount = `Releases would total ${peso(others + Number(form.amount))}, more than the total budget of ${peso(setup.total_budget)}.`;
     }
     if (!form.planned_release_date) next.planned_release_date = 'Enter the planned release date.';
     setLocal(next);
     if (Object.keys(next).length) return;
 
-    const body = { name: form.name.trim() || null, amount: Number(form.amount), planned_release_date: form.planned_release_date };
-    if (editing) save('patch', ENDPOINTS.programTranche(tranche.id), body, 'Tranche saved.');
-    else save('post', ENDPOINTS.programTranches(projectId), body, 'Tranche added.');
+    const body = { name: form.milestone.trim() || null, amount: Number(form.amount), planned_release_date: form.planned_release_date };
+    if (editing) save('patch', ENDPOINTS.programTranche(tranche.id), body, 'Release saved.');
+    else save('post', ENDPOINTS.programTranches(projectId), body, 'Release added.');
   }
 
   return (
-    <Dialog title={editing ? 'Edit tranche' : 'Add tranche'} labelId="ps-tranche-title" busy={busy} onClose={onClose}>
+    <Dialog title={editing ? `Edit ${tranche.name}` : 'Add release'} labelId="ps-tranche-title" busy={busy} onClose={onClose}>
       <form className="pu-form" onSubmit={submit} noValidate>
         {error && <div className="program-banner error" role="alert">{error}</div>}
         <div className="program-form-grid">
@@ -318,14 +323,14 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
           <Field id="ps-tranche-date" label="Planned release date" error={errors.planned_release_date}>
             {(a11y) => <input {...a11y} className="program-input" type="date" value={form.planned_release_date} disabled={busy} onChange={set('planned_release_date')} />}
           </Field>
-          <Field id="ps-tranche-name" label="Name" full error={errors.name} hint="Optional; for example Second tranche">
-            {(a11y) => <input {...a11y} className="program-input" value={form.name} disabled={busy} onChange={set('name')} />}
+          <Field id="ps-tranche-name" label="Milestone" full error={errors.name} hint="Optional; for example Mobilization">
+            {(a11y) => <input {...a11y} className="program-input" value={form.milestone} disabled={busy} onChange={set('milestone')} />}
           </Field>
         </div>
-        <p className="pu-hint">Releasing a tranche stays in the fund release approval.</p>
+        <p className="pu-hint">A new release gets the next number; changing a date never renumbers. Releasing the funds stays in the fund release approval.</p>
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save tranche' : 'Add tranche'}</button>
+          <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save release' : 'Add release'}</button>
         </div>
       </form>
     </Dialog>
@@ -334,7 +339,7 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
 
 // ------------------------------------------------------------------ remove
 
-/** Confirm removing a line item or tranche. */
+/** Confirm removing a line item or release. */
 export function RemoveDialog({ title, text, url, onClose, onSaved }) {
   const { busy, error, save } = useSave(onSaved);
 
