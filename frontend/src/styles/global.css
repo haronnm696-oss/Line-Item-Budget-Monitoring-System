@@ -3690,10 +3690,18 @@ select.signin-input:disabled{
 
 /* Registration Review panel: project assignment rows */
 .rr-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
-.rr-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px 10px;align-items:end;padding:10px;border:1px solid var(--pg-card-border);border-radius:10px}
+.rr-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 10px;align-items:end;padding:10px;border:1px solid var(--pg-card-border);border-radius:10px}
 .rr-row.has-error{border-color:var(--pg-risk);border-width:2px}
 .rr-row .program-btn{min-height:44px}
 .rr-row-error{grid-column:1 / -1;margin:0}
+.rr-row-role{align-self:center;margin:0}
+/* Read-only role (Assign to project, Review panel) and mismatch warnings */
+.pu-ro-label{display:block;font-size:12px;font-weight:600;color:var(--pg-muted)}
+.pu-ro-value{margin:4px 0 0;font-size:13.5px;font-weight:650}
+.pu-mismatch{margin:6px 0 0;font-size:12.5px;font-weight:650;color:var(--pg-risk);display:flex;gap:6px;flex-wrap:wrap}
+.pu-mismatch-sub{font-weight:500;color:var(--pg-muted)}
+.pu-asg-fix{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px}
+.pu-asg-fix .program-btn{min-height:44px}
 @media (max-width:560px){.rr-row{grid-template-columns:1fr}}
 
 /* Documents */

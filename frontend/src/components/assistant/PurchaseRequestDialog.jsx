@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { nextStep } from '../../lib/submitMessage';
 import FileField from '../FileField';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
@@ -113,8 +114,8 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
         onDone?.(editing ? `Saved your changes to ${what}.` : `Saved ${what} as a draft.`);
         return;
       }
-      await apiWrite('post', ENDPOINTS.purchaseRequestStep(step.id, 'submit'));
-      onDone?.(`${editing && request.workflow_status === 'returned' ? 'Resubmitted' : 'Submitted'} ${what}. It is waiting for the Project Leader.`);
+      const data = await apiWrite('post', ENDPOINTS.purchaseRequestStep(step.id, 'submit'));
+      onDone?.(`${editing && request.workflow_status === 'returned' ? 'Resubmitted' : 'Submitted'} ${what}. ${nextStep(data?.message)}`);
     } catch (error) {
       setErrors(fieldErrors(error));
       const message = errorText(error, 'Could not save. Please try again.');

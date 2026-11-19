@@ -105,11 +105,15 @@ class ProgramUserService
                 ]);
             }
             $seen[$project->id] = true;
-            $assignmentRole = Role::where('slug', $row['role'] ?? null)->first();
-            if (! $assignmentRole) {
-                throw ValidationException::withMessages(["assignments.$index.role" => 'Choose a role on this project.']);
+            // The role on a project is the account role; an older client may
+            // still send one, which must match.
+            $requested = $row['role'] ?? null;
+            if ($requested !== null && $requested !== '' && $requested !== $roleSlug) {
+                throw ValidationException::withMessages([
+                    "assignments.$index.role" => "A person's role on a project is always their account role.",
+                ]);
             }
-            $rows[$index] = [$project, $assignmentRole];
+            $rows[$index] = $project;
         }
 
         $role = $decision === 'approved'
@@ -138,9 +142,9 @@ class ProgramUserService
                 // Same rules as "Assign to project"; a broken rule rolls
                 // back the whole approval and names the row.
                 $logged = [];
-                foreach ($rows as $index => [$project, $assignmentRole]) {
+                foreach ($rows as $index => $project) {
                     try {
-                        $this->createAssignmentRow($locked, $project, $assignmentRole);
+                        $assignmentRole = $this->createAssignmentRow($locked, $project)->role;
                     } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
                         throw ValidationException::withMessages(["assignments.$index.project_id" => $e->getMessage()]);
                     }
@@ -187,7 +191,7 @@ class ProgramUserService
                 $fresh,
                 self::ROLE_LABELS[$role->slug] ?? $role->name,
                 array_map(
-                    fn (array $pair) => $pair[0]->title . ' (' . (self::ROLE_LABELS[$pair[1]->slug] ?? $pair[1]->name) . ')',
+                    fn (Project $project) => $project->title . ' (' . (self::ROLE_LABELS[$role->slug] ?? $role->name) . ')',
                     array_values($rows)
                 )
             )
@@ -326,8 +330,16 @@ class ProgramUserService
             ->where('is_active', true)
             ->whereDoesntHave('primaryRole', fn ($r) => $r->where('slug', 'program-leader'))
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'is_active'])
-            ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'is_active' => true])
+            ->with('primaryRole')
+            ->get(['id', 'name', 'email', 'is_active', 'role_id'])
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'is_active' => true,
+                'role_slug' => $user->primaryRole?->slug,
+                'role_label' => self::ROLE_LABELS[$user->primaryRole?->slug] ?? $user->primaryRole?->name,
+            ])
             ->values()
             ->all();
     }
@@ -361,6 +373,9 @@ class ProgramUserService
                     'project_code' => $assignment->project->code,
                     'role_slug' => $assignment->role?->slug,
                     'role_label' => self::ROLE_LABELS[$assignment->role?->slug] ?? $assignment->role?->name,
+                    // Older data: the role here differs from the account role
+                    // (never changed automatically; "Fix" sets it).
+                    'role_mismatch' => $slug !== 'program-leader' && $assignment->role?->slug !== $slug,
                     // Pay rate on this project (null = not set); edited with PATCH /projects/{id}/pay-rates/{user}.
                     'monthly_rate' => $assignment->monthly_rate !== null ? (float) $assignment->monthly_rate : null,
                     'allowance' => $assignment->allowance !== null ? (float) $assignment->allowance : null,
@@ -401,14 +416,17 @@ class ProgramUserService
         }
     }
 
-    public function assign(User $user, Project $project, string $roleSlug, User $actor): ProjectUser
+    /**
+     * Assign the person to a project. Their role there is always their
+     * account role; $roleSlug (optional, from older clients) must match it.
+     */
+    public function assign(User $user, Project $project, ?string $roleSlug, User $actor): ProjectUser
     {
-        $role = Role::where('slug', $roleSlug)->firstOrFail();
-
-        return AuditLogger::transaction(function () use ($user, $project, $role, $actor) {
+        return AuditLogger::transaction(function () use ($user, $project, $roleSlug, $actor) {
             $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
-            $assignment = $this->createAssignmentRow($lockedUser, $project, $role);
+            $assignment = $this->createAssignmentRow($lockedUser, $project, $roleSlug);
+            $role = $assignment->role;
 
             AuditTrail::record($actor, 'assignment_created', $lockedUser, [], [
                 'project_id' => $project->id,
@@ -423,18 +441,23 @@ class ProgramUserService
 
     /**
      * The assignment rules, shared by "Assign to project" and the one-step
-     * registration approval: the account must be active, one person has one
-     * role per project, and only project roles go on a project. Call inside
-     * a transaction with the user row locked. Aborts with 422 on a broken rule.
+     * registration approval. A person's role on a project is always their
+     * account role, so the role is never chosen here: the account must be
+     * active and approved, Program Leaders (program-wide) take no project
+     * rows, one person has one row per project, and a project has one
+     * Project Leader. $requestedRole, when given, must equal the account
+     * role. Call inside a transaction with the user row locked; aborts 422.
      */
-    protected function createAssignmentRow(User $lockedUser, Project $project, Role $role): ProjectUser
+    protected function createAssignmentRow(User $lockedUser, Project $project, ?string $requestedRole = null): ProjectUser
     {
         if (! $lockedUser->is_active) {
             abort(422, 'Deactivated users cannot be assigned to projects.');
         }
 
-        if (! in_array($role->slug, self::PROJECT_ROLES, true)) {
-            abort(422, 'Choose a project role (Project Leader, Research Assistant, Researcher or Finance/Admin Staff).');
+        $role = $this->projectRoleFor($lockedUser);
+
+        if ($requestedRole !== null && $requestedRole !== '' && $requestedRole !== $role->slug) {
+            abort(422, "A person's role on a project is always their account role (" . $this->roleLabel($role) . ').');
         }
 
         $existing = ProjectUser::query()
@@ -447,26 +470,86 @@ class ProgramUserService
             abort(422, 'This user already has a role on that project. Edit their role instead.');
         }
 
+        if ($role->slug === 'project-leader') {
+            $this->ensureNoOtherLeader($project, $lockedUser);
+        }
+
         return ProjectUser::create([
             'user_id' => $lockedUser->id,
             'project_id' => $project->id,
             'role_id' => $role->id,
             'assigned_at' => now(),
-        ]);
+        ])->setRelation('role', $role);
+    }
+
+    /** The role the person holds on every project: their account role (422 when it cannot go on a project). */
+    protected function projectRoleFor(User $user): Role
+    {
+        $role = $user->role_id ? Role::find($user->role_id) : null;
+
+        if (! $role) {
+            abort(422, 'Approve the account and give it a role before assigning it to a project.');
+        }
+
+        if ($role->slug === 'program-leader') {
+            abort(422, 'Program Leaders oversee every project and are not assigned to one.');
+        }
+
+        if (! in_array($role->slug, self::PROJECT_ROLES, true)) {
+            abort(422, 'This account role cannot be assigned to a project.');
+        }
+
+        return $role;
+    }
+
+    /** One Project Leader per project: block a second one, naming the project. */
+    protected function ensureNoOtherLeader(Project $project, User $user): void
+    {
+        $other = ProjectUser::query()
+            ->where('project_id', $project->id)
+            ->where('user_id', '!=', $user->id)
+            ->whereHas('role', fn ($query) => $query->where('slug', 'project-leader'))
+            ->with('user:id,name')
+            ->first();
+
+        if ($other) {
+            abort(422, $project->title . ' already has a Project Leader' . ($other->user ? ' (' . $other->user->name . ')' : '')
+                . '. A project has one Project Leader; change or remove that assignment first.');
+        }
+    }
+
+    protected function roleLabel(?Role $role): string
+    {
+        return $role ? (self::ROLE_LABELS[$role->slug] ?? $role->name) : 'No role';
     }
 
     /**
-     * Change a person's role on a project. Legacy or seeded data may hold
-     * more than one row for the same person and project; they are merged
-     * into ONE row with the new role here (the oldest row is kept, so its pay
-     * rate stays), so what the Program Leader sets is what every page sees.
-     * One audit entry per change; nothing when nothing changes.
+     * "Fix": set the person's role on a project to their account role (the
+     * only role a project row may hold). Used for older rows whose role
+     * differs. $roleSlug, if sent, must equal the account role. Legacy or
+     * seeded data may hold more than one row for the same person and
+     * project; they are merged into ONE row here (the oldest row is kept, so
+     * its pay rate stays). One audit entry per change; nothing when nothing
+     * changes.
      */
-    public function updateAssignment(User $user, Project $project, string $roleSlug, User $actor, ?string $reason = null): ProjectUser
+    public function updateAssignment(User $user, Project $project, ?string $roleSlug, User $actor, ?string $reason = null): ProjectUser
     {
-        $role = Role::where('slug', $roleSlug)->firstOrFail();
+        $assignment = $this->fixAssignmentRole($user, $project, $roleSlug, $actor, $reason);
+        $this->rerouteAfterRoleChange($user, $actor);
 
-        return AuditLogger::transaction(function () use ($user, $project, $role, $actor, $reason) {
+        return $assignment;
+    }
+
+    private function fixAssignmentRole(User $user, Project $project, ?string $roleSlug, User $actor, ?string $reason): ProjectUser
+    {
+        return AuditLogger::transaction(function () use ($user, $project, $roleSlug, $actor, $reason) {
+            $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $role = $this->projectRoleFor($lockedUser);
+
+            if ($roleSlug !== null && $roleSlug !== '' && $roleSlug !== $role->slug) {
+                abort(422, "A person's role on a project is always their account role (" . $this->roleLabel($role) . ').');
+            }
+
             $rows = $this->assignmentRows($user, $project);
             $assignment = $rows->first();
             $oldRoles = $rows->map(fn (ProjectUser $row) => $row->role?->slug)->filter()->values()->all();
@@ -479,6 +562,10 @@ class ProgramUserService
 
             if (in_array('project-leader', $oldRoles, true) && $role->slug !== 'project-leader') {
                 $this->ensureNotOnlyProjectLeader($project, $user);
+            }
+
+            if ($role->slug === 'project-leader') {
+                $this->ensureNoOtherLeader($project, $user);
             }
 
             $rows->slice(1)->each(fn (ProjectUser $extra) => $extra->delete());
@@ -589,7 +676,7 @@ class ProgramUserService
     {
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
-        return AuditLogger::transaction(function () use ($user, $role, $reason, $actor) {
+        $updated = AuditLogger::transaction(function () use ($user, $role, $reason, $actor) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $oldRole = Role::find($locked->role_id);
 
@@ -608,6 +695,10 @@ class ProgramUserService
                 $this->ensureNotLastProgramLeader($locked);
             }
 
+            // A person's role on a project is their account role, so every
+            // project row follows the new role in this same transaction.
+            $moved = $this->moveAssignmentsToRole($locked, $role);
+
             $locked->update(['role_id' => $role->id]);
 
             AuditTrail::record(
@@ -615,12 +706,92 @@ class ProgramUserService
                 'role_changed',
                 $locked,
                 ['role' => $oldRole?->slug, 'role_label' => $oldRole?->name],
-                ['role' => $role->slug, 'role_label' => $role->name],
+                ['role' => $role->slug, 'role_label' => $role->name] + ($moved ? ['assignments' => $moved] : []),
                 $reason
             );
 
             return $locked->fresh()->load('primaryRole');
         });
+
+        $this->rerouteAfterRoleChange($updated, $actor);
+
+        return $updated;
+    }
+
+    /**
+     * Their items waiting for the Project Leader step may now have no
+     * reviewer but themselves (they became the Project Leader): move them
+     * on (LeaderStepRouter). After the commit, so a failure never undoes
+     * the role change.
+     */
+    protected function rerouteAfterRoleChange(User $user, User $actor): void
+    {
+        $projectIds = ProjectUser::where('user_id', $user->id)->pluck('project_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        if ($projectIds === []) {
+            return;
+        }
+
+        try {
+            app(LeaderStepRouter::class)->reroute($actor, $projectIds);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Set every project row of the person to $role (inside the caller's
+     * transaction). Blocks, naming the project, when that would give a
+     * project two Project Leaders or leave an ongoing project without one.
+     * A Program Leader takes no project rows, so those must be removed first.
+     *
+     * @return array<int, array{project_id: int, project: ?string, from: ?string, to: string}>
+     */
+    protected function moveAssignmentsToRole(User $lockedUser, Role $role): array
+    {
+        $rows = ProjectUser::query()
+            ->where('user_id', $lockedUser->id)
+            ->with(['role', 'project'])
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        if ($role->slug === 'program-leader') {
+            abort(422, 'Remove ' . $lockedUser->name . "'s project assignments first. A Program Leader oversees every project and is not assigned to one.");
+        }
+
+        foreach ($rows->groupBy('project_id') as $projectRows) {
+            $project = $projectRows->first()->project;
+            if (! $project) {
+                continue;
+            }
+            $wasLeader = $projectRows->contains(fn (ProjectUser $row) => $row->role?->slug === 'project-leader');
+
+            if ($role->slug === 'project-leader') {
+                $this->ensureNoOtherLeader($project, $lockedUser);
+            } elseif ($wasLeader) {
+                $this->ensureNotOnlyProjectLeader($project, $lockedUser, true);
+            }
+        }
+
+        $moved = [];
+        foreach ($rows as $row) {
+            if ((int) $row->role_id === (int) $role->id) {
+                continue;
+            }
+            $moved[] = [
+                'project_id' => (int) $row->project_id,
+                'project' => $row->project?->title,
+                'from' => $row->role?->slug,
+                'to' => $role->slug,
+            ];
+            $row->update(['role_id' => $role->id]);
+        }
+
+        return $moved;
     }
 
     public function createPasswordSetupLink(User $user): string
@@ -640,7 +811,7 @@ class ProgramUserService
     /**
      * An ongoing project must keep at least one Project Leader.
      */
-    protected function ensureNotOnlyProjectLeader(Project $project, User $leaving): void
+    protected function ensureNotOnlyProjectLeader(Project $project, User $leaving, bool $nameProject = false): void
     {
         if (app(ProjectFinancialService::class)->derivedStatus($project) !== 'ongoing') {
             return;
@@ -654,7 +825,10 @@ class ProgramUserService
             ->count();
 
         if ($otherLeaders === 0) {
-            abort(422, 'Assign another Project Leader to this project first.');
+            // One Project Leader per project: a replacement is chosen in the
+            // project's set-up, which swaps the leader in one step.
+            abort(422, ($nameProject ? $project->title : 'This project') . ' would be left without a Project Leader.'
+                . " Choose the new Project Leader in the project's set-up first; it replaces this one.");
         }
     }
 

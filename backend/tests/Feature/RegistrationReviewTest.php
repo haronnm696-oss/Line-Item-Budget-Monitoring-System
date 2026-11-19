@@ -32,9 +32,10 @@ class RegistrationReviewTest extends TestCase
             ->postJson("/api/program/registrations/{$pending->id}/decision", [
                 'decision' => 'approved',
                 'role' => 'research-assistant',
+                // No role per row: the role on each project is the account role.
                 'assignments' => [
-                    ['project_id' => $a->id, 'role' => 'research-assistant'],
-                    ['project_id' => $b->id, 'role' => 'researcher'],
+                    ['project_id' => $a->id],
+                    ['project_id' => $b->id],
                 ],
             ])
             ->assertOk()
@@ -44,7 +45,7 @@ class RegistrationReviewTest extends TestCase
         $this->assertTrue($pending->is_active);
         $this->assertSame('research-assistant', $pending->primaryRole->slug);
         $this->assertSame(2, ProjectUser::where('user_id', $pending->id)->count());
-        $this->assertDatabaseHas('project_user', ['user_id' => $pending->id, 'project_id' => $b->id, 'role_id' => $this->roleId('researcher')]);
+        $this->assertDatabaseHas('project_user', ['user_id' => $pending->id, 'project_id' => $b->id, 'role_id' => $this->roleId('research-assistant')]);
 
         // One audit entry, listing the role and the assignments.
         $entries = AuditTrail::where('model_type', 'User')->where('model_id', $pending->id)->where('action', '!=', 'created')->get();

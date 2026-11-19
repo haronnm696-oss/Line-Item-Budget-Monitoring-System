@@ -184,7 +184,7 @@ class ProgramAuditTest extends TestCase
             ->patchJson("/api/program/users/{$person->id}/role", ['role' => 'project-leader', 'reason' => 'Now leads a project'])
             ->assertOk();
         $this->actingAs($this->leader)
-            ->postJson('/api/program/assignments', ['user_id' => $person->id, 'project_id' => $this->project->id, 'role' => 'researcher'])
+            ->postJson('/api/program/assignments', ['user_id' => $person->id, 'project_id' => $this->project->id])
             ->assertSuccessful();
         $this->actingAs($this->leader)
             ->patchJson("/api/program/users/{$person->id}/status", ['is_active' => false, 'reason' => 'On leave'])
@@ -201,7 +201,8 @@ class ProgramAuditTest extends TestCase
         $this->assertSame('Assigned to project', $rows['assignment_created']['action']['label']);
         $this->assertSame('Faisal Sarip', $rows['assignment_created']['record']['label']);
         $this->assertSame('Meranaw Weaving Heritage Digital Archive', $rows['assignment_created']['project']['title']);
-        $this->assertSame([['label' => 'Role', 'old' => null, 'new' => 'Researcher']], $rows['assignment_created']['changes']);
+        // The role on the project is the account role (Project Leader since the change above).
+        $this->assertSame([['label' => 'Role', 'old' => null, 'new' => 'Project Leader']], $rows['assignment_created']['changes']);
     }
 
     public function test_record_edits_show_only_changed_fields_with_money_and_names(): void

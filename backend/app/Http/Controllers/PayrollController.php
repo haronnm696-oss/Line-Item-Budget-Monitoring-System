@@ -81,7 +81,12 @@ class PayrollController extends Controller
 
     public function submit(Request $request, PayrollBatch $payrollBatch)
     {
-        return $this->batchResponse('Payroll submitted to the Project Leader.', $this->payroll->submit($payrollBatch, $request->user()));
+        $batch = $this->payroll->submit($payrollBatch, $request->user());
+        $message = $batch->pendingEscalation()
+            ? 'Payroll submitted. It goes to the Program Leader for approval.'
+            : 'Payroll submitted to the Project Leader.';
+
+        return $this->batchResponse($message, $batch);
     }
 
     public function endorse(Request $request, PayrollBatch $payrollBatch)

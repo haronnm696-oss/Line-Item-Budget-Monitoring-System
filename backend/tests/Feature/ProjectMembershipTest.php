@@ -66,6 +66,11 @@ class ProjectMembershipTest extends TestCase
 
     public function test_the_program_leaders_role_change_merges_the_rows_into_one(): void
     {
+        // One Project Leader per project: the fixture's other leader steps aside first.
+        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)
+            ->where('user_id', '!=', $this->leader->id)
+            ->whereHas('role', fn ($q) => $q->where('slug', 'project-leader'))
+            ->delete());
         $audit = AuditTrail::count();
         $this->actingAs($this->programLeader)
             ->patchJson("/api/program/assignments/{$this->leader->id}/{$this->project->id}", ['role' => 'project-leader'])

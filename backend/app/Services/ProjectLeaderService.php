@@ -139,9 +139,23 @@ class ProjectLeaderService
         $query = $this->model($type)::query()->where('project_id', $project->id);
 
         return match ($tab) {
-            'waiting' => $query->where('workflow_status', 'submitted'),
+            // Waiting for this Project Leader: never their own expenses or
+            // purchase requests (the maker never approves; those skip the step).
+            'waiting' => $this->waitingForLeader($query, $type, $user),
             'returned' => $query->where('workflow_status', 'returned'),
             'approved' => $query->where('pl_reviewed_by', $user->id)->whereIn('workflow_status', self::AFTER_APPROVAL[$type]),
+        };
+    }
+
+    private function waitingForLeader($query, string $type, User $user)
+    {
+        $query->where('workflow_status', 'submitted');
+
+        return match ($type) {
+            'expense' => $query->where('recorded_by', '!=', $user->id),
+            'purchase_request' => $query->where('requested_by', '!=', $user->id),
+            // Payroll stays listed with its waiting text (e.g. "Waiting for Program Leader").
+            'payroll' => $query,
         };
     }
 
@@ -197,7 +211,7 @@ class ProjectLeaderService
                 ['label' => 'Verified by', 'value' => $expense->verifiedBy?->name],
             ],
             'can_review' => $expense->workflow_status === 'submitted' && ! $mine,
-            'waiting_text' => $expense->workflow_status === 'submitted' && $mine ? 'You recorded this expense; another Project Leader must approve it.' : null,
+            'waiting_text' => $expense->workflow_status === 'submitted' && $mine ? 'You recorded this expense, so it skips your approval and goes to Finance/Admin.' : null,
             // Edit and resubmit: only the Project Leader who recorded it, while returned
             // (or a draft); anyone else's expense stays read-only here.
             'can_edit' => $mine && in_array($expense->workflow_status, ['draft', 'returned'], true),
@@ -256,7 +270,7 @@ class ProjectLeaderService
             'line_item' => $request->libCategory?->line_item_name,
             'category' => $request->libCategory?->category_type,
             'amount' => round((float) $request->estimated_amount, 2),
-            'workflow_label' => PurchaseRequestService::LABELS[$request->workflow_status] ?? $request->workflow_status,
+            'workflow_label' => PurchaseRequestService::label($request),
             'submitted_by' => $person($request->requestedBy),
             'fields' => [
                 ['label' => 'Line item', 'value' => $request->libCategory?->line_item_name],
@@ -266,7 +280,7 @@ class ProjectLeaderService
                 ['label' => 'Cancel reason', 'value' => $request->cancel_reason],
             ],
             'can_review' => $request->workflow_status === 'submitted' && ! $mine,
-            'waiting_text' => $request->workflow_status === 'submitted' && $mine ? 'You made this request; another Project Leader must approve it.' : null,
+            'waiting_text' => $request->workflow_status === 'submitted' && $mine ? 'You made this request, so it skips your approval.' : null,
             'can_edit' => false,
             'edit' => null,
         ];

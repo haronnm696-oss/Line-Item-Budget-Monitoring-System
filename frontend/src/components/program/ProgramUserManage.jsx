@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ACCOUNT_ROLE_OPTIONS, PROJECT_ROLE_OPTIONS } from '../../lib/roles';
+import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
 import { rateText } from '../../lib/payRate';
 import { peso } from '../money';
 import { PayRateForm } from '../payroll/PayRates';
@@ -302,6 +302,9 @@ export function ChangeRoleDialog({ user, busy, error, onSave, onClose }) {
             {!unchanged && (
               <p className="pu-confirm" role="status">
                 Change {user.name} from <strong>{current}</strong> to <strong>{next}</strong>? This changes what they can see and do.
+                {(user.assignments ?? []).length > 0 && (role === 'program-leader'
+                  ? ' A Program Leader has no project assignments: remove theirs first.'
+                  : ` Their role on ${user.assignments.length === 1 ? 'their project' : `all ${user.assignments.length} projects`} changes to ${next} too.`)}
               </p>
             )}
           </>
@@ -385,20 +388,29 @@ function messageOf(error, fallback) {
     || fallback;
 }
 
+/** Warning for an older row whose role differs from the account role. */
+export function MismatchWarning({ assignment, user }) {
+  return (
+    <p className="pu-mismatch" role="note">
+      <span aria-hidden="true">⚠</span> Role on this project differs from the account role
+      <span className="pu-mismatch-sub"> ({assignment.role_label ?? 'No role'} here, {user.role_label} account)</span>
+    </p>
+  );
+}
+
 /**
- * One assignment in the "Edit project assignments" dialog: change the role on
- * that project, set the pay rate (monthly rate and allowance), or remove the
- * person from it (confirmation + required reason).
+ * One assignment in the "Edit project assignments" dialog. The role on the
+ * project is the account role (read-only); an older row whose role differs
+ * gets a warning and "Fix". Also: set the pay rate, or remove the person
+ * from the project (confirmation + required reason).
  */
-function AssignmentRow({ user, assignment, programWide, onChangeRole, onRemove, onDone }) {
-  const [role, setRole] = useState(assignment.role_slug ?? '');
+function AssignmentRow({ user, assignment, programWide, onFix, onRemove, onDone }) {
   const [removing, setRemoving] = useState(false);
   const [editingRate, setEditingRate] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const base = `pu-asg-${assignment.project_id}`;
-  const roleKnown = PROJECT_ROLE_OPTIONS.some((option) => option.slug === assignment.role_slug);
 
   async function run(action, message) {
     setBusy(true);
@@ -428,8 +440,23 @@ function AssignmentRow({ user, assignment, programWide, onChangeRole, onRemove, 
         <Link className="au-link" to={`/program-projects/${assignment.project_id}`}>
           {assignment.project} · {assignment.project_code}
         </Link>
-        <div className="au-sub">Currently: {assignment.role_label ?? 'No role'}</div>
+        <div className="au-sub">as {assignment.role_label ?? 'No role'}</div>
       </div>
+
+      {!programWide && assignment.role_mismatch && !removing && (
+        <div className="pu-asg-fix">
+          <MismatchWarning assignment={assignment} user={user} />
+          <button
+            type="button"
+            className="program-btn primary sm"
+            disabled={busy}
+            onClick={() => run(() => onFix(assignment.project_id), `Role on ${assignment.project} set to ${user.role_label}.`)}
+          >
+            {busy ? 'Fixing…' : `Fix: make it ${user.role_label}`}
+            <span className="pa-sr-only"> on {assignment.project}</span>
+          </button>
+        </div>
+      )}
 
       {!programWide && !removing && (
         editingRate ? (
@@ -449,28 +476,6 @@ function AssignmentRow({ user, assignment, programWide, onChangeRole, onRemove, 
             </button>
           </div>
         )
-      )}
-
-      {!programWide && !removing && (
-        <div className="pu-asg-controls">
-          <div className="program-field">
-            <label htmlFor={`${base}-role`}>Role on this project</label>
-            <select id={`${base}-role`} className="program-select" value={role} disabled={busy} onChange={(event) => { setRole(event.target.value); setError(''); }}>
-              {!roleKnown && <option value={assignment.role_slug ?? ''}>{assignment.role_label ?? 'No role'}</option>}
-              {PROJECT_ROLE_OPTIONS.map((option) => (
-                <option key={option.slug} value={option.slug}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            className="program-btn primary"
-            disabled={busy || role === assignment.role_slug}
-            onClick={() => run(() => onChangeRole(assignment.project_id, role), `Role on ${assignment.project} changed.`)}
-          >
-            {busy ? 'Saving…' : 'Save role'}
-          </button>
-        </div>
       )}
 
       {removing ? (
@@ -512,7 +517,7 @@ function AssignmentRow({ user, assignment, programWide, onChangeRole, onRemove, 
   );
 }
 
-export function AssignmentsDialog({ user, onChangeRole, onRemove, onChanged, onClose }) {
+export function AssignmentsDialog({ user, onFix, onRemove, onChanged, onClose }) {
   const [notice, setNotice] = useState('');
   const assignments = user.assignments ?? [];
 
@@ -523,6 +528,9 @@ export function AssignmentsDialog({ user, onChangeRole, onRemove, onChanged, onC
           <div className="program-banner info" role="status">
             Program Leaders do not need project assignments. They oversee all projects; you can remove these rows.
           </div>
+        )}
+        {!user.program_wide && (
+          <p className="au-muted">Each project uses {user.name}&apos;s account role ({user.role_label}). To change it, use Change account role.</p>
         )}
         <div aria-live="polite">
           {notice && <div className="program-banner ok">{notice}</div>}
@@ -537,7 +545,7 @@ export function AssignmentsDialog({ user, onChangeRole, onRemove, onChanged, onC
                 user={user}
                 assignment={assignment}
                 programWide={user.program_wide}
-                onChangeRole={onChangeRole}
+                onFix={onFix}
                 onRemove={onRemove}
                 onDone={(message) => { setNotice(message); onChanged(); }}
               />

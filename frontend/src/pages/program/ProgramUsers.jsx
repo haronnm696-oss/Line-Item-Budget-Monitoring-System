@@ -7,7 +7,7 @@ import {
   fetchProgramUsers,
   removeProjectAssignment,
   updateProgramUserDetails,
-  updateProjectAssignment,
+  fixProjectAssignment,
   updateProgramUserRole,
   updateProgramUserStatus,
 } from '../../api/program';
@@ -21,6 +21,7 @@ import {
   ChangeRoleDialog,
   EditDetailsDialog,
   ManageMenu,
+  MismatchWarning,
   StatusDialog,
 } from '../../components/program/ProgramUserManage';
 import { formatDate } from '../../lib/datetime';
@@ -41,7 +42,7 @@ function RoleLabel({ slug, label }) {
   return <span className={`pu-role ${slug ?? 'none'}`}>{label ?? 'No role'}</span>;
 }
 
-function Assignments({ user }) {
+function Assignments({ user, onFix, fixing }) {
   if (user.program_wide) {
     return (
       <div className="pu-assign">
@@ -53,14 +54,26 @@ function Assignments({ user }) {
   if (!user.assignments.length) return <span className="au-muted">Not assigned yet</span>;
   return (
     <ul className="pu-assign-list">
-      {user.assignments.map((assignment) => (
-        <li key={assignment.project_id}>
-          <Link className="au-link" to={`/program-projects/${assignment.project_id}`}>
-            {assignment.project} · {assignment.project_code}
-          </Link>
-          <div className="au-sub">as {assignment.role_label}</div>
-        </li>
-      ))}
+      {user.assignments.map((assignment) => {
+        const key = `${user.id}-${assignment.project_id}`;
+        return (
+          <li key={assignment.project_id}>
+            <Link className="au-link" to={`/program-projects/${assignment.project_id}`}>
+              {assignment.project} · {assignment.project_code}
+            </Link>
+            <div className="au-sub">as {assignment.role_label}</div>
+            {assignment.role_mismatch && (
+              <div className="pu-asg-fix">
+                <MismatchWarning assignment={assignment} user={user} />
+                <button type="button" className="program-btn sm" disabled={fixing === key} onClick={() => onFix(user, assignment)}>
+                  {fixing === key ? 'Fixing…' : 'Fix'}
+                  <span className="pa-sr-only"> {user.name} on {assignment.project}: make it {user.role_label}</span>
+                </button>
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -219,6 +232,21 @@ export default function ProgramUsers() {
     refreshRegistrations();
     await loadPending();
     refresh();
+  }
+
+  // One-click "Fix" for an older row whose role differs from the account role.
+  const [fixingKey, setFixingKey] = useState('');
+  async function handleFix(user, assignment) {
+    setFixingKey(`${user.id}-${assignment.project_id}`);
+    try {
+      await fixProjectAssignment(user.id, assignment.project_id);
+      showToast(`${user.name} on ${assignment.project} is now ${user.role_label}.`);
+      refresh();
+    } catch (error) {
+      showToast(messageFor(error, 'Could not save. Please try again.'));
+    } finally {
+      setFixingKey('');
+    }
   }
 
   async function handleCreateUser(payload) {
@@ -500,7 +528,7 @@ export default function ProgramUsers() {
                         </td>
                         <td className="num">{user.employee_id || '—'}</td>
                         <td><RoleLabel slug={user.role_slug} label={user.role_label} /></td>
-                        <td><Assignments user={user} /></td>
+                        <td><Assignments user={user} onFix={handleFix} fixing={fixingKey} /></td>
                         <td className="num">{formatDate(user.last_login_at)}</td>
                         <td><ProgramPill value={user.is_active ? 'Active' : 'Inactive'} /></td>
                         <td className="r">
@@ -542,9 +570,9 @@ export default function ProgramUsers() {
         onSave={handleCreateUser}
         onClose={() => { if (!addBusy) setAddOpen(false); }}
       />
-      <ProgramAssignUserModal
+      {/* Mounted only while open, so every open starts clean. */}
+      {assignOpen && <ProgramAssignUserModal
         key={assignDefaultUserId || 'assign-new'}
-        open={assignOpen}
         users={options.assignable_users}
         projects={options.projects}
         busy={assignBusy}
@@ -552,7 +580,7 @@ export default function ProgramUsers() {
         defaultUserId={assignDefaultUserId}
         onSave={handleAssign}
         onClose={() => { if (!assignBusy) setAssignOpen(false); }}
-      />
+      />}
 
       {reviewUser && (
         <RegistrationReviewPanel
@@ -560,7 +588,6 @@ export default function ProgramUsers() {
           user={reviewUser}
           projects={reviewOptions.projects}
           accountRoles={reviewOptions.roles}
-          projectRoles={reviewOptions.project_roles}
           onClose={() => openReview(null)}
           onDecided={handleDecided}
         />
@@ -582,7 +609,7 @@ export default function ProgramUsers() {
           user={users.find((user) => user.id === dialog.user.id) ?? dialog.user}
           onClose={() => setDialog(null)}
           onChanged={refresh}
-          onChangeRole={(projectId, role) => updateProjectAssignment(dialog.user.id, projectId, role)}
+          onFix={(projectId) => fixProjectAssignment(dialog.user.id, projectId)}
           onRemove={(projectId, reason) => removeProjectAssignment(dialog.user.id, projectId, reason)}
         />
       )}

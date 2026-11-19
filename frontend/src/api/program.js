@@ -153,8 +153,12 @@ export async function assignToProject(payload) {
   return response.data;
 }
 
-export async function updateProjectAssignment(userId, projectId, role, reason = null) {
-  const response = await client.patch(ENDPOINTS.programAssignment(userId, projectId), { role, reason });
+/**
+ * "Fix": set the person's role on the project to their account role (the
+ * only role a project row may hold). No role is sent.
+ */
+export async function fixProjectAssignment(userId, projectId, reason = null) {
+  const response = await client.patch(ENDPOINTS.programAssignment(userId, projectId), { reason });
   return response.data;
 }
 

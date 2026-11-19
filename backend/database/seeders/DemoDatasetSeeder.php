@@ -646,8 +646,8 @@ class DemoDatasetSeeder extends Seeder
      */
     private function assignTeam(Project $project, \Illuminate\Support\Collection $roles, array $users): void
     {
+        // $users[0] is the Program Leader: program-wide, never assigned to a project.
         $assignments = [
-            [$users[0], 'program-leader'],
             [$users[1], 'project-leader'],
             [$users[2], 'research-assistant'],
             [$users[3], 'finance-admin'],

@@ -27,11 +27,15 @@ use Illuminate\Validation\ValidationException;
  * after the change is committed.
  *
  * A Project Leader may also record expenses on their own project (and edit,
- * delete, attach receipts to and submit only the ones they recorded). Their
- * submit skips the Project Leader approval step: draft -> endorsed
- * ("Waiting for Finance/Admin verification", pl_reviewed_by stays empty),
- * with the same receipt rule, one audit entry ("submitted") and a
- * notification to Finance/Admin. The recorder never verifies.
+ * delete, attach receipts to and submit only the ones they recorded). A
+ * project has one Project Leader and the maker never approves, so an
+ * expense RECORDED by the project's Project Leader (however it is
+ * submitted) skips the Project Leader step: draft -> endorsed ("Waiting for
+ * Finance/Admin verification", pl_reviewed_by stays empty), with the same
+ * receipt rule, one audit entry ("submitted") and a notification to
+ * Finance/Admin. One already waiting on its own maker (older data, or the
+ * recorder became the Project Leader later) is moved on by
+ * skipLeaderStep(). The recorder never verifies.
  */
 class ExpenseWorkflowService
 {
@@ -160,8 +164,10 @@ class ExpenseWorkflowService
 
     public function submit(Expense $expense, User $actor): Expense
     {
-        $byLeader = $this->requireEncoder($expense, $actor, 'submit');
+        $this->requireEncoder($expense, $actor, 'submit');
         $this->requireState($expense, ['draft', 'returned'], 'submitted');
+        // Recorded by the project's Project Leader: no Project Leader step.
+        $byLeader = $this->makerLeadsProject($expense->project_id, $expense->recorded_by);
 
         if (! $expense->receipts()->exists()) {
             throw ValidationException::withMessages([
@@ -229,6 +235,26 @@ class ExpenseWorkflowService
         $this->requireRole($expense->project, $actor, self::ENCODERS, "Only a Research Assistant or Finance/Admin staff of this project can {$verb} expenses.");
 
         return false;
+    }
+
+    /**
+     * A submitted expense recorded by the project's Project Leader has nobody
+     * to approve it: move it on to Finance/Admin (one audit entry,
+     * "rerouted"). Returns false when it does not apply.
+     */
+    public function skipLeaderStep(Expense $expense, User $actor): bool
+    {
+        if ($expense->workflow_status !== 'submitted' || ! $this->makerLeadsProject($expense->project_id, $expense->recorded_by)) {
+            return false;
+        }
+
+        $this->move($expense, 'endorsed', $actor, 'rerouted', ['submitted'], [
+            'pl_reviewed_by' => null,
+            'pl_reviewed_at' => null,
+        ], 'Recorded by the Project Leader, so it goes to Finance/Admin without a Project Leader approval.');
+        $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense->fresh(), 'leader_submitted', $actor);
+
+        return true;
     }
 
     public function endorse(Expense $expense, User $actor): Expense
