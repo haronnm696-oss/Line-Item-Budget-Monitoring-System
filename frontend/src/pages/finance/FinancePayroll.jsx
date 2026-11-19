@@ -12,14 +12,15 @@ import StagePill from '../../components/assistant/StagePill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { peso } from '../../components/money';
-import { PayRatesCard } from '../../components/payroll/PayRates';
+import PersonnelSection from '../../components/personnel/PersonnelSection';
 import RatesLabelBanner from '../../components/payroll/RatesLabelBanner';
 
 /**
  * Payroll (Finance/Admin): every monthly batch of the project with its
  * stage and next step; a batch opens in the side panel. Verifying happens
  * from the Verification queue (the panel's buttons are the same). The
- * "Pay rates" card sets each assigned person's monthly rate and allowance.
+ * Personnel section (read-only; the Program Leader keeps it) shows who is
+ * paid and their honorarium.
  */
 export default function FinancePayroll() {
   const picker = useAssignedProject({ role: 'finance-admin' });
@@ -93,7 +94,7 @@ export default function FinancePayroll() {
           </section>
         </LoadState>
 
-        {picker.projectId && <PayRatesCard key={picker.projectId} projectId={picker.projectId} editable />}
+        {picker.projectId && <PersonnelSection key={picker.projectId} projectId={picker.projectId} />}
 
         {picker.projectId && (
           <FinanceRecordPanel projectId={picker.projectId} target={open} refreshKey={refreshKey} actions={actions} verifyHere={false} onClose={() => update({ open: '' })} />

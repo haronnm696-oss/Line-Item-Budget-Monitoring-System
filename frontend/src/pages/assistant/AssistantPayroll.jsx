@@ -19,7 +19,7 @@ import AssistantRecordPanel from '../../components/assistant/AssistantRecordPane
 import StagePill from '../../components/assistant/StagePill';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
 import { peso } from '../../components/money';
-import { PayRatesCard } from '../../components/payroll/PayRates';
+import PersonnelSection from '../../components/personnel/PersonnelSection';
 import RatesLabelBanner from '../../components/payroll/RatesLabelBanner';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -150,7 +150,7 @@ export default function AssistantPayroll() {
 
               {unrated.length > 0 && (
                 <div className="program-banner info" role="status">
-                  <b>ⓘ Not included: no pay rate set for {unrated.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until Finance/Admin or the Program Leader sets a monthly rate.
+                  <b>ⓘ Not included (honorarium ₱0.00 this month): {unrated.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until the Program Leader sets their honorarium under Personnel.
                 </div>
               )}
 
@@ -296,7 +296,7 @@ export default function AssistantPayroll() {
           )}
         </LoadState>
 
-        {projectId && <PayRatesCard key={projectId} projectId={projectId} editable={false} />}
+        {projectId && <PersonnelSection key={projectId} projectId={projectId} />}
 
         {projectId && (
           <AssistantRecordPanel projectId={projectId} target={open} refreshKey={refreshKey} actions={actions} onClose={() => update({ open: '' })} />

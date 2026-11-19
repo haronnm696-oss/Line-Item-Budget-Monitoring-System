@@ -206,8 +206,7 @@ class LeaderStepRoutingTest extends TestCase
 
     private function rate(User $user, float $monthly): void
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $user->id)
-            ->update(['monthly_rate' => $monthly, 'allowance' => 0]));
+        $this->setHonorarium($user, $monthly);
     }
 
     private function submittedBatch(string $month = '2026-11', ?User $maker = null): PayrollBatch

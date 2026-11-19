@@ -15,12 +15,12 @@ class ProjectUser extends Pivot
 
     public $incrementing = true;
 
-    protected $fillable = ['project_id', 'user_id', 'role_id', 'assigned_at', 'monthly_rate', 'allowance'];
+    // monthly_rate / allowance columns are legacy (kept, not read): pay is
+    // kept on ProjectPersonnel (the Personnel section) since 2026_11_25.
+    protected $fillable = ['project_id', 'user_id', 'role_id', 'assigned_at'];
 
     protected $casts = [
         'assigned_at' => 'datetime',
-        'monthly_rate' => 'decimal:2',
-        'allowance' => 'decimal:2',
     ];
 
     public function project()

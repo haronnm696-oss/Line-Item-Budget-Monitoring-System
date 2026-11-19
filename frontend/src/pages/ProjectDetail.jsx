@@ -7,6 +7,7 @@ import { ENDPOINTS } from '../api/endpoints';
 import { useAuth } from '../context/AuthContext';
 import { canOpen } from '../routes/access';
 import { useApiData } from '../lib/useApiData';
+import PersonnelSection from '../components/personnel/PersonnelSection';
 
 function sum(rows, key) { return rows.reduce((t, r) => t + (Number(r[key]) || 0), 0); }
 function pct(part, whole) { return formatPct(whole > 0 ? (part / whole) * 100 : 0); }
@@ -90,6 +91,10 @@ function ProjectView({ data }) {
           </table>
         </div>
       </div>
+
+      {/* Read-only for the Project Leader (Finance/Admin see it on Payroll).
+          Researchers never get it (the API answers 403 as well). */}
+      {user?.role === 'PL' && <div style={{ marginTop: 14 }}><PersonnelSection projectId={project.id} /></div>}
     </>
   );
 }

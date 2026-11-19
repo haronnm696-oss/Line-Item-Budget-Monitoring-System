@@ -3583,6 +3583,8 @@ select.signin-input:disabled{
 .ps-formb{border:1px solid #E6DED3;border-radius:10px;padding:12px 14px 14px;margin:0;min-width:0}
 .ps-formb legend{padding:0 6px;font-weight:600;font-size:14px;color:#2A2222}
 .ps-formb legend .pu-hint{font-weight:400}
+.ps-check{display:flex;align-items:center;gap:8px;min-height:44px;font-weight:400;cursor:pointer}
+.ps-check input{width:18px;height:18px}
 .pu-confirm{margin:0;font-size:14px;color:#2B2023}
 .pu-asg-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .pu-asg-row{display:flex;flex-direction:column;gap:10px;padding:14px 0;border-top:1px solid #F1ECE4}

@@ -166,9 +166,9 @@ class ConnectionWalkthroughTest extends TestCase
         $this->assertEquals(array_fill(0, 5, 2500.5), $this->spentEverywhere());
 
         // ------------------------------------------------ 3. Payroll: RA prepares, PL approves, Finance verifies
-        $this->actingAs($this->fin);
-        $this->patchJson("/api/projects/{$p}/pay-rates/{$this->ra->id}", ['monthly_rate' => 20000])->assertOk();
-        $this->patchJson("/api/projects/{$p}/pay-rates/{$this->res->id}", ['monthly_rate' => 30000])->assertOk();
+        // The Program Leader adds the Special Order personnel on the project page.
+        $this->addPersonnel($p, $this->ra, 20000);
+        $this->addPersonnel($p, $this->res, 30000);
         $batch = $this->prepareBatch('2026-11');
 
         [$audit, $notes] = $this->mark();
@@ -183,7 +183,7 @@ class ConnectionWalkthroughTest extends TestCase
         $this->assertEquals(array_fill(0, 5, 2500.5), $this->spentEverywhere()); // payroll is not LIB spent
 
         // A batch that pays the Project Leader goes to the Program Leader instead.
-        $this->actingAs($this->fin)->patchJson("/api/projects/{$p}/pay-rates/{$this->pl->id}", ['monthly_rate' => 45000])->assertOk();
+        $this->addPersonnel($p, $this->pl, 45000);
         $escalated = $this->prepareBatch('2026-12');
         [$audit, $notes] = $this->mark();
         $this->actingAs($this->ra)->postJson("/api/payroll-batches/{$escalated->id}/submit")->assertOk()
@@ -243,7 +243,7 @@ class ConnectionWalkthroughTest extends TestCase
             ['POST', "/api/projects/{$p}/payroll/compute", ['month' => '2026-12']],
             ['POST', "/api/payroll-batches/{$batch->id}/endorse", []],
             ['POST', "/api/payroll-batches/{$batch->id}/verify", []],
-            ['PATCH', "/api/projects/{$p}/pay-rates/{$this->ra->id}", ['monthly_rate' => 1]],
+            ['POST', "/api/program/projects/{$p}/personnel", ['user_id' => $this->ra->id]],
             ['POST', "/api/projects/{$p}/purchase-requests", ['lib_category_id' => $this->supplies->id, 'description' => 'x', 'quantity' => 1, 'estimated_amount' => 1]],
             ['POST', "/api/projects/{$p}/budget-requests", ['type' => 'liquidation', 'title' => 'x', 'amount' => 1, 'justification' => 'x']],
             ['POST', '/api/program/assignments', ['user_id' => $this->res->id, 'project_id' => $p, 'role' => 'project-leader']],
@@ -256,7 +256,7 @@ class ConnectionWalkthroughTest extends TestCase
             }
         }
         $this->assertSame([], $failures);
-        $this->getJson("/api/projects/{$p}/pay-rates")->assertForbidden();
+        $this->getJson("/api/projects/{$p}/personnel")->assertForbidden();
 
         // ------------------------------------------------ 6. Unassigning removes access at once
         $audit = AuditTrail::count();
@@ -286,6 +286,16 @@ class ConnectionWalkthroughTest extends TestCase
         $this->assertSame($notes + 1, DB::table('notifications')->count());
 
         return $id;
+    }
+
+    /** The Program Leader adds a personnel record (whole project period). */
+    private function addPersonnel(int $projectId, User $user, float $honorarium): void
+    {
+        $this->actingAs($this->prg)->postJson("/api/program/projects/{$projectId}/personnel", [
+            'user_id' => $user->id, 'position' => 'Project Staff Level 2', 'lib_category_id' => $this->salaries->id,
+            'special_order_no' => 'SO No. 0001-OP s. 2026', 'effective_from' => '2026-01-01', 'effective_to' => '2026-12-31',
+            'monthly_honorarium' => $honorarium,
+        ])->assertCreated();
     }
 
     /** RA prepares the month and attaches the payroll file. */

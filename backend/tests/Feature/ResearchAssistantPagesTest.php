@@ -406,8 +406,7 @@ class ResearchAssistantPagesTest extends TestCase
 
     private function submittedBatch(): PayrollBatch
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $this->researcher->id)
-            ->update(['monthly_rate' => 30000, 'allowance' => 0]));
+        $this->setHonorarium($this->researcher, 30000);
         $this->actingAs($this->assistant)
             ->postJson($this->url('payroll'), ['month' => '2026-11', 'lib_category_id' => $this->ps->id])
             ->assertCreated();

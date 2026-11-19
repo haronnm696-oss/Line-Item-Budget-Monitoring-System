@@ -46,7 +46,7 @@ class PayrollController extends Controller
         $created = $this->payroll->createMonth($project, $year, $month, LibCategory::findOrFail($data['lib_category_id']), $request->user());
 
         return response()->json([
-            'message' => 'Payroll created for ' . $created->count() . ' ' . ($created->count() === 1 ? 'person' : 'people') . '.' . $this->notIncluded($project),
+            'message' => 'Payroll created for ' . $created->count() . ' ' . ($created->count() === 1 ? 'person' : 'people') . '.' . $this->notIncluded($project, $year, $month),
         ] + $this->run($project, $year, $month), 201);
     }
 
@@ -60,8 +60,8 @@ class PayrollController extends Controller
         $rows = $result['rows'];
 
         return response()->json([
-            'message' => 'Payroll computed for ' . $rows->count() . ' ' . ($rows->count() === 1 ? 'entry' : 'entries') . '.' . $this->notIncluded($project, $result['removed']),
-            // Rows taken out of this batch because the person's rate is now not set or 0.00.
+            'message' => 'Payroll computed for ' . $rows->count() . ' ' . ($rows->count() === 1 ? 'entry' : 'entries') . '.' . $this->notIncluded($project, $year, $month, $result['removed']),
+            // Rows taken out of this batch: no personnel record for the month, or honorarium 0.00.
             'removed_members' => $result['removed'],
         ] + $this->run($project, $year, $month));
     }
@@ -146,9 +146,9 @@ class PayrollController extends Controller
             'unset_rules' => $this->calculator->unsetRules(),
             // PAYROLL_RATES_LABEL (e.g. demo rates): shown as a warning when set.
             'rates_label' => config('payroll.rates_label'),
-            'rated_members' => $this->payroll->ratedMembers($project)->count(),
-            // Assigned people left out (no rate, or 0.00): named, never computed as 0.00.
-            'unrated_members' => $this->payroll->unratedMembers($project),
+            'rated_members' => $this->payroll->ratedMembers($project, $year, $month)->count(),
+            // Personnel left out (honorarium 0.00): named, never computed as 0.00.
+            'unrated_members' => $this->payroll->unratedMembers($project, $year, $month),
             'ps_line_items' => $project->libCategories()->where('category_type', 'PS')->orderBy('id')->get()
                 ->map(fn (LibCategory $item) => ['id' => $item->id, 'name' => $item->line_item_name])->values(),
         ];
@@ -220,16 +220,16 @@ class PayrollController extends Controller
     }
 
     /**
-     * " Not included: no pay rate set for A, B." (empty when everyone has a
-     * rate). $removed adds people whose row Recompute just took out (they may
-     * no longer be assigned to the project).
+     * " Not included (no honorarium for this month): A, B." (empty when none).
+     * $removed adds people whose row Recompute just took out (their personnel
+     * record no longer covers the month, or they left the project).
      */
-    private function notIncluded(Project $project, array $removed = []): string
+    private function notIncluded(Project $project, int $year, int $month, array $removed = []): string
     {
-        $names = collect($this->payroll->unratedMembers($project))->pluck('name')
+        $names = collect($this->payroll->unratedMembers($project, $year, $month))->pluck('name')
             ->merge($removed)->unique()->sort()->values();
 
-        return $names->isEmpty() ? '' : ' Not included: no pay rate set for ' . $names->join(', ', ' and ') . '.';
+        return $names->isEmpty() ? '' : ' Not included (no honorarium for this month): ' . $names->join(', ', ' and ') . '.';
     }
 
     private function psLineItem(Project $project)

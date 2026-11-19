@@ -115,6 +115,12 @@ class Project extends Model
         return $this->hasMany(ProjectReport::class);
     }
 
+    /** The team appointed by Special Order, paid honoraria through payroll (PersonnelService). */
+    public function personnel()
+    {
+        return $this->hasMany(ProjectPersonnel::class);
+    }
+
     /** Users holding a specific role slug on this project (e.g. all Project Leaders). */
     public function usersWithRole(string $roleSlug)
     {

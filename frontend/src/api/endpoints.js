@@ -68,9 +68,26 @@
  *   PATCH  /api/payroll/:id                   -> { basic_rate?, allowance?, lib_category_id? } while the batch is draft / returned
  *   POST   /api/payroll-batches/:id/submit | endorse | return { reason } | verify | reject { reason }
  *          (the whole month at once; GET payroll returns the month's batch)
- *   GET    /api/projects/:id/pay-rates        (FIN, RA, Program Leader)
- *   PATCH  /api/projects/:id/pay-rates/:userId -> { monthly_rate|null, allowance? } (FIN, Program Leader)
  *   Documents: GET/POST /api/payroll-batches/:id/documents (document_type payroll_file | other)
+ *   Who is paid and how much comes from Personnel (below); rows start with no allowance.
+ *
+ * Personnel (PersonnelService): the team appointed by Special Order, paid PS honoraria
+ * through payroll (Job Order / professional services go through expenses).
+ *   GET    /api/projects/:id/personnel
+ *          -> { access: edit|view|limited, period: { start, end }, personnel: [...],
+ *               members?, ps_line_items? (edit only) }
+ *          edit/view rows: { id, user_id, name, position, lib_category_id, line_item, special_order_no,
+ *            effective_from, effective_to, monthly_honorarium, bank_account_masked ("****9170"),
+ *            special_order_document: { id, file_name } | null }
+ *          limited rows (Research Assistant): { id, user_id, name, position, effective_from, effective_to }
+ *          Program Leader edits; Project Leader and Finance/Admin view; Researchers 403.
+ *          The full bank account number is never returned here.
+ *   POST   /api/program/projects/:id/personnel -> { user_id, position, lib_category_id (PS), special_order_no,
+ *            effective_from, effective_to (inside the project period), monthly_honorarium, bank_account? }
+ *   PATCH  /api/program/personnel/:id          -> same without user_id; bank_account absent = keep, null = remove
+ *   DELETE /api/program/personnel/:id          (refused while a Special Order file is attached)
+ *   POST   /api/program/personnel/:id/special-order -> multipart { file }   DELETE removes it
+ *          Download: /api/documents/:id/download (Program Leader, Project Leader, Finance/Admin)
  *
  * Purchase requests (draft -> submitted -> endorsed, or returned; no Finance step;
  * an approved request ends as fulfilled or cancelled):
@@ -231,8 +248,10 @@ export const ENDPOINTS = {
   payrollEntry: (id) => `/api/payroll/${id}`,
   payrollBatchStep: (id, action) => `/api/payroll-batches/${id}/${action}`,
   payrollBatchDocuments: (id) => `/api/payroll-batches/${id}/documents`,
-  payRates: (projectId) => `/api/projects/${projectId}/pay-rates`,
-  payRate: (projectId, userId) => `/api/projects/${projectId}/pay-rates/${userId}`,
+  personnel: (projectId) => `/api/projects/${projectId}/personnel`,
+  programPersonnel: (projectId) => `/api/program/projects/${projectId}/personnel`,
+  personnelRecord: (id) => `/api/program/personnel/${id}`,
+  personnelSpecialOrder: (id) => `/api/program/personnel/${id}/special-order`,
   purchaseRequests: (projectId) => `/api/projects/${projectId}/purchase-requests`,
   purchaseRequest: (id) => `/api/purchase-requests/${id}`,
   purchaseRequestStep: (id, action) => `/api/purchase-requests/${id}/${action}`,

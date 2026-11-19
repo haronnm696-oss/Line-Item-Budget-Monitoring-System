@@ -282,7 +282,7 @@ class FinanceAndResearcherPagesTest extends TestCase
             ['post', "/api/payroll-batches/{$batch->id}/return", ['reason' => 'x']],
             ['post', "/api/payroll-batches/{$batch->id}/verify", []],
             ['post', "/api/payroll-batches/{$batch->id}/documents", ['document_type' => 'payroll_file', 'file' => $file()]],
-            ['patch', "/api/projects/{$p}/pay-rates/{$this->assistant->id}", ['monthly_rate' => 1]],
+            ['post', "/api/program/projects/{$p}/personnel", ['user_id' => $this->assistant->id]],
             ['post', "/api/projects/{$p}/purchase-requests", ['lib_category_id' => $this->lineItem->id, 'description' => 'x', 'quantity' => 1, 'estimated_amount' => 1]],
             ['patch', "/api/purchase-requests/{$request->id}", ['description' => 'x']],
             ['post', "/api/purchase-requests/{$request->id}/endorse", []],
@@ -323,8 +323,7 @@ class FinanceAndResearcherPagesTest extends TestCase
 
     private function rate(User $user, float $monthly): void
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $user->id)
-            ->update(['monthly_rate' => $monthly, 'allowance' => 0]));
+        $this->setHonorarium($user, $monthly);
     }
 
     private function submittedBatch(): PayrollBatch

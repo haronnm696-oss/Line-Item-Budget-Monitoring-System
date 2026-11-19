@@ -12,8 +12,8 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\PayRateController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\PersonnelController;
 use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramAuditController;
 use App\Http\Controllers\ProgramDashboardController;
@@ -96,8 +96,9 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::post('/payroll-batches/{payrollBatch}/return', [PayrollController::class, 'returnBatch']);
     Route::post('/payroll-batches/{payrollBatch}/verify', [PayrollController::class, 'verify']);
     Route::post('/payroll-batches/{payrollBatch}/reject', [PayrollController::class, 'reject']);
-    Route::get('/projects/{project}/pay-rates', [PayRateController::class, 'index']);
-    Route::patch('/projects/{project}/pay-rates/{user}', [PayRateController::class, 'update']);
+    // Personnel (PersonnelService): the team appointed by Special Order, paid
+    // honoraria through payroll. Read here by role; Program Leader edits below.
+    Route::get('/projects/{project}/personnel', [PersonnelController::class, 'index']);
 
     // Purchase requests (PurchaseRequestService): draft -> submitted ->
     // approved by Project Leader, or returned; an approved request ends as
@@ -195,6 +196,11 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::post('/program/projects/{project}/tranches', [ProgramProjectSetupController::class, 'storeTranche']);
         Route::patch('/program/tranches/{projectTranche}', [ProgramProjectSetupController::class, 'updateTranche']);
         Route::delete('/program/tranches/{projectTranche}', [ProgramProjectSetupController::class, 'destroyTranche']);
+        Route::post('/program/projects/{project}/personnel', [PersonnelController::class, 'store']);
+        Route::patch('/program/personnel/{personnel}', [PersonnelController::class, 'update']);
+        Route::delete('/program/personnel/{personnel}', [PersonnelController::class, 'destroy']);
+        Route::post('/program/personnel/{personnel}/special-order', [PersonnelController::class, 'uploadSpecialOrder']);
+        Route::delete('/program/personnel/{personnel}/special-order', [PersonnelController::class, 'removeSpecialOrder']);
         Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
         // Read-only: entries are never edited or deleted through the API.
         Route::get('/program/audit', [ProgramAuditController::class, 'index']);

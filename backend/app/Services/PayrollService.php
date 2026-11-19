@@ -7,7 +7,7 @@ use App\Models\LibCategory;
 use App\Models\Payroll;
 use App\Models\PayrollBatch;
 use App\Models\Project;
-use App\Models\ProjectUser;
+use App\Models\ProjectPersonnel;
 use App\Models\User;
 use App\Notifications\WorkflowNotification;
 use App\Services\Concerns\RunsWorkflow;
@@ -51,7 +51,7 @@ class PayrollService
 
     private const ENCODERS = ['research-assistant', 'finance-admin'];
 
-    public function __construct(private PayrollCalculator $calculator)
+    public function __construct(private PayrollCalculator $calculator, private PersonnelService $personnel)
     {
     }
 
@@ -65,8 +65,11 @@ class PayrollService
     // ---------------------------------------------------------------- rows
 
     /**
-     * Create the month's batch (if needed) and one computed row per active
-     * member with a monthly rate who has no row yet.
+     * Create the month's batch (if needed) and one computed row per person
+     * of the project's personnel (Special Order) whose period covers the
+     * month, with a monthly honorarium above zero, who has no row yet. The
+     * row is charged to the person's PS line item ($lineItem when none) and
+     * starts with no allowance: payroll pays honoraria only.
      *
      * @return Collection<int, Payroll> the rows created
      */
@@ -78,20 +81,20 @@ class PayrollService
             $this->requireState($existingBatch, PayrollBatch::EDITABLE, 'changed');
         }
 
-        $members = $this->ratedMembers($project);
+        $members = $this->ratedMembers($project, $year, $month);
         if ($members->isEmpty()) {
             throw ValidationException::withMessages([
-                'month' => ['No one on this project has a monthly rate yet. Set pay rates first.'],
+                'month' => ['No personnel with a monthly honorarium for ' . self::monthLabel($year, $month) . '. The Program Leader adds personnel on the project page.'],
             ]);
         }
 
         $existing = Payroll::query()
             ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
             ->pluck('personnel_id')->map(fn ($id) => (int) $id)->all();
-        $toCreate = $members->reject(fn (ProjectUser $member) => in_array((int) $member->user_id, $existing, true))->values();
+        $toCreate = $members->reject(fn (ProjectPersonnel $member) => in_array((int) $member->user_id, $existing, true))->values();
         if ($toCreate->isEmpty()) {
             throw ValidationException::withMessages([
-                'month' => ['Payroll for ' . self::monthLabel($year, $month) . ' already exists for everyone with a pay rate.'],
+                'month' => ['Payroll for ' . self::monthLabel($year, $month) . ' already exists for all personnel.'],
             ]);
         }
 
@@ -103,12 +106,12 @@ class PayrollService
             $batch = $this->lockRecord($batch);
             $this->requireState($batch, PayrollBatch::EDITABLE, 'changed');
 
-            return $toCreate->map(function (ProjectUser $member) use ($batch, $project, $year, $month, $lineItem, $actor) {
-                $result = $this->calculator->compute((float) $member->monthly_rate, (float) $member->allowance);
+            return $toCreate->map(function (ProjectPersonnel $member) use ($batch, $project, $year, $month, $lineItem, $actor) {
+                $result = $this->calculator->compute((float) $member->monthly_honorarium, 0.0);
                 $payroll = Payroll::create([
                     'project_id' => $project->id,
                     'payroll_batch_id' => $batch->id,
-                    'lib_category_id' => $lineItem->id,
+                    'lib_category_id' => $member->lib_category_id ?: $lineItem->id,
                     'personnel_id' => $member->user_id,
                     'computed_by' => $actor->id,
                     'pay_month' => $month,
@@ -130,9 +133,10 @@ class PayrollService
     }
 
     /**
-     * Recompute every row of the month's batch from the current pay rates and
-     * deduction rules (batch draft or returned only). A person whose rate is
-     * now not set or 0.00 is taken out of the batch (one "deleted" audit
+     * Recompute every row of the month's batch from the current personnel
+     * honoraria and deduction rules (batch draft or returned only). A person
+     * with no personnel record covering the month, or an honorarium of 0.00,
+     * is taken out of the batch (one "deleted" audit
      * entry each), the same as Prepare leaves them out; never a 0.00 row.
      * Submitted and verified batches are refused, so they never change.
      *
@@ -150,7 +154,7 @@ class PayrollService
         }
         $this->requireState($batch, PayrollBatch::EDITABLE, 'computed');
 
-        $rates = ProjectUser::query()->where('project_id', $project->id)->get()->keyBy('user_id');
+        $rates = $this->personnel->payableFor($project, $year, $month);
 
         return AuditLogger::transaction(function () use ($batch, $rates, $actor) {
             $this->requireState($this->lockRecord($batch), PayrollBatch::EDITABLE, 'computed');
@@ -161,7 +165,7 @@ class PayrollService
                 $locked = $this->lockRecord($row);
                 $rate = $rates->get($locked->personnel_id);
 
-                if (! $rate || $rate->monthly_rate === null || (float) $rate->monthly_rate <= 0) {
+                if (! $rate || (float) $rate->monthly_honorarium <= 0) {
                     $old = $this->money($locked);
                     $locked->deductions()->delete();
                     $locked->delete();
@@ -170,7 +174,8 @@ class PayrollService
                     continue;
                 }
 
-                $rows->push($this->recompute($locked, (float) $rate->monthly_rate, (float) $rate->allowance, [], 'computed', $actor));
+                // The honorarium from Personnel; an allowance typed on the row is kept.
+                $rows->push($this->recompute($locked, (float) $rate->monthly_honorarium, (float) $locked->allowance, [], 'computed', $actor));
             }
 
             return ['rows' => $rows, 'removed' => $removed];
@@ -522,43 +527,35 @@ class PayrollService
         return Carbon::create($year, $month, 1)->format('F Y');
     }
 
-    /** Active members of the project with a monthly rate above zero, one per person. */
-    public function ratedMembers(Project $project): Collection
+    /**
+     * Personnel paid for the month: a record covering it, a monthly
+     * honorarium above zero, the person active and assigned. One per person.
+     *
+     * @return Collection<int, ProjectPersonnel>
+     */
+    public function ratedMembers(Project $project, int $year, int $month): Collection
     {
-        return ProjectUser::query()
-            ->where('project_id', $project->id)
-            ->whereNotNull('monthly_rate')
-            ->where('monthly_rate', '>', 0)
-            ->with('user')
-            ->orderBy('id')
-            ->get()
-            ->filter(fn (ProjectUser $member) => $member->user && $member->user->is_active)
-            ->unique('user_id')
+        return $this->personnel->payableFor($project, $year, $month)
+            ->filter(fn (ProjectPersonnel $record) => (float) $record->monthly_honorarium > 0)
             ->values();
     }
 
     /**
-     * Active members of the project who are NOT included in payroll: no
-     * monthly rate set, or a rate of 0.00. Names and the reason, so the page
-     * can say who is missing (they never get a 0.00 row).
+     * Personnel covering the month who are NOT included in payroll because
+     * their honorarium is 0.00 (they never get a 0.00 row). People without a
+     * personnel record are not listed: they are not paid through payroll
+     * (Job Order and professional services go through expenses).
      *
      * @return array<int, array{user_id: int, name: string, reason: string}>
      */
-    public function unratedMembers(Project $project): array
+    public function unratedMembers(Project $project, int $year, int $month): array
     {
-        $rated = $this->ratedMembers($project)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-
-        return ProjectUser::query()
-            ->where('project_id', $project->id)
-            ->with('user')
-            ->orderBy('id')
-            ->get()
-            ->filter(fn (ProjectUser $member) => $member->user && $member->user->is_active && ! in_array((int) $member->user_id, $rated, true))
-            ->unique('user_id')
-            ->map(fn (ProjectUser $member) => [
-                'user_id' => (int) $member->user_id,
-                'name' => $member->user->name,
-                'reason' => $member->monthly_rate === null ? 'not_set' : 'zero',
+        return $this->personnel->payableFor($project, $year, $month)
+            ->filter(fn (ProjectPersonnel $record) => (float) $record->monthly_honorarium <= 0)
+            ->map(fn (ProjectPersonnel $record) => [
+                'user_id' => (int) $record->user_id,
+                'name' => $record->user->name,
+                'reason' => 'zero',
             ])
             ->sortBy('name')
             ->values()

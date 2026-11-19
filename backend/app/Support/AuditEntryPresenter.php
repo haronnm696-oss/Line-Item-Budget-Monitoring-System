@@ -48,6 +48,7 @@ class AuditEntryPresenter
         'Document' => 'Document',
         'PurchaseRequest' => 'Purchase request',
         'PayrollBatch' => 'Payroll',
+        'ProjectPersonnel' => 'Personnel',
     ];
 
     /** Labels for the ACTION filter (no record type known). */
@@ -182,13 +183,18 @@ class AuditEntryPresenter
         'supplier' => 'Supplier / payee',
         'monthly_rate' => 'Monthly rate',
         'allowance' => 'Allowance',
+        'special_order_no' => 'Special Order No.',
+        'effective_from' => 'Effective from',
+        'effective_to' => 'Effective to',
+        'monthly_honorarium' => 'Monthly honorarium',
+        'bank_account_masked' => 'Bank account',
     ];
 
     private const MONEY = [
         'amount', 'allocated_amount', 'total_approved_budget', 'funding_agency_amount', 'budget', 'spent', 'remaining',
         'implementing_agency_counterpart', 'basic_rate', 'gross_pay', 'total_deductions', 'net_pay',
         'estimated_amount', 'monthly_rate', 'allowance',
-        'funder_amount', 'implementing_agency_amount', 'rate',
+        'funder_amount', 'implementing_agency_amount', 'rate', 'monthly_honorarium',
     ];
 
     private const USER_KEYS = [

@@ -8,6 +8,7 @@ use App\Models\FundingAgency;
 use App\Models\LibCategory;
 use App\Models\PayrollBatch;
 use App\Models\Project;
+use App\Models\ProjectPersonnel;
 use App\Models\ProjectUser;
 use App\Models\Role;
 use App\Models\User;
@@ -86,6 +87,26 @@ trait BuildsExpenseWorkflow
             'role_id' => Role::where('slug', $slug)->value('id'),
             'assigned_at' => now(),
         ]);
+    }
+
+    /**
+     * Payroll fixture: the person's personnel record (honorarium) on the
+     * project, covering the project period. null removes the record.
+     */
+    protected function setHonorarium(User $user, ?float $monthly, ?Project $project = null): void
+    {
+        $project ??= $this->project;
+        AuditLogger::muted(function () use ($user, $monthly, $project) {
+            ProjectPersonnel::where('project_id', $project->id)->where('user_id', $user->id)->delete();
+            if ($monthly !== null) {
+                ProjectPersonnel::create([
+                    'project_id' => $project->id, 'user_id' => $user->id, 'position' => 'Project Staff',
+                    'special_order_no' => 'SO No. 0001 s. 2026',
+                    'effective_from' => $project->start_date, 'effective_to' => $project->end_date,
+                    'monthly_honorarium' => $monthly,
+                ]);
+            }
+        });
     }
 
     protected function makeProject(string $code, string $title): Project

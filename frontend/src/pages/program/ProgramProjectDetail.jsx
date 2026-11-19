@@ -8,6 +8,7 @@ import { formatPct, peso } from '../../components/money';
 import { formatDate, formatDateTime } from '../../lib/datetime';
 import { sourceLabels } from '../../lib/fundingSource';
 import FundingWarnings from '../../components/program/FundingWarnings';
+import PersonnelSection from '../../components/personnel/PersonnelSection';
 
 
 function actionLabel(action) {
@@ -281,6 +282,8 @@ export default function ProgramProjectDetail() {
           </div>
         )}
       </section>
+
+      <PersonnelSection projectId={project.id} />
 
       <section className="program-card">
         <div className="program-card-head">
