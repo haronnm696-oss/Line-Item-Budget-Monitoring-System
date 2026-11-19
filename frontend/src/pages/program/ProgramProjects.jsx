@@ -142,7 +142,7 @@ function RowActions({ project, detailState }) {
   const close = () => setOpen(false);
   const items = [
     { label: 'View details', to: `/program-projects/${project.id}`, state: detailState },
-    { label: 'Export Form B', to: `/program-reports?project=${encodeURIComponent(project.code ?? '')}` },
+    { label: 'Export Form B', to: `/program-reports?project=${encodeURIComponent(project.code ?? '')}&report=form-b&format=pdf` },
     { label: 'View approvals', to: `/program-approvals?project=${project.id}` },
     { label: 'View audit trail', to: `/program-audit?project=${project.id}` },
   ];

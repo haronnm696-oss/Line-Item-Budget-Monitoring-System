@@ -14,7 +14,35 @@ class Project extends Model
         'code', 'title', 'description', 'funding_agency_id', 'funder_reference',
         'total_approved_budget', 'implementing_agency_counterpart',
         'funding_agency_amount', 'start_date', 'end_date', 'status',
+        'monitoring_agency',
+        'reviewed_by_name', 'reviewed_by_position',
+        'funds_certified_by_name', 'funds_certified_by_position',
+        'recommending_approval_name', 'recommending_approval_position',
+        'approved_by_name', 'approved_by_position',
     ];
+
+    /**
+     * R&D Form B signatories: column prefix => printed label. Each has
+     * optional <prefix>_name and <prefix>_position columns.
+     */
+    public const FORM_B_SIGNATORIES = [
+        'reviewed_by' => 'Reviewed by:',
+        'funds_certified_by' => 'Certified Funds Available:',
+        'recommending_approval' => 'Recommending Approval:',
+        'approved_by' => 'Approved:',
+    ];
+
+    /** The optional printed Form B fields (Monitoring Agency and signatories). */
+    public static function formBPrintFields(): array
+    {
+        $fields = ['monitoring_agency'];
+        foreach (array_keys(self::FORM_B_SIGNATORIES) as $prefix) {
+            $fields[] = "{$prefix}_name";
+            $fields[] = "{$prefix}_position";
+        }
+
+        return $fields;
+    }
 
     protected $casts = [
         'start_date' => 'date',

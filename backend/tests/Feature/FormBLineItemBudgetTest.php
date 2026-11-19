@@ -308,7 +308,7 @@ class FormBLineItemBudgetTest extends TestCase
         $this->assertStringNotContainsString('MOST', $detail->getContent());
 
         $csv = $this->get("/api/projects/{$project->id}/reports/form-b")->assertOk()->getContent();
-        $this->assertStringContainsString('Particulars,Computation,MSU,DOST,Total,Spent', $csv);
+        $this->assertStringContainsString(',Counterpart Funding: Implementing Agency,DOST', $csv);
         $this->assertStringNotContainsString('MOST', $csv);
 
         $overview = $this->actingAs($this->projectLeader)->getJson("/api/projects/{$project->id}/leader-overview")->assertOk();

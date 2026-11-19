@@ -58,11 +58,19 @@ class ProgramProjectSetupController extends Controller
             'start_date' => ['sometimes', 'required', 'date'],
             'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:' . ($request->input('start_date') ?? $project->start_date?->toDateString())],
             'project_leader_id' => ['sometimes', 'required', 'integer'],
-        ], $this->messages());
+        ] + $this->formBPrintRules(), $this->messages());
 
         $this->setup->updateProject($project, $data, $request->user());
 
         return response()->json(['message' => 'Project details saved.']);
+    }
+
+    /** Optional printed Form B fields: Monitoring Agency and signatory names and positions. */
+    private function formBPrintRules(): array
+    {
+        return collect(Project::formBPrintFields())
+            ->mapWithKeys(fn ($field) => [$field => ['sometimes', 'nullable', 'string', 'max:255']])
+            ->all();
     }
 
     /** POST /api/program/projects/{project}/line-items */

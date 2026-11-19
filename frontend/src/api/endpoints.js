@@ -99,6 +99,10 @@
  *
  * Reports:
  *   GET /api/projects/:id/reports/:type     -> CSV; type = form-b | form-c | utilization | liquidation | payroll-register
+ *   GET /api/projects/:id/form-b            -> R&D Form B document in the official layout (PDF print view):
+ *       { funder, header, details, columns, rows: [{ kind, label, level, implementing_agency, funder }],
+ *         footer, signatories: [{ label, name, position }], paper: A4|Legal }
+ *       Same rows as the /reports/form-b CSV. Funder names come from the project (never hard-coded).
  *       (percent cells are plain numbers, never "<0.1")
  *   GET /api/projects/:id/payroll-register?period=all|year|90d&month=YYYY-MM
  *       -> { project, period, period_label, rates_label, deduction_types,
@@ -261,6 +265,7 @@ export const ENDPOINTS = {
   // Read-only budget summary for any project member (Researcher, Finance/Admin).
   budgetSummary: (projectId) => `/api/projects/${projectId}/budget-summary`,
   report: (projectId, type) => `/api/projects/${projectId}/reports/${type}`,
+  formB: (projectId) => `/api/projects/${projectId}/form-b`,
   payrollRegister: (projectId) => `/api/projects/${projectId}/payroll-register`,
   audit: '/api/audit',
   team: (projectId) => `/api/projects/${projectId}/team`,

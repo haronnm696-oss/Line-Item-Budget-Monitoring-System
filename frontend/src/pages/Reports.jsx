@@ -3,7 +3,8 @@ import { csvPct, formatPct, peso } from '../components/money';
 import { ratesLabel, ratesLabelHtml } from '../lib/payrollRatesLabel';
 import { REGISTER_PERIOD, registerCell, registerColumns, registerRows, registerTableHtml } from '../lib/payrollRegister';
 import { printHtmlDocument, saveBlob } from '../lib/download';
-import { downloadPayrollRegisterCsv, fetchPayrollRegister } from '../api/reports';
+import { downloadPayrollRegisterCsv, downloadReportCsv, fetchFormB, fetchPayrollRegister } from '../api/reports';
+import { formBHtml } from '../lib/formBPrint';
 import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
@@ -16,6 +17,14 @@ import { myProjects, notAssignedText, projectRoleFor } from '../lib/myProjects';
 import FundingWarnings from '../components/program/FundingWarnings';
 
 const REPORT_TYPES = [
+  {
+    key: 'form-b',
+    icon: '▤',
+    title: 'R&D Form B (Project Line-Item Budget)',
+    desc: "Official Form B layout for the project's funder: PS and MOOE, Direct and Indirect cost, counterpart and funder columns, and signatories.",
+    // The PDF button reads "Export Form B" for every project and funder.
+    pdfLabel: 'Export Form B',
+  },
   {
     key: 'utilization',
     icon: '▦',
@@ -378,8 +387,33 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }
   }
 
+  // R&D Form B: the backend document in the official layout, printed
+  // straight away ("Save as PDF" in the print dialog).
+  async function exportFormBPdf() {
+    showToast('Preparing Form B…', 'info');
+    try {
+      printHtmlDocument(formBHtml(await fetchFormB(listRow.id), escapeHtml));
+    } catch {
+      showToast('Could not load Form B. Please try again.', 'error');
+    }
+  }
+
+  async function downloadFormBCsv() {
+    showToast('Exporting Form B to CSV…', 'info');
+    try {
+      const { blob, filename } = await downloadReportCsv(listRow.id, 'form-b');
+      saveBlob(blob, filename);
+    } catch {
+      showToast('Could not export Form B. Please try again.', 'error');
+    }
+  }
+
   function handleGenerate(type) {
     if (!reportAvailable(type)) return;
+    if (type === 'form-b') {
+      exportFormBPdf();
+      return;
+    }
     showToast(`Generating report preview for ${selectedProject.title}…`, 'info');
 
     if (type === 'payroll-register') {
@@ -676,6 +710,10 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       downloadRegisterCsv();
       return;
     }
+    if (r.key === 'form-b') {
+      downloadFormBCsv();
+      return;
+    }
     const csv = csvFor(r.key);
     showToast(`Exporting ${r.title} to CSV…`, 'info');
     downloadCSV(toCSV(csv.rows, csv.headers), csv.filename);
@@ -833,8 +871,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                   {r.key === 'payroll-register' && reportsReady && payrollNote}
                 </div>
                 <div className="prr-actions">
-                  <button type="button" className="program-btn" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
-                    Generate PDF
+                  <button type="button" className={`program-btn${r.key === 'form-b' ? ' primary' : ''}`} onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
+                    {r.pdfLabel ?? 'Generate PDF'}
                   </button>
                   <button type="button" className="program-btn" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)}>
                     Export CSV
@@ -858,7 +896,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                   <button className="btn sm" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
-                    Generate PDF
+                    {r.pdfLabel ?? 'Generate PDF'}
                   </button>
                   <button className="btn sm" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)}>
                     Export CSV

@@ -60,7 +60,7 @@ class ProjectSetupService
         });
     }
 
-    /** Funder, funder reference, period, total budget and Project Leader. */
+    /** Funder, funder reference, period, total budget, Project Leader and the printed Form B fields. */
     public function updateProject(Project $project, array $data, User $actor): Project
     {
         $leader = array_key_exists('project_leader_id', $data) ? $this->leaderOrFail($data['project_leader_id']) : null;
@@ -78,9 +78,13 @@ class ProjectSetupService
                 }
             }
 
+            $print = array_map(
+                fn ($value) => ($value = trim((string) $value)) === '' ? null : $value,
+                array_intersect_key($data, array_flip(Project::formBPrintFields()))
+            );
             $locked->update(array_intersect_key($data, array_flip([
                 'funding_agency_id', 'funder_reference', 'start_date', 'end_date', 'total_approved_budget',
-            ])));
+            ])) + $print);
             if ($leader) {
                 $this->setLeader($locked, $leader);
             }
@@ -350,6 +354,8 @@ class ProjectSetupService
             'start_date' => $project->start_date?->toDateString(),
             'end_date' => $project->end_date?->toDateString(),
             'project_leader_id' => $leader !== null ? (int) $leader : null,
+            // Printed on R&D Form B (optional; blank Monitoring Agency = the funder's name).
+            'form_b' => $project->only(Project::formBPrintFields()),
             'total_budget' => round((float) $project->total_approved_budget, 2),
             'allocated' => round((float) $project->libCategories()->sum('allocated_amount'), 2),
             // Funder and counterpart totals are the line-item sums.
@@ -508,7 +514,7 @@ class ProjectSetupService
             'end_date' => $project->end_date?->toDateString(),
             'project_leader_id' => $leader ? (int) $leader->user_id : null,
             'project_leader' => $leader?->user?->name,
-        ];
+        ] + $project->only(Project::formBPrintFields());
     }
 
     private function lineItemSnapshot(LibCategory $item): array
