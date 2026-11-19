@@ -6,6 +6,7 @@ use App\Support\Percent;
 use App\Services\ProjectFinancialService;
 use App\Models\Project;
 use App\Services\DashboardService;
+use App\Services\FormBReportService;
 use App\Services\PayrollRegisterService;
 use App\Support\Csv;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
-    public function __construct(private DashboardService $dashboard, private PayrollRegisterService $register)
+    public function __construct(private DashboardService $dashboard, private PayrollRegisterService $register, private FormBReportService $formB)
     {
     }
 
@@ -28,6 +29,16 @@ class ReportController extends Controller
         return response()->json($this->registerFor($request, $project));
     }
 
+    /**
+     * GET /api/projects/{project}/form-b
+     * The printable R&D Form B (official layout, the project's funder names);
+     * the Reports page prints it as the PDF. The CSV is /reports/form-b.
+     */
+    public function formB(Project $project)
+    {
+        return response()->json($this->formB->build($project));
+    }
+
     private function registerFor(Request $request, Project $project): array
     {
         $data = $request->validate([
@@ -40,7 +51,7 @@ class ReportController extends Controller
 
     /**
      * Export official monitoring reports as CSV. Supported types:
-     * form-b (LIB), form-c (financial/fund-release), utilization, liquidation,
+     * form-b (R&D Form B, FormBReportService), form-c (financial/fund-release), utilization, liquidation,
      * payroll-register (verified batches; ?period= / ?month= as above).
      */
     public function export(Request $request, Project $project, string $type)
@@ -57,11 +68,17 @@ class ReportController extends Controller
             return response(Csv::render($this->register->csvRows($register)), 200, Csv::headers($filename));
         }
 
+        if ($type === 'form-b') {
+            $doc = $this->formB->build($project);
+            $filename = Str::slug($project->code . '-form-b-' . now()->format('Ymd')) . '.csv';
+
+            return response(Csv::render($this->formB->csvRows($doc)), 200, Csv::headers($filename));
+        }
+
         $compliance = (string) $request->query('compliance', 'all');
         $summary = $this->dashboard->build($project);
 
         $rows = match ($type) {
-            'form-b' => $this->formBRows($summary),
             'form-c' => $this->formCRows($summary),
             'utilization' => $this->utilizationRows($summary),
             'liquidation' => $this->liquidationRows($project, $compliance),
@@ -70,60 +87,6 @@ class ReportController extends Controller
         $filename = Str::slug($project->code . '-' . $type . '-' . now()->format('Ymd')) . '.csv';
 
         return response(Csv::render($rows), 200, Csv::headers($filename));
-    }
-
-    /**
-     * R&D Form B (Project Line-Item Budget): PS and MOOE, Direct and
-     * Indirect cost, expense groups and sub-groups, with the implementing
-     * agency and the project's funder (its short name) as columns.
-     */
-    protected function formBRows(array $summary): array
-    {
-        $project = $summary['project'];
-        $formB = $summary['form_b'];
-        $labels = $formB['labels'];
-        $rows = [
-            ['R&D Form B — Project Line-Item Budget'],
-            ['Project Code', $project['code']],
-            ['Project Title', $project['title']],
-            ['Implementing Agency', $project['implementing_agency']],
-            ['Funding Agency', $project['funding_agency']],
-            ['Project Leader', $project['project_leader']],
-            ['Project Period', $project['period']],
-            [],
-            ['Particulars', 'Computation', $labels['implementing_agency'], $labels['funder'], 'Total', 'Spent'],
-        ];
-        $total = fn (string $label, array $t) => [$label, '', $t['implementing_agency'], $t['funder'], $t['total'], ''];
-        $item = fn (array $i, string $indent) => [$indent . $i['name'], $i['computation'] ?? '', $i['implementing_agency_amount'], $i['funder_amount'], $i['allocated'], $i['spent']];
-
-        foreach ($formB['sections'] as $section) {
-            $rows[] = [strtoupper($section['label']) . " ({$section['type']})"];
-            foreach ($section['cost_types'] as $cost) {
-                $rows[] = ['  ' . $cost['label']];
-                foreach ($cost['groups'] as $group) {
-                    $rows[] = ['    ' . $group['name']];
-                    foreach ($group['items'] as $row) {
-                        $rows[] = $item($row, '      ');
-                    }
-                    foreach ($group['subgroups'] as $sub) {
-                        $rows[] = ['      ' . $sub['name']];
-                        foreach ($sub['items'] as $row) {
-                            $rows[] = $item($row, '        ');
-                        }
-                    }
-                    $rows[] = $total('    Sub-total, ' . $group['name'], $group['subtotal']);
-                }
-                $rows[] = $total('  Sub-total, ' . $cost['label'], $cost['subtotal']);
-            }
-            $rows[] = $total("Total {$section['type']}", $section['subtotal']);
-        }
-        $rows[] = $total('GRAND TOTAL', $formB['grand_total']);
-        $rows[] = [];
-        $rows[] = ['Total spent (verified)', '', '', '', '', $summary['kpis']['total_spent']];
-        $rows[] = ['Remaining', '', '', '', '', $summary['kpis']['remaining']];
-        $rows[] = ['Utilization %', '', '', '', '', Percent::csv($summary['kpis']['utilization_pct'])];
-
-        return $rows;
     }
 
     protected function formCRows(array $summary): array

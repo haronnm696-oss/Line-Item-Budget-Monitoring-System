@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
 import { errorText, fieldErrors } from '../../api/leader';
@@ -94,6 +94,19 @@ function useSave(onSaved) {
  * New project (mode "create") or Edit details (mode "edit": funder, funder
  * reference, period, total budget, Project Leader).
  */
+/**
+ * Printed on R&D Form B, editable per project (all optional): the Monitoring
+ * Agency (blank = the funder's name) and the four signatories, whose name and
+ * position print under blank signature lines. Never hard-coded.
+ */
+const FORM_B_SIGNATORIES = [
+  ['reviewed_by', 'Reviewed by'],
+  ['funds_certified_by', 'Certified Funds Available'],
+  ['recommending_approval', 'Recommending Approval'],
+  ['approved_by', 'Approved'],
+];
+const FORM_B_FIELDS = ['monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
+
 export function ProjectFormDialog({ mode, projectId = null, setup = null, onClose, onSaved }) {
   const creating = mode === 'create';
   const options = useApiData(ENDPOINTS.programProjectOptions);
@@ -108,6 +121,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     end_date: setup?.end_date ?? '',
     total_approved_budget: setup?.total_budget ? String(setup.total_budget) : '',
     project_leader_id: setup?.project_leader_id ? String(setup.project_leader_id) : '',
+    ...Object.fromEntries(FORM_B_FIELDS.map((key) => [key, setup?.form_b?.[key] ?? ''])),
   });
   const [local, setLocal] = useState({});
   const { busy, error, serverErrors, save } = useSave(onSaved);
@@ -129,6 +143,9 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
       next.total_approved_budget = `The total budget cannot be less than the line items already allocated (${peso(setup.allocated)}).`;
     }
     if (!form.project_leader_id) next.project_leader_id = 'Choose the Project Leader.';
+    for (const key of FORM_B_FIELDS) {
+      if (String(form[key] ?? '').trim().length > 255) next[key] = 'Use 255 characters or fewer.';
+    }
     setLocal(next);
     if (Object.keys(next).length) return;
 
@@ -143,7 +160,8 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     if (creating) {
       save('post', ENDPOINTS.programProjects, { ...body, title: form.title.trim(), code: form.code.trim() }, 'Project created.');
     } else {
-      save('patch', ENDPOINTS.programProject(projectId), body, 'Project details saved.');
+      const printed = Object.fromEntries(FORM_B_FIELDS.map((key) => [key, String(form[key] ?? '').trim() || null]));
+      save('patch', ENDPOINTS.programProject(projectId), { ...body, ...printed }, 'Project details saved.');
     }
   }
 
@@ -182,6 +200,20 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
             )}
           </Field>
         </div>
+        {!creating && (
+          <fieldset className="ps-formb">
+            <legend>Printed on Form B <span className="pu-hint">(optional)</span></legend>
+            <div className="program-form-grid">
+              {text('monitoring_agency', 'Monitoring agency', 'text', { full: true, hint: "Leave blank to print the funder's name." })}
+              {FORM_B_SIGNATORIES.map(([prefix, label]) => (
+                <Fragment key={prefix}>
+                  {text(`${prefix}_name`, `${label}: name`)}
+                  {text(`${prefix}_position`, `${label}: position`)}
+                </Fragment>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : creating ? 'Create project' : 'Save details'}</button>

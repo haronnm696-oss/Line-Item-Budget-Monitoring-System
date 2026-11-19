@@ -113,7 +113,7 @@ export default function ProgramProjectDetail() {
             <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'details' }); }}>Edit details</button>
           )}
           <Link className="program-btn" to={`/program-approvals?project=${project.id}`}>View approvals</Link>
-          <Link className="program-btn primary" to={`/program-reports?project=${encodeURIComponent(project.code)}`}>
+          <Link className="program-btn primary" to={`/program-reports?project=${encodeURIComponent(project.code)}&report=form-b&format=pdf`}>
             Export Form B
           </Link>
         </div>
