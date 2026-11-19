@@ -115,6 +115,7 @@ class DashboardService
         $tranches = $this->trancheRows($project);
         $approvals = $this->pendingApprovalRows($project);
         $compliance = $this->financials->compliance($project);
+        $funding = $this->financials->fundingTotals($project);
         $burnRate = $this->burnRate($project, $budget, $totalSpent);
 
         return [
@@ -123,7 +124,7 @@ class DashboardService
                 'code' => $project->code,
                 'title' => $project->title,
                 'description' => $project->description,
-                'implementing_agency' => 'MSU-Marawi',
+                'implementing_agency' => ProjectFinancialService::sourceLabels($project)['implementing_agency'],
                 'funding_agency' => $this->fundingAgencyName($project),
                 'project_leader' => $this->projectLeaderName($project) ?? 'Unassigned',
                 'period' => $this->period($project),
@@ -135,8 +136,10 @@ class DashboardService
                 'total_spent' => $totalSpent,
                 'remaining' => $remaining,
                 'utilization_pct' => $metrics['utilization_pct'],
-                'counterpart_budget' => (float) $project->implementing_agency_counterpart,
-                'funding_budget' => (float) $project->funding_agency_amount,
+                // Sums of the line items (no separately typed figure).
+                'counterpart_budget' => $funding['implementing_agency'],
+                'funding_budget' => $funding['funder'],
+                'funder_label' => ProjectFinancialService::sourceLabels($project)['funder'],
             ],
             'kpis' => [
                 'total_budget' => $budget,
@@ -161,10 +164,12 @@ class DashboardService
             'approvals' => $approvals,
             'compliance' => $compliance,
             'funding_sources' => [
-                'counterpart' => (float) $project->implementing_agency_counterpart,
-                'funding' => (float) $project->funding_agency_amount,
+                'counterpart' => $funding['implementing_agency'],
+                'funding' => $funding['funder'],
                 'total' => $budget,
+                'labels' => ProjectFinancialService::sourceLabels($project),
             ],
+            'form_b' => $this->financials->formB($project),
         ];
     }
 

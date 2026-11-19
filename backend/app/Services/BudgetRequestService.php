@@ -236,10 +236,16 @@ class BudgetRequestService
         }
 
         $amount = round((float) $data['amount'], 2);
-        $available = $this->financials->balancing($project, $from->id)['line_items'][0]['available'] ?? 0.0;
+        // Money moves within one funding source: funder share to funder
+        // share, or counterpart to counterpart.
+        $source = ProjectFinancialService::source($data['funding_source'] ?? null);
+        $balance = $this->financials->sourceBalance($project, $from->id, $source);
+        $available = $balance['available'] ?? 0.0;
         if ($amount > $available) {
+            $labels = ProjectFinancialService::sourceLabels($project);
+            $share = ! ($balance['has_counterpart'] ?? false) ? '' : ' (' . ($source === LibCategory::SOURCE_COUNTERPART ? $labels['implementing_agency'] . ' counterpart' : $labels['funder'] . ' share') . ')';
             throw ValidationException::withMessages([
-                'amount' => ['The source line item has only ₱' . number_format($available, 2) . ' available.'],
+                'amount' => ['The source line item has only ₱' . number_format($available, 2) . ' available' . $share . '.'],
             ]);
         }
 
@@ -250,6 +256,7 @@ class BudgetRequestService
                 'from_lib_category_id' => $from->id,
                 'to_lib_category_id' => $to->id,
                 'amount' => $amount,
+                'funding_source' => $source,
             ],
         ];
     }

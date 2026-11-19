@@ -237,8 +237,11 @@ class ProgramAuditTest extends TestCase
         $this->assertSame('Nov 10, 2026', $addedChanges['Expense date']['new']);
         $this->assertFalse($addedChanges->has('Project'), 'project_id repeats the Project column');
 
-        $this->assertSame([['label' => 'Allocated', 'old' => '₱50,000.00', 'new' => '₱60,000.00']],
-            $rows->first(fn ($r) => $r['action']['label'] === 'Line item edited')['changes']);
+        // allocated_amount alone changes the funder share (allocated = counterpart + funder).
+        $this->assertSame([
+            ['label' => 'Allocated', 'old' => '₱50,000.00', 'new' => '₱60,000.00'],
+            ['label' => 'Funder share', 'old' => '₱50,000.00', 'new' => '₱60,000.00'],
+        ], $rows->first(fn ($r) => $r['action']['label'] === 'Line item edited')['changes']);
 
         $deleted = $rows->first(fn ($r) => $r['action']['label'] === 'Expense deleted');
         $this->assertSame('danger', $deleted['action']['tone']);
@@ -377,7 +380,7 @@ class ProgramAuditTest extends TestCase
 
         $edits = [
             'Project' => ['title' => 'Logged project (renamed)'],
-            'LibCategory' => ['allocated_amount' => 120000],
+            'LibCategory' => ['allocated_amount' => 120000, 'funder_amount' => 120000],
             'ProjectTranche' => ['status' => 'due'],
             'Expense' => ['amount' => 150],
             'Payroll' => ['status' => 'approved'],

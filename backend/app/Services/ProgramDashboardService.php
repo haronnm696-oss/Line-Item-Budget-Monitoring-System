@@ -383,6 +383,9 @@ class ProgramDashboardService
                 'funder_name' => $project->fundingAgency?->name,
             ],
             'line_items' => $this->lineItemGroups($project),
+            // The same line items laid out like R&D Form B (PS/MOOE, Direct/
+            // Indirect, groups) with counterpart and funder columns.
+            'form_b' => $this->financials->formB($project),
             'tranches' => $this->trancheRows($project, $today),
             'expenses' => $this->recentExpenses($project),
             'team' => $project->projectUsers
@@ -1316,14 +1319,18 @@ class ProgramDashboardService
                 ]);
             }
 
-            if ((float) $from->allocated_amount < $amount) {
+            // Within one source; older requests without one moved funder money.
+            $column = LibCategory::SOURCE_COLUMN[ProjectFinancialService::source($payload['funding_source'] ?? null)];
+
+            if ((float) $from->{$column} < $amount) {
                 throw ValidationException::withMessages([
                     'payload' => ['The source line item does not have enough allocated budget.'],
                 ]);
             }
 
-            $from->decrement('allocated_amount', $amount);
-            $to->increment('allocated_amount', $amount);
+            // Saved through the model so allocated_amount stays the sum of both sources.
+            $from->update([$column => round((float) $from->{$column} - $amount, 2)]);
+            $to->update([$column => round((float) $to->{$column} + $amount, 2)]);
         }
 
         if ($approval->type === 'disbursement' && $approval->tranche) {

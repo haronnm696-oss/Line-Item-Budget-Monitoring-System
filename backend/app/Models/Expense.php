@@ -27,8 +27,11 @@ class Expense extends Model implements HasDocuments
         'rejected' => 'returned',
     ];
 
+    /** Funder by default; implementing_agency draws on the counterpart share. */
+    protected $attributes = ['funding_source' => 'funder'];
+
     protected $fillable = [
-        'project_id', 'lib_category_id', 'purchase_request_id', 'recorded_by', 'verified_by',
+        'project_id', 'lib_category_id', 'funding_source', 'purchase_request_id', 'recorded_by', 'verified_by',
         'reference_no', 'payee', 'description', 'amount', 'expense_date',
         'attachment_path', 'status', 'remarks', 'verified_at',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at', 'return_reason',

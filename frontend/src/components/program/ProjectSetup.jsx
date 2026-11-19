@@ -4,6 +4,8 @@ import { apiWrite } from '../../api/http';
 import { errorText, fieldErrors } from '../../api/leader';
 import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
+import { RATE_PERIODS, computedAmount, describeComputation, hasComputation } from '../../lib/lineItemComputation';
+import { sourceLabels } from '../../lib/fundingSource';
 
 /*
  * Program Leader project set-up dialogs (New project, Edit details, line
@@ -191,57 +193,144 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
 
 // ------------------------------------------------------------------ line items
 
+/** Expense groups of R&D Form B, offered as suggestions (any name is allowed). */
+const EXPENSE_GROUPS = [
+  'Honoraria', 'Salaries and Wages', 'Traveling Expenses', 'Training Expenses', 'Supplies and Materials Expenses',
+  'Communication Expenses', 'Professional Services', 'Utilities', 'Printing and Binding Expenses',
+  'Other Maintenance and Operating Expenses',
+];
+
+const WHOLE = /^\d+$/;
+
+/** The line item's values as form strings. */
+function lineItemForm(item) {
+  const text = (value) => (value == null ? '' : String(value));
+  return {
+    category_type: item?.type ?? 'MOOE',
+    cost_type: item?.cost_type ?? 'Direct',
+    expense_group: text(item?.group),
+    expense_subgroup: text(item?.subgroup),
+    line_item_name: text(item?.name),
+    quantity: text(item?.quantity),
+    unit_description: text(item?.unit_description),
+    rate: text(item?.rate),
+    rate_period: text(item?.rate_period),
+    periods: text(item?.periods),
+    implementing_agency_amount: item ? text(item.implementing_agency_amount ?? 0) : '',
+    funder_amount: item ? text(item.funder_amount ?? item.allocated ?? 0) : '',
+  };
+}
+
+/** Request body from the form (computation fields as numbers or null). */
+function lineItemBody(form, computed) {
+  const number = (value) => (String(value).trim() === '' ? null : Number(value));
+  const counterpart = number(form.implementing_agency_amount) ?? 0;
+  return {
+    category_type: form.category_type,
+    cost_type: form.cost_type,
+    expense_group: form.expense_group.trim() || null,
+    expense_subgroup: form.expense_subgroup.trim() || null,
+    line_item_name: form.line_item_name.trim(),
+    quantity: number(form.quantity),
+    unit_description: form.unit_description.trim() || null,
+    rate: number(form.rate),
+    rate_period: form.rate_period || null,
+    periods: number(form.periods),
+    implementing_agency_amount: counterpart,
+    // With a computation the funder amount is the computed amount (the server sets it too).
+    funder_amount: computed != null ? computed : (number(form.funder_amount) ?? 0),
+  };
+}
+
 /**
- * Add (item null) or edit a line item. `setup` comes from the project page
- * (total budget, allocated, locks).
+ * Add (item null) or edit a line item, R&D Form B style: category, cost
+ * type, expense group (and optional sub-group), name, an optional
+ * computation, and the two amounts (implementing agency counterpart and the
+ * project's funder). `setup` comes from the project page (total budget,
+ * allocated, locks, labels).
  */
 export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved }) {
   const editing = Boolean(item);
   const used = editing && setup.used_line_items.includes(item.id);
   const amountLocked = editing && setup.allocations_locked;
-  const [form, setForm] = useState({
-    category_type: item?.type ?? 'MOOE',
-    line_item_name: item?.name ?? '',
-    allocated_amount: item ? String(item.allocated) : '',
-  });
+  const labels = sourceLabels(setup.labels);
+  const [form, setForm] = useState(() => lineItemForm(item));
   const [local, setLocal] = useState({});
   const { busy, error, serverErrors, save } = useSave(onSaved);
   const errors = { ...serverErrors, ...local };
+  const computing = hasComputation(form);
+  const computed = computing ? computedAmount(form) : null;
+  const counterpart = Number(form.implementing_agency_amount) || 0;
+  // As on Form B: the computation is the funder amount; the counterpart is added.
+  const funder = computed != null ? computed : Number(form.funder_amount) || 0;
+  const total = Math.round((counterpart + funder) * 100) / 100;
   const others = Number(setup.allocated) - (editing ? Number(item.allocated) : 0);
   const left = Math.max(0, Number(setup.total_budget) - others);
-  const floor = editing ? Number(item.spent ?? 0) + Number(item.pending ?? 0) : 0;
   const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
 
   function submit(event) {
     event.preventDefault();
     const next = {};
     if (!form.line_item_name.trim()) next.line_item_name = 'Enter the line item name.';
-    const amountError = moneyError(form.allocated_amount);
-    const amount = Number(form.allocated_amount);
-    if (amountError) next.allocated_amount = amountError;
-    else if (!(Number(setup.total_budget) > 0)) next.allocated_amount = "Set the project's total budget first (Edit details).";
-    else if (others + amount > Number(setup.total_budget) + 0.001) next.allocated_amount = `Line items would total ${peso(others + amount)}, more than the total budget of ${peso(setup.total_budget)}. ${peso(left)} is left to allocate.`;
-    else if (editing && amount + 0.001 < floor) next.allocated_amount = `The allocated amount cannot be less than what is already spent and pending (${peso(floor)}).`;
+    const anyComputation = ['quantity', 'rate', 'periods', 'unit_description', 'rate_period'].some((key) => String(form[key]).trim() !== '');
+    if (anyComputation) {
+      if (!WHOLE.test(String(form.quantity).trim()) || Number(form.quantity) < 1) next.quantity = 'Enter a whole quantity of at least 1.';
+      const rateError = moneyError(form.rate);
+      if (rateError) next.rate = rateError;
+      if (String(form.periods).trim() !== '' && (!WHOLE.test(String(form.periods).trim()) || Number(form.periods) < 1)) next.periods = 'Enter a whole number of periods of at least 1.';
+    }
+    const counterpartError = String(form.implementing_agency_amount).trim() === '' ? null : moneyError(form.implementing_agency_amount);
+    if (counterpartError) next.implementing_agency_amount = counterpartError;
+    if (!computing) {
+      const funderError = String(form.funder_amount).trim() === '' ? null : moneyError(form.funder_amount);
+      if (funderError) next.funder_amount = funderError;
+    }
+    if (!next.funder_amount && !next.implementing_agency_amount && !(total > 0) && !anyComputation) {
+      next.funder_amount = 'Enter the amounts or the computation.';
+    } else if (!(Number(setup.total_budget) > 0)) {
+      next.funder_amount = "Set the project's total budget first (Edit details).";
+    } else if (others + total > Number(setup.total_budget) + 0.001) {
+      next.funder_amount = `Line items would total ${peso(others + total)}, more than the total budget of ${peso(setup.total_budget)}. ${peso(left)} is left to allocate.`;
+    }
     setLocal(next);
     if (Object.keys(next).length) return;
 
+    const body = lineItemBody(form, computed);
     if (!editing) {
-      save('post', ENDPOINTS.programLineItems(projectId), { ...form, line_item_name: form.line_item_name.trim(), allocated_amount: amount }, 'Line item added.');
+      save('post', ENDPOINTS.programLineItems(projectId), body, 'Line item added.');
       return;
     }
-    const body = {};
-    if (form.category_type !== item.type) body.category_type = form.category_type;
-    if (form.line_item_name.trim() !== item.name) body.line_item_name = form.line_item_name.trim();
-    if (amount !== Number(item.allocated)) body.allocated_amount = amount;
-    if (Object.keys(body).length === 0) { onClose(); return; }
-    save('patch', ENDPOINTS.programLineItem(item.id), body, 'Line item saved.');
+    const before = lineItemBody(lineItemForm(item), computedAmount(lineItemForm(item)));
+    const changes = Object.fromEntries(Object.entries(body).filter(([key, value]) => value !== before[key]));
+    if (amountLocked) {
+      for (const key of ['quantity', 'rate', 'rate_period', 'periods', 'implementing_agency_amount', 'funder_amount']) delete changes[key];
+    }
+    if (Object.keys(changes).length === 0) { onClose(); return; }
+    save('patch', ENDPOINTS.programLineItem(item.id), changes, 'Line item saved.');
   }
+
+  const input = (key, label, extra = {}) => (
+    <Field id={`ps-li-${key}`} label={label} error={errors[key]} hint={extra.hint} full={extra.full}>
+      {(a11y) => (
+        <input
+          {...a11y}
+          className="program-input"
+          value={form[key]}
+          disabled={busy || extra.disabled}
+          onChange={set(key)}
+          inputMode={extra.inputMode}
+          list={extra.list}
+          readOnly={extra.readOnly}
+        />
+      )}
+    </Field>
+  );
 
   return (
     <Dialog title={editing ? 'Edit line item' : 'Add line item'} labelId="ps-line-title" busy={busy} onClose={onClose}>
       <form className="pu-form" onSubmit={submit} noValidate>
         {error && <div className="program-banner error" role="alert">{error}</div>}
-        <div className="program-form-grid">
+        <div className="program-form-grid fb-form-grid">
           <Field id="ps-category" label="Category" error={errors.category_type} hint={used ? 'In use: the category cannot change.' : undefined}>
             {(a11y) => (
               <select {...a11y} className="program-select" value={form.category_type} disabled={busy || used} onChange={set('category_type')}>
@@ -250,21 +339,72 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
               </select>
             )}
           </Field>
-          <Field id="ps-line-name" label="Line item name" error={errors.line_item_name}>
-            {(a11y) => <input {...a11y} className="program-input" value={form.line_item_name} disabled={busy} onChange={set('line_item_name')} />}
+          <Field id="ps-cost-type" label="Cost type" error={errors.cost_type}>
+            {(a11y) => (
+              <select {...a11y} className="program-select" value={form.cost_type} disabled={busy} onChange={set('cost_type')}>
+                <option value="Direct">Direct cost</option>
+                <option value="Indirect">Indirect cost</option>
+              </select>
+            )}
           </Field>
+          {input('expense_group', 'Expense group', { list: 'ps-li-groups', hint: 'For example Honoraria or Supplies and Materials Expenses' })}
+          {input('expense_subgroup', 'Sub-group', { hint: 'Optional; for example Semi-Expendable Machinery and Equipment' })}
+          <datalist id="ps-li-groups">
+            {EXPENSE_GROUPS.map((group) => <option key={group} value={group} />)}
+          </datalist>
+          {input('line_item_name', 'Item', { full: true, hint: 'For example Project Leader or IoT devices' })}
+
+          <div className="program-field full">
+            <span className="program-label">Computation <span className="ld-muted">optional</span></span>
+            <p className="pu-hint">Gives the {labels.funder} amount: quantity × rate × number of periods, for example 1 × ₱8,800.00 per month × 12 months. The counterpart is entered on its own and added.</p>
+          </div>
+          {input('quantity', 'Quantity', { inputMode: 'numeric', disabled: amountLocked })}
+          {input('unit_description', 'Unit description', { hint: 'For example Project Leader' })}
+          {input('rate', 'Rate (₱)', { inputMode: 'decimal', disabled: amountLocked })}
+          <Field id="ps-li-rate_period" label="Rate period" error={errors.rate_period}>
+            {(a11y) => (
+              <select {...a11y} className="program-select" value={form.rate_period} disabled={busy || amountLocked} onChange={set('rate_period')}>
+                {RATE_PERIODS.map((period) => <option key={period.value} value={period.value}>{period.label}</option>)}
+              </select>
+            )}
+          </Field>
+          {input('periods', 'Number of periods', { inputMode: 'numeric', disabled: amountLocked, hint: 'Optional; 1 when left blank' })}
+          <div className="program-field" aria-live="polite">
+            <span className="program-label">Computed {labels.funder} amount</span>
+            <p className="fb-computed">
+              {computed != null ? <><b>{peso(computed)}</b><br />{describeComputation(form)}</> : 'No computation: enter both amounts below.'}
+            </p>
+          </div>
+
+          {input('implementing_agency_amount', `${labels.implementing_agency} counterpart (₱)`, {
+            inputMode: 'decimal', disabled: amountLocked, hint: 'Leave blank or 0 when there is none',
+          })}
           <Field
-            id="ps-allocated"
-            label="Allocated amount (₱)"
-            full
-            error={errors.allocated_amount}
-            hint={amountLocked
-              ? 'This project has verified expenses: change amounts through a realignment request.'
-              : `${peso(left)} of the ${peso(setup.total_budget)} total budget is left to allocate${floor > 0 ? `; at least ${peso(floor)} (spent and pending)` : ''}.`}
+            id="ps-li-funder_amount"
+            label={`${labels.funder} (₱)`}
+            error={errors.funder_amount}
+            hint={computing ? 'Set by the computation (quantity × rate × periods).' : undefined}
           >
-            {(a11y) => <input {...a11y} className="program-input" inputMode="decimal" value={form.allocated_amount} disabled={busy || amountLocked} onChange={set('allocated_amount')} />}
+            {(a11y) => (
+              <input
+                {...a11y}
+                className="program-input"
+                inputMode="decimal"
+                value={computing ? (computed != null ? computed.toFixed(2) : '') : form.funder_amount}
+                readOnly={computing}
+                disabled={busy || amountLocked}
+                onChange={set('funder_amount')}
+              />
+            )}
           </Field>
         </div>
+        <p className="ld-hint" role="status">
+          Allocated: <b>{peso(total)}</b> ({labels.implementing_agency} {peso(counterpart)} + {labels.funder} {peso(funder)})
+          {' · '}
+          {amountLocked
+            ? 'This project has verified expenses: change amounts through a realignment request.'
+            : `${peso(left)} of the ${peso(setup.total_budget)} total budget is left to allocate.`}
+        </p>
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save line item' : 'Add line item'}</button>
@@ -355,6 +495,104 @@ export function RemoveDialog({ title, text, url, onClose, onSaved }) {
           </button>
         </div>
       </div>
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------------ funders
+
+/**
+ * Funders: each has a full name ("Ministry of Science and Technology -
+ * BARMM") and a short name ("MOST") that labels the funder column of every
+ * Line-Item Budget. Program Leader only; no funder is built in.
+ */
+export function FundersDialog({ onClose }) {
+  const list = useApiData(ENDPOINTS.programFunders);
+  const funders = list.data?.funders ?? [];
+  const [editing, setEditing] = useState(null); // funder id, 'new' or null
+  const [form, setForm] = useState({ name: '', acronym: '' });
+  const [local, setLocal] = useState({});
+  const [notice, setNotice] = useState('');
+  const { busy, error, serverErrors, save } = useSave((message) => {
+    setEditing(null);
+    setNotice(message);
+    list.retry();
+  });
+  const errors = { ...serverErrors, ...local };
+
+  function start(funder) {
+    setNotice('');
+    setLocal({});
+    setEditing(funder ? funder.id : 'new');
+    setForm({ name: funder?.name ?? '', acronym: funder?.short_name ?? funder?.acronym ?? '' });
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const next = {};
+    if (!form.name.trim()) next.name = "Enter the funder's full name.";
+    if (!form.acronym.trim()) next.acronym = 'Enter the short name shown on screens.';
+    setLocal(next);
+    if (Object.keys(next).length) return;
+    const body = { name: form.name.trim(), acronym: form.acronym.trim() };
+    if (editing === 'new') save('post', ENDPOINTS.programFunders, body, 'Funder added.');
+    else save('patch', ENDPOINTS.programFunder(editing), body, 'Funder saved.');
+  }
+
+  const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
+  const fields = (
+    <form className="pu-form" onSubmit={submit} noValidate>
+      {error && <div className="program-banner error" role="alert">{error}</div>}
+      <div className="program-form-grid">
+        <Field id="ps-funder-name" label="Full name" error={errors.name} full hint="The funder's official name">
+          {(a11y) => <input {...a11y} className="program-input" value={form.name} disabled={busy} onChange={set('name')} />}
+        </Field>
+        <Field id="ps-funder-acronym" label="Short name" error={errors.acronym} hint="The acronym shown as the funder column">
+          {(a11y) => <input {...a11y} className="program-input" value={form.acronym} disabled={busy} onChange={set('acronym')} />}
+        </Field>
+      </div>
+      <div className="program-modal-actions">
+        <button type="button" className="program-btn" onClick={() => setEditing(null)} disabled={busy}>Cancel</button>
+        <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : editing === 'new' ? 'Add funder' : 'Save funder'}</button>
+      </div>
+    </form>
+  );
+
+  return (
+    <Dialog title="Funders" labelId="ps-funders-title" busy={busy} onClose={onClose}>
+      <div aria-live="polite">{notice && <div className="program-banner ok">{notice}</div>}</div>
+      {list.status === 'error' && (
+        <div className="program-banner error" role="alert">
+          Could not load the funders. <button type="button" className="program-btn sm" onClick={list.retry}>Try again</button>
+        </div>
+      )}
+      {list.status === 'loading' && <p className="pu-hint">Loading funders…</p>}
+      {list.status === 'ready' && funders.length === 0 && <p className="pu-hint">No funders yet. Add the first one.</p>}
+      {funders.length > 0 && (
+        <ul className="pd-list">
+          {funders.map((funder) => (
+            <li key={funder.id}>
+              {editing === funder.id ? fields : (
+                <div className="pd-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', textAlign: 'left' }}>
+                  <span>
+                    <b>{funder.short_name || funder.name}</b>
+                    <span>{funder.name} · {funder.project_count} {funder.project_count === 1 ? 'project' : 'projects'}</span>
+                  </span>
+                  <button type="button" className="program-btn sm" onClick={() => start(funder)} disabled={busy}>
+                    Edit<span className="pa-sr-only"> {funder.name}</span>
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {editing === 'new' ? fields : (
+        <div className="program-modal-actions">
+          <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Close</button>
+          <button type="button" className="program-btn primary" onClick={() => start(null)} disabled={busy}>Add funder</button>
+        </div>
+      )}
     </Dialog>
   );
 }

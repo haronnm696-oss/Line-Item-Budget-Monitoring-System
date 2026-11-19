@@ -11,10 +11,12 @@ test('statuses read Returned / Withdrawn; a legacy rejected row reads Returned',
 
 test('edit and resubmit starts from the returned request', () => {
   const form = initialForm({ type: 'fund_release', project_tranche_id: 4, amount: 250000, title: 'Release 2', justification: 'Fieldwork.' });
-  assert.deepEqual(form, { type: 'fund_release', trancheId: '4', fromId: '', toId: '', amount: '250000', title: '', justification: 'Fieldwork.' });
+  assert.deepEqual(form, { type: 'fund_release', trancheId: '4', fromId: '', toId: '', fundingSource: 'funder', amount: '250000', title: '', justification: 'Fieldwork.' });
 
   const realign = initialForm({ type: 'realignment', from_lib_category_id: 1, to_lib_category_id: 2, amount: 1000, justification: null });
   assert.equal(realign.fromId, '1');
+  assert.equal(realign.fundingSource, 'funder');
+  assert.equal(initialForm({ type: 'realignment', funding_source: 'implementing_agency' }).fundingSource, 'implementing_agency');
   assert.equal(realign.toId, '2');
   assert.equal(realign.justification, ''); // legacy rows may have none
 
@@ -23,7 +25,7 @@ test('edit and resubmit starts from the returned request', () => {
 
 test('a new request starts from ?new= and ?tranche=', () => {
   assert.deepEqual(initialForm(null, { type: 'fund_release', trancheId: 7 }), {
-    type: 'fund_release', trancheId: '7', fromId: '', toId: '', amount: '', title: '', justification: '',
+    type: 'fund_release', trancheId: '7', fromId: '', toId: '', fundingSource: 'funder', amount: '', title: '', justification: '',
   });
 });
 
@@ -31,7 +33,7 @@ test('request body per type', () => {
   const base = { trancheId: '4', fromId: '1', toId: '2', amount: '1000', title: ' Oct ', justification: ' Why ' };
   assert.deepEqual(requestFields({ ...base, type: 'fund_release' }), { justification: 'Why', project_tranche_id: 4, document_type: 'other' });
   assert.deepEqual(requestFields({ ...base, type: 'realignment' }), {
-    justification: 'Why', from_lib_category_id: 1, to_lib_category_id: 2, amount: 1000, document_type: 'other',
+    justification: 'Why', from_lib_category_id: 1, to_lib_category_id: 2, amount: 1000, funding_source: 'funder', document_type: 'other',
   });
   assert.deepEqual(requestFields({ ...base, type: 'liquidation' }), {
     justification: 'Why', amount: 1000, title: 'Oct', project_tranche_id: '4', document_type: 'receipt',

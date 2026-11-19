@@ -7,6 +7,7 @@ import { useApiData } from '../../lib/useApiData';
 import { documentsAfter, initialForm, pendingTrancheIds, requestFields } from '../../lib/budgetRequestForm';
 import { peso } from '../money';
 import { formatDate } from '../../lib/datetime';
+import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
 
 const TYPES = [
   ['fund_release', 'Fund release'],
@@ -54,7 +55,10 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
   const unreleased = (tranches.data?.items ?? []).filter((t) => !t.is_released);
   const lineItems = balancing.data?.line_items ?? [];
   const source = lineItems.find((item) => String(item.id) === fromId);
-  const available = source ? Number(source.available) : null;
+  const labels = balancing.data?.labels;
+  const moneySource = effectiveSource(source, form.fundingSource);
+  // Money moves within one source: its available amount is the limit.
+  const available = source ? sourceAvailable(source, moneySource) : null;
   const overAvailable = type === 'realignment' && available != null && Number(amount) > available;
   const documentCount = documentsAfter(documents, toRemove, files);
 
@@ -181,15 +185,47 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
           <div className="program-form-grid ld-grid-3">
             <div className="program-field">
               <label htmlFor="ld-from">From line item</label>
-              <select id="ld-from" className="program-select" value={fromId} onChange={set('fromId')} disabled={busy || loadingOptions}>
+              <select
+                id="ld-from"
+                className="program-select"
+                value={fromId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const item = lineItems.find((row) => String(row.id) === value);
+                  setForm((current) => ({ ...current, fromId: value, fundingSource: effectiveSource(item, current.fundingSource) }));
+                }}
+                disabled={busy || loadingOptions}
+              >
                 <option value="">Choose</option>
                 {lineItems.map((item) => <option key={item.id} value={item.id}>{item.type} · {item.name}</option>)}
               </select>
               {source && (
-                <div className={`ld-hint${available <= 0 ? ' is-risk' : ''}`}>Available: <b>{peso(available)}</b></div>
+                <div className={`ld-hint${available <= 0 ? ' is-risk' : ''}`}>
+                  Available{hasCounterpart(source) ? ` (${sourceName(moneySource, labels)})` : ''}: <b>{peso(available)}</b>
+                </div>
               )}
               {err('from_lib_category_id')}
             </div>
+            {hasCounterpart(source) && (
+              <fieldset className="program-field full ld-funded-by">
+                <legend className="program-label">Move money of</legend>
+                {[FUNDER, COUNTERPART].map((value) => (
+                  <label key={value} className="ld-radio">
+                    <input
+                      type="radio"
+                      name="ld-realign-source"
+                      value={value}
+                      checked={moneySource === value}
+                      onChange={() => setForm((current) => ({ ...current, fundingSource: value }))}
+                      disabled={busy}
+                    />
+                    <span>{sourceName(value, labels)} — {peso(sourceAvailable(source, value))} available</span>
+                  </label>
+                ))}
+                <div className="ld-hint">The amount moves to the same source of the destination line item.</div>
+                {err('funding_source')}
+              </fieldset>
+            )}
             <div className="program-field">
               <label htmlFor="ld-to">To line item</label>
               <select id="ld-to" className="program-select" value={toId} onChange={set('toId')} disabled={busy || loadingOptions}>

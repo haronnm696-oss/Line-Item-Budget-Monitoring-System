@@ -431,7 +431,7 @@ class ProgramDashboardSeeder extends Seeder
         $peso = "\u{20B1}";
 
         $categories = [
-            ['PS-01', 'PS', 'Project Leader Honoraria (Prof. Mudzna M. Asakil)', 400000],
+            ['PS-01', 'PS', 'Project Leader Honoraria', 400000],
             ['PS-02', 'PS', 'Research Assistant Honoraria (2 personnel)', 360000],
             ['PS-03', 'PS', 'Researcher Honoraria', 240000],
             ['PS-04', 'PS', 'Program Leader Indirect Honoraria', 200000],

@@ -6,6 +6,7 @@ use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\ProjectTranche;
 use App\Services\ProjectSetupService;
+use App\Support\LineItemComputation;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -122,10 +123,25 @@ class ProgramProjectSetupController extends Controller
     {
         $required = $creating ? ['required'] : ['sometimes', 'required'];
 
+        $optionalMoney = array_merge(['sometimes', 'nullable'], self::MONEY);
+
         return [
             'category_type' => array_merge($required, [Rule::in(['PS', 'MOOE'])]),
+            'cost_type' => ['sometimes', 'nullable', Rule::in(LibCategory::COST_TYPES)],
+            'expense_group' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'expense_subgroup' => ['sometimes', 'nullable', 'string', 'max:255'],
             'line_item_name' => array_merge($required, ['string', 'max:255']),
-            'allocated_amount' => array_merge($required, self::MONEY),
+            // Optional computation: quantity x rate [per month|quarter] x periods.
+            'quantity' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:1000000', 'required_with:rate'],
+            'unit_description' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'rate' => array_merge($optionalMoney, ['required_with:quantity']),
+            'rate_period' => ['sometimes', 'nullable', Rule::in(LineItemComputation::PERIODS)],
+            'periods' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:1000'],
+            // The two sources; allocated = their sum. allocated_amount alone
+            // (older clients) sets the funder share.
+            'implementing_agency_amount' => $optionalMoney,
+            'funder_amount' => $optionalMoney,
+            'allocated_amount' => $optionalMoney,
         ];
     }
 
@@ -147,6 +163,10 @@ class ProgramProjectSetupController extends Controller
             'end_date.after_or_equal' => 'The end date must be on or after the start date.',
             '*.regex' => 'Use at most two decimals.',
             'allocated_amount.min' => 'The allocated amount cannot be negative.',
+            'funder_amount.min' => 'The amount cannot be negative.',
+            'implementing_agency_amount.min' => 'The amount cannot be negative.',
+            'quantity.required_with' => 'Enter the quantity for the computation.',
+            'rate.required_with' => 'Enter the rate for the computation.',
             'total_approved_budget.gt' => 'The total budget must be more than zero.',
             'amount.gt' => 'The release amount must be more than zero.',
         ];
@@ -154,7 +174,18 @@ class ProgramProjectSetupController extends Controller
 
     private function lineItem(LibCategory $item): array
     {
-        return ['id' => $item->id, 'type' => $item->category_type, 'name' => $item->line_item_name, 'allocated' => round((float) $item->allocated_amount, 2)];
+        return [
+            'id' => $item->id,
+            'type' => $item->category_type,
+            'cost_type' => $item->cost_type,
+            'group' => $item->expense_group,
+            'subgroup' => $item->expense_subgroup,
+            'name' => $item->line_item_name,
+            'computation' => $item->computationText(),
+            'implementing_agency_amount' => round((float) $item->implementing_agency_amount, 2),
+            'funder_amount' => round((float) $item->funder_amount, 2),
+            'allocated' => round((float) $item->allocated_amount, 2),
+        ];
     }
 
     private function tranche(ProjectTranche $tranche): array

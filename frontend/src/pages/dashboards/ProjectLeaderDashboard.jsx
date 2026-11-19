@@ -85,7 +85,7 @@ export default function ProjectLeaderDashboard() {
         <LoadState state={overview} loadingText="Loading project data…">
           {data && (
             <>
-              <Kpis kpis={data.kpis} />
+              <Kpis kpis={data.kpis} funder={data.project?.funder} />
 
               <div className="pl-row pl-row-main">
                 <section className="program-card">
@@ -162,7 +162,7 @@ function ProjectMeta({ project }) {
   );
 }
 
-function Kpis({ kpis }) {
+function Kpis({ kpis, funder }) {
   const utilization = Number(kpis.utilization_pct) || 0;
   const budget = Number(kpis.total_budget) || 0;
   const remaining = Number(kpis.remaining) || 0;
@@ -174,7 +174,7 @@ function Kpis({ kpis }) {
         <div className="pl-kpi-head"><span className="pl-kpi-label">Total budget</span></div>
         <div className="pl-kpi-value"><AnimatedNumber value={budget} format={peso} /></div>
         <div className="pl-kpi-sub">
-          Funder {peso(kpis.funder_share)} + MSU–Main Campus counterpart {peso(kpis.counterpart)}
+          {funder || 'Funder'} {peso(kpis.funder_share)} + MSU–Main Campus counterpart {peso(kpis.counterpart)}
         </div>
         <div className="pl-track pl-track-gold"><span style={{ width: `${clampPct(utilization)}%` }} /></div>
         <div className="pl-kpi-foot">{formatPct(utilization)} spent</div>

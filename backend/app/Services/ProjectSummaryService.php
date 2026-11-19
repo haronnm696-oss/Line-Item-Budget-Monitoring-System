@@ -39,8 +39,9 @@ class ProjectSummaryService
             ],
             'kpis' => [
                 'total_budget' => $metrics['budget'],
-                'funder_share' => round((float) $project->funding_agency_amount, 2),
-                'counterpart' => round((float) $project->implementing_agency_counterpart, 2),
+                // Sums of the line items (no separately typed figure).
+                'funder_share' => $this->financials->fundingTotals($project)['funder'],
+                'counterpart' => $this->financials->fundingTotals($project)['implementing_agency'],
                 'total_spent' => $metrics['spent'],
                 'remaining' => $metrics['remaining'],
                 'utilization_pct' => $metrics['utilization_pct'],

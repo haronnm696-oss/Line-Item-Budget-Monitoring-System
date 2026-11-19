@@ -13,6 +13,7 @@ import StatCard from '../components/StatCard';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 import { myProjects, notAssignedText, projectRoleFor } from '../lib/myProjects';
+import FundingWarnings from '../components/program/FundingWarnings';
 
 const REPORT_TYPES = [
   {
@@ -517,7 +518,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
         <div class="footer">
           This report was generated from verified expense records only. <br />
-          Mindanao State University–Main Campus · MOST R&D Form B · Line-Item Budget Monitoring System.
+          Mindanao State University–Main Campus · R&D Form B · Line-Item Budget Monitoring System.
         </div>
       </body>
       </html>
@@ -788,7 +789,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         <div className="page-head">
           <div>
             <h2>Reports</h2>
-            <p>Generated from verified expense records only · MOST R&D Form B</p>
+            <p>Generated from verified expense records only · R&D Form B</p>
           </div>
         </div>
       )}
@@ -883,6 +884,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         </>
       )}
 
+      {/* Typed project amounts not yet assigned to line items (Form B). */}
+      <FundingWarnings warnings={detail?.form_b?.warnings} className={programMode ? 'program-banner warn' : 'banner warn'} />
       {/* Live preview */}
       {renderPreviewTable()}
     </>

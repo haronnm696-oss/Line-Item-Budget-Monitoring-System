@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { fetchProgramProject } from '../../api/program';
 import { ENDPOINTS } from '../../api/endpoints';
@@ -6,6 +6,8 @@ import ProgramPill from '../../components/program/ProgramPill';
 import { LineItemDialog, ProjectFormDialog, RemoveDialog, TrancheDialog } from '../../components/program/ProjectSetup';
 import { formatPct, peso } from '../../components/money';
 import { formatDate, formatDateTime } from '../../lib/datetime';
+import { sourceLabels } from '../../lib/fundingSource';
+import FundingWarnings from '../../components/program/FundingWarnings';
 
 
 function actionLabel(action) {
@@ -76,8 +78,9 @@ export default function ProgramProjectDetail() {
   }
 
   const project = data.project;
-  const groups = data.line_items?.groups ?? [];
-  const total = data.line_items?.total;
+  const formB = data.form_b ?? null;
+  const sections = formB?.sections ?? [];
+  const labels = sourceLabels(formB?.labels);
   const tranches = data.tranches ?? [];
   const expenses = data.expenses ?? [];
   const team = data.team ?? [];
@@ -144,8 +147,10 @@ export default function ProgramProjectDetail() {
       <section className="program-card">
         <div className="program-card-head">
           <div>
-            <div className="program-card-title">Line-item budget</div>
-            <div className="program-card-sub">Allocated versus verified spending, grouped by PS and MOOE</div>
+            <div className="program-card-title">Line-item budget (R&amp;D Form B)</div>
+            <div className="program-card-sub">
+              PS and MOOE, direct and indirect cost, by expense group: {labels.implementing_agency} counterpart and {labels.funder} amounts, with verified spending
+            </div>
           </div>
           {setup && (
             <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'line' }); }}>Add line item</button>
@@ -158,42 +163,44 @@ export default function ProgramProjectDetail() {
             {setup.allocations_locked ? ' · Verified expenses exist: allocated amounts change only through a realignment request.' : ''}
           </p>
         )}
-        {groups.length === 0 ? (
+        {setup?.funding_totals && (
+          <p className="ld-hint" role="status">
+            {labels.implementing_agency} counterpart {peso(setup.funding_totals.implementing_agency)}
+            {' + '}{labels.funder} {peso(setup.funding_totals.funder)}
+            {' = '}{peso(setup.funding_totals.total)} (sums of the line items)
+          </p>
+        )}
+        <FundingWarnings warnings={formB?.warnings} />
+        {sections.length === 0 ? (
           <p className="pl-inbox-empty">No line items recorded yet.</p>
         ) : (
           <div className="program-scroll">
-            <table className="program-table pd-table">
+            <table className="program-table fb-table">
+              <caption className="pa-sr-only">Line-item budget in R&amp;D Form B layout</caption>
               <thead>
                 <tr>
-                  <th>Line item</th>
-                  <th className="num">Allocated</th>
-                  <th className="num">Spent</th>
-                  <th className="num">Remaining</th>
-                  <th className="num">% used</th>
-                  {setup && <th><span className="pa-sr-only">Actions</span></th>}
+                  <th scope="col">Particulars</th>
+                  <th scope="col" className="num">{labels.implementing_agency}</th>
+                  <th scope="col" className="num">{labels.funder}</th>
+                  <th scope="col" className="num">Total</th>
+                  <th scope="col" className="num">Spent</th>
+                  {setup && <th scope="col"><span className="pa-sr-only">Actions</span></th>}
                 </tr>
               </thead>
               <tbody>
-                {groups.map((group) => (
-                  <GroupRows
-                    key={group.type}
-                    group={group}
+                {sections.map((section) => (
+                  <FormBSection
+                    key={section.type}
+                    section={section}
                     setup={setup}
-                    onEdit={(item) => { setNotice(''); setDialog({ kind: 'line', item: { ...item, type: group.type } }); }}
+                    onEdit={(item) => { setNotice(''); setDialog({ kind: 'line', item }); }}
                     onRemove={(item) => { setNotice(''); setDialog({ kind: 'removeLine', item }); }}
                   />
                 ))}
               </tbody>
-              {total && (
+              {formB?.grand_total && (
                 <tfoot>
-                  <tr className="pd-total">
-                    <td>Grand total</td>
-                    <td className="num">{peso(total.allocated)}</td>
-                    <td className="num">{peso(total.spent)}</td>
-                    <td className="num">{peso(total.remaining)}</td>
-                    <td className="num">{formatPct(total.utilization_pct)}</td>
-                    {setup && <td />}
-                  </tr>
+                  <TotalRow className="fb-grand" label="Grand total" totals={formB.grand_total} setup={setup} />
                 </tfoot>
               )}
             </table>
@@ -398,51 +405,88 @@ export default function ProgramProjectDetail() {
   );
 }
 
-function GroupRows({ group, setup, onEdit, onRemove }) {
+/** A sub-total row: counterpart, funder and total (spent left blank). */
+function TotalRow({ className, label, totals, setup }) {
+  return (
+    <tr className={className}>
+      <th scope="row">{label}</th>
+      <td className="num">{peso(totals.implementing_agency)}</td>
+      <td className="num">{peso(totals.funder)}</td>
+      <td className="num">{peso(totals.total)}</td>
+      <td />
+      {setup && <td />}
+    </tr>
+  );
+}
+
+/** One line item: name, Form B computation, the two amounts, spent, actions. */
+function ItemRow({ item, inSub, setup, onEdit, onRemove }) {
+  const used = setup?.used_line_items.includes(item.id);
+  return (
+    <tr className={`fb-item${inSub ? ' in-sub' : ''}`}>
+      <td>
+        <div>{item.name}</div>
+        {item.computation && <div className="fb-computation">{item.computation}</div>}
+      </td>
+      <td className="num">{peso(item.implementing_agency_amount)}</td>
+      <td className="num">{peso(item.funder_amount)}</td>
+      <td className="num">{peso(item.allocated)}</td>
+      <td className="num">
+        {peso(item.spent)}
+        {item.spent > item.allocated && <div><ProgramPill value="Over budget" tone="risk" icon="✕" /></div>}
+      </td>
+      {setup && (
+        <td className="pd-actions">
+          <button type="button" className="program-btn sm" onClick={() => onEdit(item)}>
+            Edit<span className="pa-sr-only"> {item.name}</span>
+          </button>
+          {used ? (
+            <span className="project-code" title="It has expenses, payroll or purchase requests">🔒 In use</span>
+          ) : (
+            <button type="button" className="program-btn sm danger" onClick={() => onRemove(item)}>
+              Remove<span className="pa-sr-only"> {item.name}</span>
+            </button>
+          )}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+/**
+ * PS or MOOE in Form B order: Direct then Indirect cost, each with its
+ * expense groups (and optional sub-groups), sub-totals per source at every
+ * level.
+ */
+function FormBSection({ section, setup, onEdit, onRemove }) {
+  const span = setup ? 6 : 5;
+  const rowProps = { setup, onEdit, onRemove };
   return (
     <>
-      <tr className="pd-group">
-        <td colSpan={setup ? 6 : 5}>{group.label}</td>
+      <tr className="fb-section">
+        <th scope="rowgroup" colSpan={span}>{section.label} ({section.type})</th>
       </tr>
-      {group.items.map((item) => (
-        <tr key={item.id}>
-          <td>
-            <div>{item.name}</div>
-            {item.code && <div className="project-code">{item.code}</div>}
-          </td>
-          <td className="num">{peso(item.allocated)}</td>
-          <td className="num">{peso(item.spent)}</td>
-          <td className="num">{peso(item.remaining)}</td>
-          <td className="num">
-            {formatPct(item.utilization_pct)}
-            {item.over_budget && (
-              <div><ProgramPill value="Over budget" tone="risk" icon="✕" /></div>
-            )}
-          </td>
-          {setup && (
-            <td className="pd-actions">
-              <button type="button" className="program-btn sm" onClick={() => onEdit(item)}>
-                Edit<span className="pa-sr-only"> {item.name}</span>
-              </button>
-              {setup.used_line_items.includes(item.id) ? (
-                <span className="project-code" title="It has expenses, payroll or purchase requests">🔒 In use</span>
-              ) : (
-                <button type="button" className="program-btn sm danger" onClick={() => onRemove(item)}>
-                  Remove<span className="pa-sr-only"> {item.name}</span>
-                </button>
-              )}
-            </td>
-          )}
-        </tr>
+      {section.cost_types.map((cost) => (
+        <Fragment key={cost.cost_type}>
+          <tr className="fb-cost"><td colSpan={span}>{cost.label}</td></tr>
+          {cost.groups.map((group) => (
+            <Fragment key={group.name}>
+              <tr className="fb-group"><td colSpan={span}>{group.name}</td></tr>
+              {group.items.map((item) => <ItemRow key={item.id} item={item} {...rowProps} />)}
+              {group.subgroups.map((sub) => (
+                <Fragment key={sub.name}>
+                  <tr className="fb-subgroup"><td colSpan={span}>{sub.name}</td></tr>
+                  {sub.items.map((item) => <ItemRow key={item.id} item={item} inSub {...rowProps} />)}
+                  <TotalRow className="fb-sub" label={`Sub-total, ${sub.name}`} totals={sub.subtotal} setup={setup} />
+                </Fragment>
+              ))}
+              <TotalRow className="fb-sub" label={`Sub-total, ${group.name}`} totals={group.subtotal} setup={setup} />
+            </Fragment>
+          ))}
+          <TotalRow className="fb-sub" label={`Sub-total, ${cost.label}`} totals={cost.subtotal} setup={setup} />
+        </Fragment>
       ))}
-      <tr className="pd-subtotal">
-        <td>{group.type} subtotal</td>
-        <td className="num">{peso(group.subtotal.allocated)}</td>
-        <td className="num">{peso(group.subtotal.spent)}</td>
-        <td className="num">{peso(group.subtotal.remaining)}</td>
-        <td className="num">{formatPct(group.subtotal.utilization_pct)}</td>
-        {setup && <td />}
-      </tr>
+      <TotalRow className="fb-sub-section" label={`Total ${section.type}`} totals={section.subtotal} setup={setup} />
     </>
   );
 }

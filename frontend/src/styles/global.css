@@ -3853,3 +3853,27 @@ select.signin-input:disabled{
 .program-row-actions .program-btn{min-height:44px}
 .pa-decided-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 @media (max-width:720px){.pa-decided-side{align-items:flex-start}}
+
+/* Funded by (Record expense, realignment): funder or counterpart */
+.ld-funded-by{border:none;margin:0;padding:0;min-width:0}
+.ld-funded-by legend{padding:0;margin-bottom:6px;font-size:13px;font-weight:650}
+.ld-radio{display:flex;align-items:center;gap:10px;min-height:44px;font-size:14px;cursor:pointer}
+.ld-radio input{width:18px;height:18px;margin:0;accent-color:var(--pg-brand)}
+.ld-radio input:focus-visible{outline:2px solid var(--pg-brand);outline-offset:2px}
+
+/* R&D Form B layout on the Program Leader project page */
+.fb-table{min-width:880px}
+.fb-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fb-section td{background:#F3EBDD;font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6F1D2A}
+.fb-cost td{background:#FAF7F2;font-weight:750;font-size:12.5px;padding-left:18px}
+.fb-group td:first-child{padding-left:30px;font-weight:700}
+.fb-subgroup td:first-child{padding-left:44px;font-weight:650;font-style:italic}
+.fb-item td:first-child{padding-left:44px}
+.fb-item.in-sub td:first-child{padding-left:58px}
+.fb-computation{font-size:12.5px;color:var(--pg2-muted);overflow-wrap:anywhere}
+.fb-sub td{font-weight:700;background:#FDFBF7}
+.fb-sub-section td{font-weight:800;background:#F7F1E7;border-top:1px solid #EDE4D6}
+.fb-grand td{font-weight:800;border-top:2px solid #EDE4D6;background:#FDFBF7}
+.fb-form-grid .program-field.third{grid-column:span 1}
+.fb-computed{margin:4px 0 0;font-size:13px;color:var(--pg2-muted)}
+.fb-warnings p{margin:0}.fb-warnings p + p{margin-top:6px}

@@ -129,6 +129,12 @@ class ProjectFinancialService
                     'type' => $category->category_type,
                     'name' => $category->line_item_name,
                     'code' => $category->line_item_code,
+                    'cost_type' => $category->cost_type,
+                    'group' => $category->expense_group,
+                    'subgroup' => $category->expense_subgroup,
+                    'computation' => $category->computationText(),
+                    'implementing_agency_amount' => round((float) $category->implementing_agency_amount, 2),
+                    'funder_amount' => round((float) $category->funder_amount, 2),
                     'allocated' => $allocated,
                     'spent' => $spent,
                     'remaining' => $allocated - $spent,
@@ -143,8 +149,11 @@ class ProjectFinancialService
     public const PENDING_STAGES = ['submitted', 'endorsed'];
 
     /**
-     * Balancing query per line item: allocated, spent, pending and
-     * available = allocated - spent - pending. Payroll is not included.
+     * Balancing query per line item and funding source: allocated, spent,
+     * pending and available = allocated - spent - pending. Payroll is not
+     * included. Each expense and purchase request draws from one source of
+     * its line item (funding_source: the funder by default, or the
+     * implementing agency counterpart); row totals are both sources summed.
      *
      *   spent    verified expenses
      *   pending  expenses submitted or approved by the Project Leader, plus
@@ -162,10 +171,11 @@ class ProjectFinancialService
     {
         $sums = function ($query, string $column) use ($project) {
             return $query->where('project_id', $project->id)
-                ->selectRaw("lib_category_id, SUM({$column}) as total")
-                ->groupBy('lib_category_id')
-                ->pluck('total', 'lib_category_id')
-                ->map(fn ($v) => round((float) $v, 2));
+                ->selectRaw("lib_category_id, funding_source, SUM({$column}) as total")
+                ->groupBy('lib_category_id', 'funding_source')
+                ->get()
+                ->groupBy(fn ($row) => $row->lib_category_id . ':' . self::source($row->funding_source))
+                ->map(fn ($group) => round((float) $group->sum('total'), 2));
         };
 
         $spent = $sums(self::onlySpent(Expense::query()), 'amount');
@@ -180,23 +190,41 @@ class ProjectFinancialService
             ->orderBy('category_type')->orderBy('id')
             ->get()
             ->map(function (LibCategory $item) use ($spent, $pendingExpenses, $pendingRequests) {
-                $allocated = round((float) $item->allocated_amount, 2);
-                $itemSpent = $spent[$item->id] ?? 0.0;
-                $fromExpenses = $pendingExpenses[$item->id] ?? 0.0;
-                $fromRequests = $pendingRequests[$item->id] ?? 0.0;
-                $pending = round($fromExpenses + $fromRequests, 2);
+                $sources = [];
+                foreach (LibCategory::SOURCES as $source) {
+                    $key = $item->id . ':' . $source;
+                    $allocated = $item->amountFor($source);
+                    $itemSpent = $spent[$key] ?? 0.0;
+                    $fromExpenses = $pendingExpenses[$key] ?? 0.0;
+                    $fromRequests = $pendingRequests[$key] ?? 0.0;
+                    $pending = round($fromExpenses + $fromRequests, 2);
+                    $sources[$source] = [
+                        'allocated' => $allocated,
+                        'spent' => $itemSpent,
+                        'pending_expenses' => $fromExpenses,
+                        'pending_purchase_requests' => $fromRequests,
+                        'pending' => $pending,
+                        'available' => round($allocated - $itemSpent - $pending, 2),
+                    ];
+                }
+                $sum = fn (string $key) => round(array_sum(array_column($sources, $key)), 2);
 
                 return [
                     'id' => $item->id,
                     'type' => $item->category_type,
+                    'cost_type' => $item->cost_type,
+                    'group' => $item->expense_group,
+                    'subgroup' => $item->expense_subgroup,
                     'code' => $item->line_item_code,
                     'name' => $item->line_item_name,
-                    'allocated' => $allocated,
-                    'spent' => $itemSpent,
-                    'pending_expenses' => $fromExpenses,
-                    'pending_purchase_requests' => $fromRequests,
-                    'pending' => $pending,
-                    'available' => round($allocated - $itemSpent - $pending, 2),
+                    'allocated' => round((float) $item->allocated_amount, 2),
+                    'spent' => $sum('spent'),
+                    'pending_expenses' => $sum('pending_expenses'),
+                    'pending_purchase_requests' => $sum('pending_purchase_requests'),
+                    'pending' => $sum('pending'),
+                    'available' => $sum('available'),
+                    'has_counterpart' => $item->hasCounterpart(),
+                    'sources' => $sources,
                 ];
             })
             ->values();
@@ -212,6 +240,179 @@ class ProjectFinancialService
                 'available' => $total('available'),
             ],
         ];
+    }
+
+    /**
+     * One funding source of one line item from balancing() (allocated,
+     * spent, pending, available) plus the item's name. Null when the item is
+     * not on the project.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function sourceBalance(Project $project, int $lineItemId, ?string $source): ?array
+    {
+        $row = $this->balancing($project, $lineItemId)['line_items'][0] ?? null;
+        if (! $row) {
+            return null;
+        }
+        $source = self::source($source);
+
+        return $row['sources'][$source] + ['name' => $row['name'], 'source' => $source, 'has_counterpart' => $row['has_counterpart']];
+    }
+
+    /** Unknown or empty funding source values mean the funder. */
+    public static function source(?string $source): string
+    {
+        return in_array($source, LibCategory::SOURCES, true) ? $source : LibCategory::SOURCE_FUNDER;
+    }
+
+    /**
+     * Funder and counterpart totals are the sums of the line items; there is
+     * no separately typed figure that could disagree with them.
+     *
+     * @return array{implementing_agency: float, funder: float, total: float}
+     */
+    public function fundingTotals(Project $project): array
+    {
+        $counterpart = round((float) $project->libCategories()->sum('implementing_agency_amount'), 2);
+        $funder = round((float) $project->libCategories()->sum('funder_amount'), 2);
+
+        return ['implementing_agency' => $counterpart, 'funder' => $funder, 'total' => round($counterpart + $funder, 2)];
+    }
+
+    /**
+     * Column labels: the project's funder short name (acronym, else its full
+     * name) and the implementing agency. Never a hard-coded funder.
+     *
+     * @return array{funder: string, funder_name: string|null, implementing_agency: string}
+     */
+    public static function sourceLabels(Project $project): array
+    {
+        $agency = $project->fundingAgency;
+
+        return [
+            'funder' => $agency ? (trim((string) $agency->acronym) ?: $agency->name) : 'Funder',
+            'funder_name' => $agency?->name,
+            'implementing_agency' => (string) config('app.implementing_agency', 'Implementing agency'),
+        ];
+    }
+
+    public const COST_TYPE_LABELS = ['Direct' => 'Direct Cost', 'Indirect' => 'Indirect Cost'];
+    public const CATEGORY_LABELS = ['PS' => 'Personal Services', 'MOOE' => 'Maintenance and Other Operating Expenses'];
+
+    /**
+     * The line items laid out like R&D Form B: PS then MOOE, each split into
+     * Direct and Indirect cost, then expense groups (with one optional
+     * sub-group level), with sub-totals per source at every level and grand
+     * totals. Levels without line items are left out.
+     *
+     * @return array<string, mixed>
+     */
+    public function formB(Project $project): array
+    {
+        $project->loadMissing('fundingAgency');
+        $items = $project->libCategories()->orderBy('id')->get();
+        $spent = self::onlySpent(Expense::query())->where('project_id', $project->id)
+            ->selectRaw('lib_category_id, SUM(amount) as total')->groupBy('lib_category_id')
+            ->pluck('total', 'lib_category_id');
+
+        $row = fn (LibCategory $item) => [
+            'id' => $item->id,
+            'type' => $item->category_type,
+            'cost_type' => $item->cost_type ?: 'Direct',
+            'group' => $item->expense_group ?: $item->line_item_name,
+            'subgroup' => $item->expense_subgroup,
+            'name' => $item->line_item_name,
+            'code' => $item->line_item_code,
+            'quantity' => $item->quantity,
+            'unit_description' => $item->unit_description,
+            'rate' => $item->rate !== null ? round((float) $item->rate, 2) : null,
+            'rate_period' => $item->rate_period,
+            'periods' => $item->periods,
+            'computed_amount' => $item->computedAmount(),
+            'computation' => $item->computationText(),
+            'implementing_agency_amount' => round((float) $item->implementing_agency_amount, 2),
+            'funder_amount' => round((float) $item->funder_amount, 2),
+            'allocated' => round((float) $item->allocated_amount, 2),
+            'spent' => round((float) ($spent[$item->id] ?? 0), 2),
+        ];
+        $rows = $items->map($row);
+        $totals = function ($subset) {
+            $counterpart = round((float) $subset->sum('implementing_agency_amount'), 2);
+            $funder = round((float) $subset->sum('funder_amount'), 2);
+
+            return ['implementing_agency' => $counterpart, 'funder' => $funder, 'total' => round($counterpart + $funder, 2)];
+        };
+
+        $sections = [];
+        foreach (array_keys(self::CATEGORY_LABELS) as $type) {
+            $inType = $rows->where('type', $type);
+            $costTypes = [];
+            foreach (LibCategory::COST_TYPES as $costType) {
+                $inCost = $inType->where('cost_type', $costType);
+                if ($inCost->isEmpty()) {
+                    continue;
+                }
+                $groups = $inCost->groupBy('group')->map(fn ($inGroup, $name) => [
+                    'name' => $name,
+                    'items' => $inGroup->filter(fn ($item) => trim((string) $item['subgroup']) === '')->values()->all(),
+                    'subgroups' => $inGroup->filter(fn ($item) => trim((string) $item['subgroup']) !== '')
+                        ->groupBy('subgroup')
+                        ->map(fn ($inSub, $subName) => ['name' => $subName, 'items' => $inSub->values()->all(), 'subtotal' => $totals($inSub)])
+                        ->values()->all(),
+                    'subtotal' => $totals($inGroup),
+                ])->values()->all();
+
+                $costTypes[] = ['cost_type' => $costType, 'label' => self::COST_TYPE_LABELS[$costType], 'groups' => $groups, 'subtotal' => $totals($inCost)];
+            }
+            if ($costTypes !== []) {
+                $sections[] = ['type' => $type, 'label' => self::CATEGORY_LABELS[$type], 'cost_types' => $costTypes, 'subtotal' => $totals($inType)];
+            }
+        }
+
+        return [
+            'labels' => self::sourceLabels($project),
+            'sections' => $sections,
+            'grand_total' => $totals($rows),
+            'warnings' => $this->fundingWarnings($project, $totals($rows)),
+        ];
+    }
+
+    /**
+     * Older projects carry a typed counterpart and funder amount
+     * (projects.implementing_agency_counterpart / funding_agency_amount)
+     * from before amounts lived on line items. When a typed figure differs
+     * from what the line items assign, say so; nothing is changed
+     * automatically, and the warning goes once they match. A figure that was
+     * never typed (0) is not compared.
+     *
+     * @param array{implementing_agency: float, funder: float}|null $assigned line-item sums (fundingTotals() when null)
+     * @return array<int, array{source: string, typed: float, assigned: float, message: string}>
+     */
+    public function fundingWarnings(Project $project, ?array $assigned = null): array
+    {
+        $assigned ??= $this->fundingTotals($project);
+        $labels = self::sourceLabels($project);
+        $checks = [
+            LibCategory::SOURCE_COUNTERPART => ['implementing_agency_counterpart', 'Counterpart'],
+            LibCategory::SOURCE_FUNDER => ['funding_agency_amount', "Funder amount ({$labels['funder']})"],
+        ];
+
+        $warnings = [];
+        foreach ($checks as $source => [$column, $what]) {
+            $typed = round((float) $project->{$column}, 2);
+            $sum = round((float) $assigned[$source], 2);
+            if ($typed > 0 && abs($typed - $sum) >= 0.005) {
+                $warnings[] = [
+                    'source' => $source,
+                    'typed' => $typed,
+                    'assigned' => $sum,
+                    'message' => sprintf('%s typed for this project (₱%s) is not yet assigned to line items (₱%s assigned).', $what, number_format($typed, 2), number_format($sum, 2)),
+                ];
+            }
+        }
+
+        return $warnings;
     }
 
     /**

@@ -182,6 +182,10 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::get('/program/projects/{project}', [ProgramProjectController::class, 'show']);
         // Project set-up: details, Project Leader, Line-Item Budget, tranches.
         Route::get('/program/project-options', [ProgramProjectSetupController::class, 'options']);
+        // Funders: full name and short name (labels the funder column).
+        Route::get('/program/funders', [\App\Http\Controllers\ProgramFunderController::class, 'index']);
+        Route::post('/program/funders', [\App\Http\Controllers\ProgramFunderController::class, 'store']);
+        Route::patch('/program/funders/{fundingAgency}', [\App\Http\Controllers\ProgramFunderController::class, 'update']);
         Route::post('/program/projects', [ProgramProjectSetupController::class, 'store']);
         Route::patch('/program/projects/{project}', [ProgramProjectSetupController::class, 'update']);
         Route::post('/program/projects/{project}/line-items', [ProgramProjectSetupController::class, 'storeLineItem']);
