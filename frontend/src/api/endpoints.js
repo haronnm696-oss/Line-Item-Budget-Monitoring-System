@@ -186,6 +186,7 @@ export const ENDPOINTS = {
   programAudit: '/api/program/audit',
   programDecision: (id) => `/api/program/approvals/${id}/decision`,
   programRegistrations: '/api/program/registrations',
+  programRegistrationCount: '/api/program/registrations/count',
   programRegistrationDecision: (id) => `/api/program/registrations/${id}/decision`,
   programUsers: '/api/program/users',
   programUser: (id) => `/api/program/users/${id}`,

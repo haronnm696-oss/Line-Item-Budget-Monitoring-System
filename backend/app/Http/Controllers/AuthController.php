@@ -161,11 +161,24 @@ class AuthController extends Controller
             'is_active' => false,
         ]);
 
+        // One bell entry (and email) per active Program Leader. A mailer
+        // failure is logged and never blocks the registration or the others.
         $programLeaders = User::query()
+            ->where('is_active', true)
             ->whereHas('primaryRole', fn ($query) => $query->where('slug', 'program-leader'))
             ->get();
 
-        Notification::send($programLeaders, new NewRegistrationPendingNotification($user));
+        foreach ($programLeaders as $programLeader) {
+            try {
+                Notification::send($programLeader, new NewRegistrationPendingNotification($user));
+            } catch (\Throwable $e) {
+                Log::warning('New registration notification could not be sent.', [
+                    'applicant_id' => $user->id,
+                    'program_leader_id' => $programLeader->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return response()->json([
             'user' => self::toUserPayload($user),

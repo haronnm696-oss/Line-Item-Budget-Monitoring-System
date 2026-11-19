@@ -19,7 +19,7 @@ export const PROGRAM_NAV = [
   },
   {
     label: 'Administration',
-    items: [{ to: '/program-users', label: 'Users and roles', icon: 'users' }],
+    items: [{ to: '/program-users', label: 'Users and roles', icon: 'users', badge: 'registrations' }],
   },
 ];
 

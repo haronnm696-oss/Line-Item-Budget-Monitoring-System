@@ -57,26 +57,66 @@ class ProgramUserService
             ->values();
     }
 
+    /**
+     * Approve (with the account role and, optionally, project assignments)
+     * or reject a pending registration. Approval is ONE transaction: if any
+     * assignment row breaks a rule, nothing is saved and the error names the
+     * row (assignments.N.project_id). One audit entry either way; the
+     * applicant is emailed after the commit (a mailer failure is only logged).
+     *
+     * @param array<int, array{project_id: int|string, role: string}> $assignments
+     */
     public function decideRegistration(
         User $user,
         string $decision,
         ?string $roleSlug,
         ?string $remarks,
-        User $actor
+        User $actor,
+        array $assignments = []
     ): User {
         if ($decision === 'rejected' && trim((string) $remarks) === '') {
             throw ValidationException::withMessages(['remarks' => 'A reason for rejection is required.']);
         }
 
-        if ($decision === 'approved' && ! in_array($roleSlug, self::PROJECT_ROLES, true)) {
+        if ($decision === 'approved' && ! in_array($roleSlug, self::ACCOUNT_ROLES, true)) {
             throw ValidationException::withMessages(['role' => 'Choose a valid role for this account.']);
+        }
+
+        $assignments = $decision === 'approved' ? array_values($assignments) : [];
+
+        if ($roleSlug === 'program-leader' && $assignments !== []) {
+            throw ValidationException::withMessages([
+                'assignments' => 'A Program Leader oversees every project; remove the project rows.',
+            ]);
+        }
+
+        // Resolve every row up front; a second row for the same project is
+        // named here (one person, one role per project).
+        $rows = [];
+        $seen = [];
+        foreach ($assignments as $index => $row) {
+            $project = Project::find($row['project_id'] ?? null);
+            if (! $project) {
+                throw ValidationException::withMessages(["assignments.$index.project_id" => 'Choose a project.']);
+            }
+            if (isset($seen[$project->id])) {
+                throw ValidationException::withMessages([
+                    "assignments.$index.project_id" => 'This project is already in another row. One person has one role per project.',
+                ]);
+            }
+            $seen[$project->id] = true;
+            $assignmentRole = Role::where('slug', $row['role'] ?? null)->first();
+            if (! $assignmentRole) {
+                throw ValidationException::withMessages(["assignments.$index.role" => 'Choose a role on this project.']);
+            }
+            $rows[$index] = [$project, $assignmentRole];
         }
 
         $role = $decision === 'approved'
             ? Role::where('slug', $roleSlug)->firstOrFail()
             : null;
 
-        AuditLogger::transaction(function () use ($user, $decision, $role, $remarks, $actor) {
+        AuditLogger::transaction(function () use ($user, $decision, $role, $remarks, $actor, $rows) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
             if (! $locked->isPendingRegistration()) {
@@ -84,6 +124,7 @@ class ProgramUserService
             }
 
             $oldValues = $locked->only(['role_id', 'is_active', 'registration_rejected_at', 'registration_rejection_reason']);
+            $extra = [];
 
             if ($decision === 'approved') {
                 $locked->update([
@@ -93,6 +134,29 @@ class ProgramUserService
                     'registration_rejected_at' => null,
                     'registration_rejection_reason' => null,
                 ]);
+
+                // Same rules as "Assign to project"; a broken rule rolls
+                // back the whole approval and names the row.
+                $logged = [];
+                foreach ($rows as $index => [$project, $assignmentRole]) {
+                    try {
+                        $this->createAssignmentRow($locked, $project, $assignmentRole);
+                    } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                        throw ValidationException::withMessages(["assignments.$index.project_id" => $e->getMessage()]);
+                    }
+                    $logged[] = [
+                        'project_id' => $project->id,
+                        'project' => $project->title,
+                        'role' => $assignmentRole->slug,
+                        'role_label' => self::ROLE_LABELS[$assignmentRole->slug] ?? $assignmentRole->name,
+                    ];
+                }
+
+                $extra = [
+                    'role' => $role->slug,
+                    'role_label' => self::ROLE_LABELS[$role->slug] ?? $role->name,
+                    'assignments' => $logged,
+                ];
             } else {
                 $locked->update([
                     'role_id' => null,
@@ -108,20 +172,42 @@ class ProgramUserService
                 $decision === 'approved' ? 'approved' : 'rejected',
                 $locked,
                 $oldValues,
-                $locked->fresh()->only(['role_id', 'is_active', 'registration_rejected_at', 'registration_rejection_reason']),
+                $locked->fresh()->only(['role_id', 'is_active', 'registration_rejected_at', 'registration_rejection_reason']) + $extra,
                 $remarks
             );
         });
 
-        $fresh = $user->fresh()->load('primaryRole');
+        $fresh = $user->fresh()->load('primaryRole', 'projectUsers.project', 'projectUsers.role');
 
-        if ($decision === 'approved') {
-            Notification::send($fresh, new AccountApprovedNotification($fresh, $role->name));
-        } else {
-            Notification::send($fresh, new AccountRejectedNotification($fresh, trim((string) $remarks)));
-        }
+        // The request is handled: its bell entry is done for every Program Leader.
+        \App\Notifications\NewRegistrationPendingNotification::resolveFor($fresh);
+
+        $this->sendDecisionEmail($fresh, $decision === 'approved'
+            ? new AccountApprovedNotification(
+                $fresh,
+                self::ROLE_LABELS[$role->slug] ?? $role->name,
+                array_map(
+                    fn (array $pair) => $pair[0]->title . ' (' . (self::ROLE_LABELS[$pair[1]->slug] ?? $pair[1]->name) . ')',
+                    array_values($rows)
+                )
+            )
+            : new AccountRejectedNotification($fresh, trim((string) $remarks)));
 
         return $fresh;
+    }
+
+    /** The decision is saved already; a mailer failure is logged, never thrown. */
+    protected function sendDecisionEmail(User $user, \Illuminate\Notifications\Notification $notification): void
+    {
+        try {
+            Notification::send($user, $notification);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Registration decision email could not be sent.', [
+                'user_id' => $user->id,
+                'notification' => class_basename($notification),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function addUser(array $data, User $actor): User
@@ -322,26 +408,7 @@ class ProgramUserService
         return AuditLogger::transaction(function () use ($user, $project, $role, $actor) {
             $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
 
-            if (! $lockedUser->is_active) {
-                abort(422, 'Deactivated users cannot be assigned to projects.');
-            }
-
-            $existing = ProjectUser::query()
-                ->where('user_id', $lockedUser->id)
-                ->where('project_id', $project->id)
-                ->lockForUpdate()
-                ->first();
-
-            if ($existing) {
-                abort(422, 'This user already has a role on that project. Edit their role instead.');
-            }
-
-            $assignment = ProjectUser::create([
-                'user_id' => $lockedUser->id,
-                'project_id' => $project->id,
-                'role_id' => $role->id,
-                'assigned_at' => now(),
-            ]);
+            $assignment = $this->createAssignmentRow($lockedUser, $project, $role);
 
             AuditTrail::record($actor, 'assignment_created', $lockedUser, [], [
                 'project_id' => $project->id,
@@ -352,6 +419,40 @@ class ProgramUserService
 
             return $assignment;
         });
+    }
+
+    /**
+     * The assignment rules, shared by "Assign to project" and the one-step
+     * registration approval: the account must be active, one person has one
+     * role per project, and only project roles go on a project. Call inside
+     * a transaction with the user row locked. Aborts with 422 on a broken rule.
+     */
+    protected function createAssignmentRow(User $lockedUser, Project $project, Role $role): ProjectUser
+    {
+        if (! $lockedUser->is_active) {
+            abort(422, 'Deactivated users cannot be assigned to projects.');
+        }
+
+        if (! in_array($role->slug, self::PROJECT_ROLES, true)) {
+            abort(422, 'Choose a project role (Project Leader, Research Assistant, Researcher or Finance/Admin Staff).');
+        }
+
+        $existing = ProjectUser::query()
+            ->where('user_id', $lockedUser->id)
+            ->where('project_id', $project->id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($existing) {
+            abort(422, 'This user already has a role on that project. Edit their role instead.');
+        }
+
+        return ProjectUser::create([
+            'user_id' => $lockedUser->id,
+            'project_id' => $project->id,
+            'role_id' => $role->id,
+            'assigned_at' => now(),
+        ]);
     }
 
     /**
