@@ -73,6 +73,10 @@ function financeTarget(link, record, projectId) {
  * `record` ({ type, id }) and `projectId` come from the notification API.
  */
 export function notificationTarget(role, link, record = null, projectId = null) {
+  // New account request: Users and roles with that applicant's Review panel open.
+  if (role === 'PRG' && record?.type === 'registration') {
+    return `/program-users?review=${encodeURIComponent(record.id)}`;
+  }
   if (role === 'PL') {
     const target = leaderTarget(link, record, projectId);
     if (target) return target;

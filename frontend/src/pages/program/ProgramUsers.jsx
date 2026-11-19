@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   assignToProject,
   createProgramUser,
-  decideRegistration,
   fetchPendingRegistrations,
   fetchProgramUsers,
   removeProjectAssignment,
@@ -15,6 +14,8 @@ import {
 import ProgramAddUserModal from '../../components/program/ProgramAddUserModal';
 import ProgramAssignUserModal from '../../components/program/ProgramAssignUserModal';
 import ProgramPill from '../../components/program/ProgramPill';
+import RegistrationReviewPanel from '../../components/program/RegistrationReviewPanel';
+import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import {
   AssignmentsDialog,
   ChangeRoleDialog,
@@ -70,16 +71,13 @@ export default function ProgramUsers() {
   const requestKey = FILTERS.map((key) => filters[key]).join('|');
   const hasFilters = ['q', 'role', 'project', 'status', 'user'].some((key) => filters[key] !== '');
 
-  // ---- pending registrations (unchanged flow)
+  // ---- pending registrations: each card opens the Review panel (?review=<id>)
+  const { refreshRegistrations } = useProgramRefresh();
   const [pending, setPending] = useState([]);
-  const [pendingRoleOptions, setPendingRoleOptions] = useState([]);
-  const [pendingRoles, setPendingRoles] = useState({});
+  const [reviewOptions, setReviewOptions] = useState({ roles: [], project_roles: [], projects: [] });
   const [pendingLoading, setPendingLoading] = useState(true);
   const [pendingError, setPendingError] = useState('');
-  const [approvingId, setApprovingId] = useState(null);
-  const [rejectingId, setRejectingId] = useState(null);
-  const [rejectReasons, setRejectReasons] = useState({});
-  const [rejectBusy, setRejectBusy] = useState(false);
+  const reviewId = searchParams.get('review') ?? '';
 
   // ---- people list: each result is tagged with the filters it belongs to
   const [result, setResult] = useState(null); // { key, users, meta }
@@ -117,13 +115,10 @@ export default function ProgramUsers() {
       const payload = await fetchPendingRegistrations();
       const list = Array.isArray(payload?.users) ? payload.users : [];
       setPending(list);
-      setPendingRoleOptions(Array.isArray(payload?.roles) ? payload.roles : []);
-      setPendingRoles((previous) => {
-        const next = { ...previous };
-        list.forEach((user) => {
-          if (!next[user.id]) next[user.id] = 'project-leader';
-        });
-        return next;
+      setReviewOptions({
+        roles: Array.isArray(payload?.roles) ? payload.roles : [],
+        project_roles: Array.isArray(payload?.project_roles) ? payload.project_roles : [],
+        projects: Array.isArray(payload?.projects) ? payload.projects : [],
       });
     } catch (error) {
       setPendingError(messageFor(error, 'Unable to load pending registrations.'));
@@ -211,43 +206,19 @@ export default function ProgramUsers() {
 
   const refresh = () => setReloadToken((value) => value + 1);
 
-  async function handleApprove(user) {
-    setApprovingId(user.id);
-    setPendingError('');
-    try {
-      await decideRegistration(user.id, {
-        decision: 'approved',
-        role: pendingRoles[user.id] || 'project-leader',
-      });
-      showToast(`${user.name} approved. You can now assign them to a project.`);
-      await loadPending();
-      refresh();
-    } catch (error) {
-      setPendingError(messageFor(error, 'Unable to approve this registration.'));
-    } finally {
-      setApprovingId(null);
-    }
+  function openReview(id) {
+    const next = new URLSearchParams(window.location.search);
+    if (id) next.set('review', String(id));
+    else next.delete('review');
+    setSearchParams(next, { replace: !id });
   }
 
-  async function handleReject(user) {
-    const reason = (rejectReasons[user.id] || '').trim();
-    if (!reason) {
-      setPendingError('A rejection reason is required.');
-      return;
-    }
-    setRejectBusy(true);
-    setPendingError('');
-    try {
-      await decideRegistration(user.id, { decision: 'rejected', remarks: reason });
-      setRejectingId(null);
-      setRejectReasons((previous) => ({ ...previous, [user.id]: '' }));
-      showToast(`${user.name}'s registration was rejected.`);
-      await loadPending();
-    } catch (error) {
-      setPendingError(messageFor(error, 'Unable to reject this registration.'));
-    } finally {
-      setRejectBusy(false);
-    }
+  async function handleDecided(message) {
+    openReview(null);
+    showToast(message);
+    refreshRegistrations();
+    await loadPending();
+    refresh();
   }
 
   async function handleCreateUser(payload) {
@@ -319,6 +290,19 @@ export default function ProgramUsers() {
       ?.scrollIntoView({ block: 'center' });
   }, [highlightUserId, current]);
 
+  // ?review=<id> (also from the bell) opens that applicant's Review panel.
+  const reviewUser = reviewId ? pending.find((user) => String(user.id) === reviewId) ?? null : null;
+  // Opened from the bell while this page was already loaded: the list may
+  // predate the request, so reload it once before saying it is gone.
+  const [reloadedFor, setReloadedFor] = useState('');
+  const needsReload = reviewId !== '' && !pendingLoading && !reviewUser && reloadedFor !== reviewId;
+  useEffect(() => {
+    if (!needsReload) return;
+    setReloadedFor(reviewId);
+    loadPending();
+  }, [needsReload, reviewId, loadPending]);
+  const reviewGone = reviewId !== '' && !pendingLoading && !pendingError && !reviewUser && !needsReload;
+
   const statusValue = filters.status || (filters.user ? 'all' : 'active');
 
   return (
@@ -341,7 +325,18 @@ export default function ProgramUsers() {
 
       <div aria-live="polite">
         {toast && <div className="program-banner ok">{toast.msg}</div>}
-        {pendingError && <div className="program-banner error" role="alert">{pendingError}</div>}
+        {pendingError && (
+          <div className="program-banner error" role="alert">
+            {pendingError}{' '}
+            <button type="button" className="program-btn sm" onClick={loadPending}>Try again</button>
+          </div>
+        )}
+        {reviewGone && (
+          <div className="program-banner info" role="status">
+            This account request was already approved or rejected.{' '}
+            <button type="button" className="program-btn sm" onClick={() => openReview(null)}>Dismiss</button>
+          </div>
+        )}
       </div>
 
       {!pendingLoading && pending.length === 0 ? (
@@ -355,7 +350,7 @@ export default function ProgramUsers() {
           <div className="program-card-head">
             <div>
               <div className="program-card-title">Pending registrations</div>
-              <div className="program-card-sub">Approve with a role, or reject with a reason. The user is emailed either way.</div>
+              <div className="program-card-sub">Review each request: approve with an account role and project assignments, or reject with a reason. The applicant is emailed either way.</div>
             </div>
           </div>
 
@@ -367,15 +362,10 @@ export default function ProgramUsers() {
                 {pending.length} pending registration{pending.length === 1 ? '' : 's'}
               </div>
               <div className="program-note-sub">
-                Registration role options are limited to project roles. Use Manage afterwards to change the account role.
+                Project assignments are optional; you can also add them later from Manage.
               </div>
 
-              {pending.map((user) => {
-                const isApproving = approvingId === user.id;
-                const isRejecting = rejectingId === user.id;
-                const assignedRole = pendingRoles[user.id] || 'project-leader';
-
-                return (
+              {pending.map((user) => (
                   <div className="program-pending-row" key={user.id}>
                     <div className="program-pending-main">
                       <div className="program-row-title">
@@ -388,64 +378,20 @@ export default function ProgramUsers() {
                       <div className="program-row-sub">
                         {user.email} · requested {formatDate(user.created_at)}
                       </div>
-
-                      {isRejecting && (
-                        <div className="program-reject" style={{ marginTop: 12 }}>
-                          <div className="program-field">
-                            <label htmlFor={`pending-reject-${user.id}`}>Reason for rejection (required)</label>
-                            <textarea
-                              id={`pending-reject-${user.id}`}
-                              className="program-textarea"
-                              value={rejectReasons[user.id] || ''}
-                              onChange={(event) => setRejectReasons((previous) => ({ ...previous, [user.id]: event.target.value }))}
-                              placeholder="Tell the user why this registration was rejected"
-                            />
-                          </div>
-                          <div className="program-reject-actions">
-                            <button type="button" className="program-btn" onClick={() => setRejectingId(null)} disabled={rejectBusy}>
-                              Cancel
-                            </button>
-                            <button type="button" className="program-btn primary" onClick={() => handleReject(user)} disabled={rejectBusy}>
-                              {rejectBusy ? 'Rejecting…' : 'Confirm rejection'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     <div className="program-pending-actions">
-                      <div className="program-field">
-                        <label htmlFor={`pending-role-${user.id}`}>Role</label>
-                        <select
-                          id={`pending-role-${user.id}`}
-                          className="program-select"
-                          value={assignedRole}
-                          disabled={isApproving}
-                          onChange={(event) => setPendingRoles((previous) => ({ ...previous, [user.id]: event.target.value }))}
-                        >
-                          {pendingRoleOptions.map((role) => (
-                            <option key={role.slug} value={role.slug}>{role.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button type="button" className="program-btn primary" disabled={isApproving} onClick={() => handleApprove(user)}>
-                        {isApproving ? 'Approving…' : 'Approve'}
-                      </button>
                       <button
                         type="button"
-                        className="program-btn"
-                        disabled={isApproving}
-                        onClick={() => {
-                          setRejectingId(isRejecting ? null : user.id);
-                          setRejectReasons((previous) => ({ ...previous, [user.id]: '' }));
-                        }}
+                        className="program-btn primary"
+                        aria-label={`Review ${user.name}`}
+                        onClick={() => openReview(user.id)}
                       >
-                        Reject
+                        Review
                       </button>
                     </div>
                   </div>
-                );
-              })}
+              ))}
             </div>
           )}
         </section>
@@ -607,6 +553,18 @@ export default function ProgramUsers() {
         onSave={handleAssign}
         onClose={() => { if (!assignBusy) setAssignOpen(false); }}
       />
+
+      {reviewUser && (
+        <RegistrationReviewPanel
+          key={reviewUser.id}
+          user={reviewUser}
+          projects={reviewOptions.projects}
+          accountRoles={reviewOptions.roles}
+          projectRoles={reviewOptions.project_roles}
+          onClose={() => openReview(null)}
+          onDecided={handleDecided}
+        />
+      )}
 
       {dialog?.kind === 'edit' && (
         <EditDetailsDialog

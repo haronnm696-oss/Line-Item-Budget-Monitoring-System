@@ -77,7 +77,16 @@ class UserApprovalController extends Controller
             ]);
         });
 
-        Notification::send($user, new AccountApprovedNotification($user->fresh(), $role->name));
+        \App\Notifications\NewRegistrationPendingNotification::resolveFor($user);
+
+        try {
+            Notification::send($user, new AccountApprovedNotification($user->fresh(), $role->name));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Registration decision email could not be sent.', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Account approved and role assigned.',

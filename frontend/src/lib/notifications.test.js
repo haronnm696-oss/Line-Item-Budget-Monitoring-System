@@ -74,3 +74,12 @@ test('a Finance/Admin opens the record in the Verification queue panel', () => {
     '/verification-queue?project=4&open=payroll-3',
   );
 });
+
+test('a Program Leader opens a new account request in its Review panel', () => {
+  assert.equal(
+    notificationTarget('PRG', '/program-users?review=42', { type: 'registration', id: 42 }),
+    '/program-users?review=42',
+  );
+  // Other roles never get that panel.
+  assert.notEqual(notificationTarget('FIN', '/program-users?review=42', { type: 'registration', id: 42 }), '/program-users?review=42');
+});

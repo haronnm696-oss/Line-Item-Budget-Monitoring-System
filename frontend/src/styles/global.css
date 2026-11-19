@@ -3688,6 +3688,14 @@ select.signin-input:disabled{
 .ld-fields dt{font-size:12px;color:var(--pg-muted);font-weight:600}
 .ld-fields dd{margin:2px 0 0;font-size:13.5px;overflow-wrap:anywhere}
 
+/* Registration Review panel: project assignment rows */
+.rr-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.rr-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:8px 10px;align-items:end;padding:10px;border:1px solid var(--pg-card-border);border-radius:10px}
+.rr-row.has-error{border-color:var(--pg-risk);border-width:2px}
+.rr-row .program-btn{min-height:44px}
+.rr-row-error{grid-column:1 / -1;margin:0}
+@media (max-width:560px){.rr-row{grid-template-columns:1fr}}
+
 /* Documents */
 .ld-doc-list{list-style:none;margin:0;padding:0}
 .ld-doc{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--pg2-line)}

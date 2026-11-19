@@ -94,11 +94,22 @@ export async function fetchPendingRegistrations() {
   return response.data;
 }
 
-export async function decideRegistration(id, { decision, role = '', remarks = '' }) {
+/** Pending count only, for the "Users and roles" menu badge. */
+export async function fetchRegistrationCount() {
+  const response = await client.get(ENDPOINTS.programRegistrationCount);
+  return response.data;
+}
+
+/**
+ * Approve (account role plus optional project assignments, saved together)
+ * or reject (remarks required). assignments: [{ project_id, role }].
+ */
+export async function decideRegistration(id, { decision, role = '', remarks = '', assignments = [] }) {
   const response = await client.post(ENDPOINTS.programRegistrationDecision(id), {
     decision,
     role: role || null,
     remarks: remarks || null,
+    ...(decision === 'approved' && assignments.length ? { assignments } : {}),
   });
   return response.data;
 }

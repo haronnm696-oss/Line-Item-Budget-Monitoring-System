@@ -17,18 +17,47 @@ class ProgramUserController extends Controller
 
     public function registrations()
     {
+        $users = $this->users->pendingRegistrations();
+
         return response()->json([
-            'users' => $this->users->pendingRegistrations(),
-            'roles' => $this->roleOptions(ProgramUserService::PROJECT_ROLES),
+            'users' => $users,
+            'counts' => ['pending' => $users->count()],
+            // Account roles for the Review panel; project roles for its assignment rows.
+            'roles' => $this->roleOptions(ProgramUserService::ACCOUNT_ROLES),
+            'project_roles' => $this->roleOptions(ProgramUserService::PROJECT_ROLES),
+            'projects' => $this->projectOptions(),
         ]);
     }
 
+    /** Pending count only, for the "Users and roles" menu badge. */
+    public function registrationCount()
+    {
+        return response()->json(['counts' => ['pending' => User::query()
+            ->whereNull('role_id')
+            ->whereNull('registration_rejected_at')
+            ->count()]]);
+    }
+
+    /**
+     * Approve with the account role and optional project assignments (one
+     * transaction), or reject with a reason. Without assignments this is
+     * the earlier "approve, then Manage" flow.
+     */
     public function decideRegistration(Request $request, User $user)
     {
         $data = $request->validate([
             'decision' => ['required', Rule::in(['approved', 'rejected'])],
-            'role' => ['nullable', 'string', 'required_if:decision,approved', Rule::in(ProgramUserService::PROJECT_ROLES)],
+            'role' => ['nullable', 'string', 'required_if:decision,approved', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
             'remarks' => ['nullable', 'string', 'max:2000', 'required_if:decision,rejected'],
+            'assignments' => ['nullable', 'array', 'max:50'],
+            'assignments.*.project_id' => ['required', 'integer', 'exists:projects,id'],
+            'assignments.*.role' => ['required', 'string', Rule::in(ProgramUserService::PROJECT_ROLES)],
+        ], [
+            'remarks.required_if' => 'A reason for rejection is required.',
+            'assignments.*.project_id.required' => 'Choose a project.',
+            'assignments.*.project_id.exists' => 'This project no longer exists.',
+            'assignments.*.role.required' => 'Choose a role on this project.',
+            'assignments.*.role.in' => 'Choose a project role (Project Leader, Research Assistant, Researcher or Finance/Admin Staff).',
         ]);
 
         $user = $this->users->decideRegistration(
@@ -36,15 +65,35 @@ class ProgramUserController extends Controller
             $data['decision'],
             $data['role'] ?? null,
             $data['remarks'] ?? null,
-            $request->user()
+            $request->user(),
+            $data['assignments'] ?? []
         );
+
+        $assigned = $user->projectUsers->count();
 
         return response()->json([
             'message' => $data['decision'] === 'approved'
-                ? 'Account approved and role assigned. You can now assign the user to a project.'
+                ? ($assigned > 0
+                    ? 'Account approved with its role and ' . $assigned . ' project assignment' . ($assigned === 1 ? '' : 's') . '.'
+                    : 'Account approved and role assigned. You can now assign the user to a project.')
                 : 'Registration rejected. The user has been notified.',
             'user' => $this->userPayload($user),
         ]);
+    }
+
+    protected function projectOptions(): array
+    {
+        return Project::query()
+            ->orderBy('title')
+            ->get(['id', 'title', 'code', 'status'])
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'title' => $project->title,
+                'code' => $project->code,
+                'status' => ucfirst((string) $project->status),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -67,17 +116,7 @@ class ProgramUserController extends Controller
         return response()->json($directory + [
             'roles' => $this->roleOptions(ProgramUserService::ACCOUNT_ROLES),
             'project_roles' => $this->roleOptions(ProgramUserService::PROJECT_ROLES),
-            'projects' => Project::query()
-                ->orderBy('title')
-                ->get(['id', 'title', 'code', 'status'])
-                ->map(fn (Project $project) => [
-                    'id' => $project->id,
-                    'title' => $project->title,
-                    'code' => $project->code,
-                    'status' => ucfirst((string) $project->status),
-                ])
-                ->values()
-                ->all(),
+            'projects' => $this->projectOptions(),
             'assignable_users' => $this->users->assignableUsers(),
         ]);
     }

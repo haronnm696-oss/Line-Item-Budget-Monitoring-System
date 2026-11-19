@@ -197,6 +197,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
 
         // Account review and per-project role management.
         Route::get('/program/registrations', [ProgramUserController::class, 'registrations']);
+        Route::get('/program/registrations/count', [ProgramUserController::class, 'registrationCount']);
         Route::post('/program/registrations/{user}/decision', [ProgramUserController::class, 'decideRegistration']);
         Route::get('/program/users', [ProgramUserController::class, 'index']);
         Route::post('/program/users', [ProgramUserController::class, 'store']);

@@ -74,6 +74,8 @@ class NotificationController extends Controller
             'payroll_batch_id' => 'payroll',
             'purchase_request_id' => 'purchase_request',
             'approval_id' => 'approval',
+            // New account request: opens that applicant's Review panel.
+            'registration_user_id' => 'registration',
         ] as $field => $type) {
             if (! empty($data[$field])) {
                 return ['type' => $type, 'id' => (int) $data[$field]];

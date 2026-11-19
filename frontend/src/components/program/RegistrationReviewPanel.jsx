@@ -1,0 +1,273 @@
+import { useEffect, useRef, useState } from 'react';
+import { decideRegistration } from '../../api/program';
+import { formatDateTime } from '../../lib/datetime';
+import { ACCOUNT_ROLE_OPTIONS, PROJECT_ROLE_OPTIONS } from '../../lib/roles';
+
+let nextRowKey = 1;
+const newRow = (role = '') => ({ key: nextRowKey++, project_id: '', role });
+
+function fieldErrorsFrom(error) {
+  const errors = error?.response?.data?.errors ?? {};
+  return Object.fromEntries(Object.entries(errors).map(([key, messages]) => [key, messages?.[0]]));
+}
+
+/**
+ * Review one pending registration: the applicant's details, then approve
+ * with an account role and optional project assignments (saved together;
+ * if one row is wrong nothing is saved and that row shows why), or reject
+ * with a required reason. The applicant is emailed either way.
+ */
+export default function RegistrationReviewPanel({ user, projects, accountRoles, projectRoles, onClose, onDecided }) {
+  const roleOptions = accountRoles?.length ? accountRoles : ACCOUNT_ROLE_OPTIONS;
+  const rowRoleOptions = projectRoles?.length ? projectRoles : PROJECT_ROLE_OPTIONS;
+
+  const [role, setRole] = useState('');
+  const [rows, setRows] = useState([]);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const titleRef = useRef(null);
+
+  const programWide = role === 'program-leader';
+
+  useEffect(() => { titleRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    const onKey = (event) => { if (event.key === 'Escape' && !busy) onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
+  function updateRow(key, patch) {
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+    setFieldErrors({});
+  }
+
+  function addRow() {
+    // A new row starts with the account role when it is a project role.
+    const defaultRole = rowRoleOptions.some((option) => option.slug === role) ? role : '';
+    setRows((current) => [...current, newRow(defaultRole)]);
+  }
+
+  async function submit(decision) {
+    setError('');
+    const local = {};
+    if (decision === 'approved') {
+      if (!role) local.role = 'Choose an account role.';
+      if (!programWide) {
+        rows.forEach((row, index) => {
+          if (!row.project_id) local[`assignments.${index}.project_id`] = 'Choose a project.';
+          if (!row.role) local[`assignments.${index}.role`] = 'Choose a role on this project.';
+        });
+      }
+    } else if (!reason.trim()) {
+      local.remarks = 'A reason for rejection is required.';
+    }
+    if (Object.keys(local).length) {
+      setFieldErrors(local);
+      return;
+    }
+
+    setBusy(true);
+    setFieldErrors({});
+    try {
+      const payload = decision === 'approved'
+        ? {
+          decision,
+          role,
+          // A Program Leader is program-wide: project rows are never sent.
+          assignments: programWide ? [] : rows.map((row) => ({ project_id: Number(row.project_id), role: row.role })),
+        }
+        : { decision, remarks: reason.trim() };
+      const data = await decideRegistration(user.id, payload);
+      onDecided(data?.message || (decision === 'approved' ? `${user.name} approved.` : `${user.name}'s registration was rejected.`));
+    } catch (failure) {
+      const fields = fieldErrorsFrom(failure);
+      setFieldErrors(fields);
+      setError(Object.keys(fields).length
+        ? 'Nothing was saved. Fix the highlighted field and try again.'
+        : failure?.response?.data?.message || 'Could not save. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const unit = [user.college, user.department].filter(Boolean).join(' · ') || '—';
+
+  return (
+    <div className="ld-panel-overlay" role="presentation" onClick={() => !busy && onClose()}>
+      <aside
+        className="ld-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rr-panel-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="ld-panel-head">
+          <div>
+            <div className="ld-panel-eyebrow">Pending registration</div>
+            <h2 className="ld-panel-title" id="rr-panel-title" tabIndex={-1} ref={titleRef}>{user.name}</h2>
+          </div>
+          <button type="button" className="program-icon-btn" onClick={onClose} disabled={busy} aria-label="Close panel">×</button>
+        </div>
+
+        <dl className="ld-fields">
+          <div><dt>Email</dt><dd>{user.email}</dd></div>
+          <div><dt>Employee ID</dt><dd>{user.employee_id || '—'}</dd></div>
+          <div><dt>Position</dt><dd>{user.position || '—'}</dd></div>
+          <div><dt>Contact number</dt><dd>{user.contact_number || '—'}</dd></div>
+          <div style={{ gridColumn: '1 / -1' }}><dt>College/unit and department</dt><dd>{unit}</dd></div>
+          <div><dt>Date submitted</dt><dd>{formatDateTime(user.created_at)}</dd></div>
+        </dl>
+
+        {error && <div className="program-banner error" role="alert">{error}</div>}
+
+        {!rejecting && (
+          <>
+            <h3 className="ld-panel-sub">Account role</h3>
+            <div className="program-field">
+              <label htmlFor="rr-role">Account role (required)</label>
+              <select
+                id="rr-role"
+                className="program-select"
+                value={role}
+                disabled={busy}
+                aria-invalid={fieldErrors.role ? 'true' : undefined}
+                aria-describedby={fieldErrors.role ? 'rr-role-error' : undefined}
+                onChange={(event) => { setRole(event.target.value); setFieldErrors({}); }}
+              >
+                <option value="">Choose a role</option>
+                {roleOptions.map((option) => (
+                  <option key={option.slug} value={option.slug}>{option.label}</option>
+                ))}
+              </select>
+              {fieldErrors.role && <p className="program-error" id="rr-role-error"><span aria-hidden="true">⚠</span> {fieldErrors.role}</p>}
+            </div>
+
+            <h3 className="ld-panel-sub">Project assignments (optional)</h3>
+            {programWide ? (
+              <p className="ld-muted">
+                <span aria-hidden="true">ℹ</span> A Program Leader oversees every project, so no project rows are needed.
+                {rows.length > 0 && ' The rows you added will not be saved.'}
+              </p>
+            ) : (
+              <>
+                {fieldErrors.assignments && (
+                  <p className="program-error" role="alert"><span aria-hidden="true">⚠</span> {fieldErrors.assignments}</p>
+                )}
+                {rows.length === 0 && (
+                  <p className="ld-muted">No projects yet. You can add them now or later from Manage.</p>
+                )}
+                <ol className="rr-rows">
+                  {rows.map((row, index) => {
+                    const projectError = fieldErrors[`assignments.${index}.project_id`];
+                    const roleError = fieldErrors[`assignments.${index}.role`];
+                    const rowError = projectError || roleError;
+                    return (
+                      <li key={row.key} className={`rr-row${rowError ? ' has-error' : ''}`}>
+                        <div className="program-field">
+                          <label htmlFor={`rr-project-${row.key}`}>Project {index + 1}</label>
+                          <select
+                            id={`rr-project-${row.key}`}
+                            className="program-select"
+                            value={row.project_id}
+                            disabled={busy}
+                            aria-invalid={projectError ? 'true' : undefined}
+                            onChange={(event) => updateRow(row.key, { project_id: event.target.value })}
+                          >
+                            <option value="">Choose a project</option>
+                            {projects.map((project) => (
+                              <option key={project.id} value={String(project.id)}>
+                                {project.title}{project.code ? ` · ${project.code}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="program-field">
+                          <label htmlFor={`rr-row-role-${row.key}`}>Role on this project</label>
+                          <select
+                            id={`rr-row-role-${row.key}`}
+                            className="program-select"
+                            value={row.role}
+                            disabled={busy}
+                            aria-invalid={roleError ? 'true' : undefined}
+                            onChange={(event) => updateRow(row.key, { role: event.target.value })}
+                          >
+                            <option value="">Choose a role</option>
+                            {rowRoleOptions.map((option) => (
+                              <option key={option.slug} value={option.slug}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          className="program-btn"
+                          disabled={busy}
+                          aria-label={`Remove project ${index + 1}`}
+                          onClick={() => { setRows((current) => current.filter((item) => item.key !== row.key)); setFieldErrors({}); }}
+                        >
+                          Remove
+                        </button>
+                        {rowError && (
+                          <p className="program-error rr-row-error" role="alert">
+                            <span aria-hidden="true">⚠</span> Project {index + 1}: {rowError}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+                <div>
+                  <button type="button" className="program-btn" disabled={busy || projects.length === 0} onClick={addRow}>
+                    + Add project
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {rejecting && (
+          <div className="program-field">
+            <label htmlFor="rr-reason">Reason for rejection (required)</label>
+            <textarea
+              id="rr-reason"
+              className="program-textarea"
+              value={reason}
+              disabled={busy}
+              aria-invalid={fieldErrors.remarks ? 'true' : undefined}
+              aria-describedby={fieldErrors.remarks ? 'rr-reason-error' : undefined}
+              placeholder="Tell the applicant why this request was rejected. They will see it in the email."
+              onChange={(event) => { setReason(event.target.value); setFieldErrors({}); }}
+            />
+            {fieldErrors.remarks && <p className="program-error" id="rr-reason-error"><span aria-hidden="true">⚠</span> {fieldErrors.remarks}</p>}
+          </div>
+        )}
+
+        <div className="ld-panel-actions">
+          {rejecting ? (
+            <>
+              <button type="button" className="program-btn" disabled={busy} onClick={() => { setRejecting(false); setError(''); setFieldErrors({}); }}>
+                Cancel
+              </button>
+              <button type="button" className="program-btn primary" disabled={busy} onClick={() => submit('rejected')}>
+                {busy ? 'Rejecting…' : 'Confirm rejection'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="program-btn" disabled={busy} onClick={() => { setRejecting(true); setError(''); setFieldErrors({}); }}>
+                Reject
+              </button>
+              <button type="button" className="program-btn primary" disabled={busy} onClick={() => submit('approved')}>
+                {busy ? 'Approving…' : 'Approve'}
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
