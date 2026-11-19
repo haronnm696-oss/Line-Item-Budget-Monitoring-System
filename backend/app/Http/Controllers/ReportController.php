@@ -72,11 +72,18 @@ class ReportController extends Controller
         return response(Csv::render($rows), 200, Csv::headers($filename));
     }
 
+    /**
+     * R&D Form B (Project Line-Item Budget): PS and MOOE, Direct and
+     * Indirect cost, expense groups and sub-groups, with the implementing
+     * agency and the project's funder (its short name) as columns.
+     */
     protected function formBRows(array $summary): array
     {
         $project = $summary['project'];
+        $formB = $summary['form_b'];
+        $labels = $formB['labels'];
         $rows = [
-            ['MOST R&D Form B — Line-Item Budget Monitoring'],
+            ['R&D Form B — Project Line-Item Budget'],
             ['Project Code', $project['code']],
             ['Project Title', $project['title']],
             ['Implementing Agency', $project['implementing_agency']],
@@ -84,30 +91,37 @@ class ReportController extends Controller
             ['Project Leader', $project['project_leader']],
             ['Project Period', $project['period']],
             [],
-            ['Category', 'Type', 'Line Item Code', 'Allocated', 'Spent', 'Remaining', 'Utilization %'],
+            ['Particulars', 'Computation', $labels['implementing_agency'], $labels['funder'], 'Total', 'Spent'],
         ];
+        $total = fn (string $label, array $t) => [$label, '', $t['implementing_agency'], $t['funder'], $t['total'], ''];
+        $item = fn (array $i, string $indent) => [$indent . $i['name'], $i['computation'] ?? '', $i['implementing_agency_amount'], $i['funder_amount'], $i['allocated'], $i['spent']];
 
-        foreach (array_merge($summary['categories']['ps'], $summary['categories']['mooe']) as $category) {
-            $rows[] = [
-                $category['name'],
-                $category['type'],
-                $category['code'] ?? '',
-                $category['allocated'],
-                $category['spent'],
-                $category['remaining'],
-                Percent::csv($category['utilization_pct']),
-            ];
+        foreach ($formB['sections'] as $section) {
+            $rows[] = [strtoupper($section['label']) . " ({$section['type']})"];
+            foreach ($section['cost_types'] as $cost) {
+                $rows[] = ['  ' . $cost['label']];
+                foreach ($cost['groups'] as $group) {
+                    $rows[] = ['    ' . $group['name']];
+                    foreach ($group['items'] as $row) {
+                        $rows[] = $item($row, '      ');
+                    }
+                    foreach ($group['subgroups'] as $sub) {
+                        $rows[] = ['      ' . $sub['name']];
+                        foreach ($sub['items'] as $row) {
+                            $rows[] = $item($row, '        ');
+                        }
+                    }
+                    $rows[] = $total('    Sub-total, ' . $group['name'], $group['subtotal']);
+                }
+                $rows[] = $total('  Sub-total, ' . $cost['label'], $cost['subtotal']);
+            }
+            $rows[] = $total("Total {$section['type']}", $section['subtotal']);
         }
-
-        $rows[] = [
-            'GRAND TOTAL',
-            '',
-            '',
-            $summary['kpis']['total_budget'],
-            $summary['kpis']['total_spent'],
-            $summary['kpis']['remaining'],
-            Percent::csv($summary['kpis']['utilization_pct']),
-        ];
+        $rows[] = $total('GRAND TOTAL', $formB['grand_total']);
+        $rows[] = [];
+        $rows[] = ['Total spent (verified)', '', '', '', '', $summary['kpis']['total_spent']];
+        $rows[] = ['Remaining', '', '', '', '', $summary['kpis']['remaining']];
+        $rows[] = ['Utilization %', '', '', '', '', Percent::csv($summary['kpis']['utilization_pct'])];
 
         return $rows;
     }
@@ -116,7 +130,7 @@ class ReportController extends Controller
     {
         $project = $summary['project'];
         $rows = [
-            ['MOST R&D Form C — Financial and Fund-Release Report'],
+            ['R&D Form C — Financial and Fund-Release Report'],
             ['Project Code', $project['code']],
             ['Project Title', $project['title']],
             ['Project Leader', $project['project_leader']],

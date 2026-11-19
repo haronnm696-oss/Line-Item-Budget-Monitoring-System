@@ -98,6 +98,7 @@ class PurchaseRequestController extends Controller
             'quantity' => [$required, 'integer', 'min:1', 'max:1000000'],
             'estimated_amount' => [$required, 'numeric', 'gt:0', 'max:9999999999999.99'],
             'supplier' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'funding_source' => ['sometimes', 'nullable', Rule::in(LibCategory::SOURCES)],
         ], ['lib_category_id.exists' => 'Choose a line item of this project.']);
     }
 
@@ -111,6 +112,7 @@ class PurchaseRequestController extends Controller
             'project_id' => $row->project_id,
             'lib_category_id' => $row->lib_category_id,
             'line_item' => $row->libCategory?->line_item_name,
+            'funding_source' => $row->funding_source ?: LibCategory::SOURCE_FUNDER,
             'description' => $row->description,
             'quantity' => $row->quantity,
             'estimated_amount' => round((float) $row->estimated_amount, 2),

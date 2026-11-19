@@ -183,13 +183,17 @@ class ApprovalDetailService
         $amount = round((float) ($payload['amount'] ?? $approval->amount ?? 0), 2);
         $applied = $approval->status === 'approved';
         $rows = collect($this->financials->balancing($project)['line_items'])->keyBy('id');
+        // Older requests have no source: they moved funder money.
+        $source = ProjectFinancialService::source($payload['funding_source'] ?? null);
+        $labels = ProjectFinancialService::sourceLabels($project);
 
-        $side = function (?int $id, int $sign) use ($rows, $amount, $applied) {
+        $side = function (?int $id, int $sign) use ($rows, $amount, $applied, $source) {
             $row = $id ? $rows->get($id) : null;
             if (! $row) {
                 return null;
             }
-            $now = ['allocated' => $row['allocated'], 'spent' => $row['spent'], 'pending' => $row['pending'], 'available' => $row['available']];
+            $bucket = $row['sources'][$source];
+            $now = ['allocated' => $bucket['allocated'], 'spent' => $bucket['spent'], 'pending' => $bucket['pending'], 'available' => $bucket['available']];
             $moved = $now;
             $delta = $sign * $amount * ($applied ? -1 : 1);
             $moved['allocated'] = round($now['allocated'] + $delta, 2);
@@ -206,6 +210,10 @@ class ApprovalDetailService
             'kind' => 'realignment',
             'amount' => $amount,
             'applied' => $applied,
+            'funding_source' => $source,
+            'funding_source_label' => $source === \App\Models\LibCategory::SOURCE_COUNTERPART
+                ? $labels['implementing_agency'] . ' counterpart'
+                : $labels['funder'],
             'from' => $side((int) ($payload['from_lib_category_id'] ?? 0) ?: null, -1),
             'to' => $side((int) ($payload['to_lib_category_id'] ?? 0) ?: null, 1),
         ];

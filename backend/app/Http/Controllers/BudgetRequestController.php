@@ -99,6 +99,8 @@ class BudgetRequestController extends Controller
             'project_tranche_id' => ['nullable', 'integer', 'required_if:type,fund_release'],
             'from_lib_category_id' => ['nullable', 'integer', 'required_if:type,realignment'],
             'to_lib_category_id' => ['nullable', 'integer', 'required_if:type,realignment'],
+            // Realignment moves money within one source (funder by default).
+            'funding_source' => ['nullable', Rule::in(\App\Models\LibCategory::SOURCES)],
             'amount' => ['nullable', 'numeric', 'gt:0', 'max:9999999999999.99', 'required_if:type,realignment', 'required_if:type,liquidation'],
             'document_type' => ['nullable', Rule::in(Document::TYPES)],
             'files' => ['nullable', 'array', 'max:10'],
@@ -148,6 +150,7 @@ class BudgetRequestController extends Controller
                 'type' => $type,
                 'project_tranche_id' => $approval->project_tranche_id !== null ? (int) $approval->project_tranche_id : null,
                 'from_lib_category_id' => isset($payload['from_lib_category_id']) ? (int) $payload['from_lib_category_id'] : null,
+                'funding_source' => $payload['funding_source'] ?? 'funder',
                 'to_lib_category_id' => isset($payload['to_lib_category_id']) ? (int) $payload['to_lib_category_id'] : null,
                 'amount' => $approval->amount !== null ? (float) $approval->amount : null,
                 'title' => $approval->title,

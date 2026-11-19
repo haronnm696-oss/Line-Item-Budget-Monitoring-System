@@ -263,7 +263,7 @@ class ProjectLeaderPagesTest extends TestCase
             ->getJson("/api/projects/{$this->project->id}/review-queue/expense/{$id}")->assertOk()->json('item');
         $this->assertTrue($item['can_edit']);
         $this->assertSame('The OR is unreadable and the amount is ₱2,450.', $item['return_reason']);
-        $this->assertEquals(['lib_category_id' => $this->lineItem->id, 'description' => 'Laboratory reagents', 'amount' => 2500,
+        $this->assertEquals(['lib_category_id' => $this->lineItem->id, 'funding_source' => 'funder', 'description' => 'Laboratory reagents', 'amount' => 2500,
             'expense_date' => '2026-11-10', 'payee' => 'Iligan Lab Supply', 'reference_no' => 'OR-1001'], $item['edit']);
 
         // Correct it and replace the receipt (each change has its own audit entry, as for any edit).

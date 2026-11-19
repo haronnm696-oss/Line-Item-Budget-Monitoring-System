@@ -16,6 +16,13 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+    | The implementing agency whose counterpart appears next to the funder on
+    | the Line-Item Budget (R&D Form B). Funder names come from the
+    | funding_agencies table, never from configuration.
+    */
+    'implementing_agency' => env('IMPLEMENTING_AGENCY', 'MSU'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

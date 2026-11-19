@@ -26,6 +26,7 @@ export function initialForm(edit = null, initial = {}) {
       trancheId: text(edit.project_tranche_id),
       fromId: text(edit.from_lib_category_id),
       toId: text(edit.to_lib_category_id),
+      fundingSource: edit.funding_source || 'funder',
       amount: text(edit.amount),
       title: edit.type === 'liquidation' ? text(edit.title) : '',
       justification: text(edit.justification),
@@ -36,6 +37,7 @@ export function initialForm(edit = null, initial = {}) {
     trancheId: text(initial.trancheId),
     fromId: '',
     toId: '',
+    fundingSource: 'funder',
     amount: '',
     title: '',
     justification: '',
@@ -47,7 +49,13 @@ export function requestFields(form) {
   const fields = { justification: form.justification.trim() };
   if (form.type === 'fund_release') fields.project_tranche_id = Number(form.trancheId);
   if (form.type === 'realignment') {
-    Object.assign(fields, { from_lib_category_id: Number(form.fromId), to_lib_category_id: Number(form.toId), amount: Number(form.amount) });
+    Object.assign(fields, {
+      from_lib_category_id: Number(form.fromId),
+      to_lib_category_id: Number(form.toId),
+      amount: Number(form.amount),
+      // Realignment moves money within one source (funder by default).
+      funding_source: form.fundingSource || 'funder',
+    });
   }
   if (form.type === 'liquidation') {
     Object.assign(fields, { amount: Number(form.amount), title: form.title.trim(), project_tranche_id: form.trancheId || '' });

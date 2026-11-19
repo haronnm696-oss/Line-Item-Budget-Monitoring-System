@@ -115,6 +115,8 @@ class ExpenseController extends Controller
             'lib_category_id' => [$required, 'integer', Rule::exists((new LibCategory())->getTable(), 'id')->where('project_id', $project->id)],
             'description' => [$required, 'string', 'max:500'],
             'amount' => [$required, 'numeric', 'gt:0', 'max:9999999999999.99'],
+            // Funder by default; the implementing agency only on a line item with a counterpart.
+            'funding_source' => ['sometimes', 'nullable', Rule::in(LibCategory::SOURCES)],
             'expense_date' => [$required, 'date'],
             'reference_no' => ['nullable', 'string', 'max:100'],
             'payee' => ['nullable', 'string', 'max:255'],
@@ -137,6 +139,7 @@ class ExpenseController extends Controller
             'lib_category_id' => $expense->lib_category_id,
             'purchase_request_id' => $expense->purchase_request_id,
             'line_item' => $expense->libCategory?->line_item_name,
+            'funding_source' => $expense->funding_source ?: LibCategory::SOURCE_FUNDER,
             'description' => $expense->description,
             'payee' => $expense->payee,
             'reference_no' => $expense->reference_no,

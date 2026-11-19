@@ -105,7 +105,7 @@ function buildPrintHTML(title, subtitle, rows, meta) {
         <div class="org">
           <h1>Mindanao State University–Main Campus</h1>
           <p>Office of the Vice Chancellor for Research & Extension · LIB Monitoring System</p>
-          <p>Monitoring Agency: <b>MOST-BARMM</b> · Implementing Agency: <b>MSU-Marawi</b></p>
+          <p>Implementing Agency: <b>MSU–Main Campus</b></p>
         </div>
       </div>
 
@@ -124,7 +124,7 @@ function buildPrintHTML(title, subtitle, rows, meta) {
 
       <div class="footer">
         This is an immutable system audit log. Entries cannot be edited or deleted.<br />
-        Mindanao State University–Main Campus · MOST R&D Form B · Line-Item Budget Monitoring System.
+        Mindanao State University–Main Campus · R&D Form B · Line-Item Budget Monitoring System.
       </div>
       <script>window.print();</script>
     </body>
@@ -180,7 +180,7 @@ export default function AuditTrail() {
 
   function handlePrintPDF() {
     const title = 'Audit Trail Log';
-    const subtitle = 'Immutable log of every financial action · MSU–Main Campus · MOST-BARMM';
+    const subtitle = 'Immutable log of every financial action · MSU–Main Campus';
     const meta = [
       { label: 'Total entries', value: filtered.length.toString() },
       { label: 'Date range', value: 'All records' },

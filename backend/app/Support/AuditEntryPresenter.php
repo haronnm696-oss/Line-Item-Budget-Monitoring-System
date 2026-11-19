@@ -95,6 +95,15 @@ class AuditEntryPresenter
         'is_active' => 'Account',
         'amount' => 'Amount',
         'allocated_amount' => 'Allocated',
+        'funder_amount' => 'Funder share',
+        'implementing_agency_amount' => 'Counterpart',
+        'cost_type' => 'Cost type',
+        'expense_group' => 'Expense group',
+        'expense_subgroup' => 'Sub-group',
+        'unit_description' => 'Unit',
+        'rate_period' => 'Rate period',
+        'periods' => 'Periods',
+        'funding_source' => 'Funded by',
         'total_approved_budget' => 'Approved budget',
         'budget' => 'Budget',
         'spent' => 'Spent',
@@ -170,6 +179,7 @@ class AuditEntryPresenter
         'amount', 'allocated_amount', 'total_approved_budget', 'funding_agency_amount', 'budget', 'spent', 'remaining',
         'implementing_agency_counterpart', 'basic_rate', 'gross_pay', 'total_deductions', 'net_pay',
         'estimated_amount', 'monthly_rate', 'allowance',
+        'funder_amount', 'implementing_agency_amount', 'rate',
     ];
 
     private const USER_KEYS = [

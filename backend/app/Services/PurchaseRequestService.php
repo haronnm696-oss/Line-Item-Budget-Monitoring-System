@@ -61,13 +61,32 @@ class PurchaseRequestService
         return self::LABELS[$request->workflow_status] ?? (string) $request->workflow_status;
     }
     private const EDITABLE = ['draft', 'returned'];
-    private const FIELDS = ['lib_category_id', 'description', 'quantity', 'estimated_amount', 'supplier'];
+
+    /**
+     * Funder by default; the counterpart only on a line item that has one.
+     * $fallback: a kept source that no longer fits the line item goes back
+     * to the funder instead of failing.
+     */
+    private function fundingSource($lineItemId, ?string $requested, bool $fallback = false): string
+    {
+        $item = $lineItemId ? \App\Models\LibCategory::find($lineItemId) : null;
+        if (! $item) {
+            return \App\Models\LibCategory::SOURCE_FUNDER;
+        }
+        if ($fallback && ! $item->hasCounterpart()) {
+            return \App\Models\LibCategory::SOURCE_FUNDER;
+        }
+
+        return $item->resolveFundingSource($requested);
+    }
+    private const FIELDS = ['lib_category_id', 'funding_source', 'description', 'quantity', 'estimated_amount', 'supplier'];
 
     public function create(Project $project, array $data, User $actor): PurchaseRequest
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can create purchase requests.');
 
         return AuditLogger::transaction(function () use ($project, $data, $actor) {
+            $data['funding_source'] = $this->fundingSource($data['lib_category_id'] ?? null, $data['funding_source'] ?? null);
             $request = PurchaseRequest::create(array_merge(array_intersect_key($data, array_flip(self::FIELDS)), [
                 'project_id' => $project->id,
                 'requested_by' => $actor->id,
@@ -87,6 +106,13 @@ class PurchaseRequestService
         return AuditLogger::transaction(function () use ($request, $data, $actor) {
             $locked = $this->lockRecord($request);
             $this->requireState($locked, self::EDITABLE, 'edited');
+            if (array_key_exists('lib_category_id', $data) || array_key_exists('funding_source', $data)) {
+                $data['funding_source'] = $this->fundingSource(
+                    $data['lib_category_id'] ?? $locked->lib_category_id,
+                    array_key_exists('funding_source', $data) ? $data['funding_source'] : $locked->funding_source,
+                    ! array_key_exists('funding_source', $data)
+                );
+            }
             $old = $this->snapshot($locked);
             $locked->update(array_intersect_key($data, array_flip(self::FIELDS)));
             AuditLogger::write('updated', $locked, $old, $this->snapshot($locked->fresh()), $actor);
@@ -300,7 +326,7 @@ class PurchaseRequestService
 
     private function snapshot(PurchaseRequest $request): array
     {
-        return $request->only(['project_id', 'lib_category_id', 'description', 'quantity', 'estimated_amount', 'supplier', 'workflow_status']);
+        return $request->only(['project_id', 'lib_category_id', 'funding_source', 'description', 'quantity', 'estimated_amount', 'supplier', 'workflow_status']);
     }
 
     private function notify(Collection $recipients, PurchaseRequest $request, string $event, User $actor, ?string $reason = null, ?Expense $expense = null): void

@@ -25,8 +25,11 @@ class PurchaseRequest extends Model implements HasDocuments
     /** Approved and still open: the only stage that counts as pending money. */
     public const OPEN_APPROVED = 'endorsed';
 
+    /** Funder by default; implementing_agency draws on the counterpart share. */
+    protected $attributes = ['funding_source' => 'funder'];
+
     protected $fillable = [
-        'project_id', 'lib_category_id', 'requested_by', 'description', 'quantity', 'estimated_amount', 'supplier',
+        'project_id', 'lib_category_id', 'funding_source', 'requested_by', 'description', 'quantity', 'estimated_amount', 'supplier',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at', 'return_reason',
         'fulfilled_at', 'fulfilled_by', 'cancelled_at', 'cancelled_by', 'cancel_reason',
     ];

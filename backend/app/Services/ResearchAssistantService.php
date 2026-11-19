@@ -301,6 +301,7 @@ class ResearchAssistantService
             'can_attach_receipt' => $expense->awaitsLateReceipt(),
             'edit' => $mine ? [
                 'lib_category_id' => $expense->lib_category_id,
+                'funding_source' => $expense->funding_source ?: 'funder',
                 'description' => $expense->description,
                 'amount' => round((float) $expense->amount, 2),
                 'expense_date' => $expense->expense_date?->toDateString(),
@@ -388,6 +389,7 @@ class ResearchAssistantService
             'can_attach_receipt' => false,
             'edit' => $mine ? [
                 'lib_category_id' => $request->lib_category_id,
+                'funding_source' => $request->funding_source ?: 'funder',
                 'description' => $request->description,
                 'quantity' => $request->quantity,
                 'estimated_amount' => round((float) $request->estimated_amount, 2),

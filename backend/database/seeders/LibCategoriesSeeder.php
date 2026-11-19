@@ -27,7 +27,7 @@ class LibCategoriesSeeder extends Seeder
 
         $categories = [
             // --- I. Personnel Services (PS) ---
-            ['category_type' => 'PS', 'line_item_name' => 'Project Leader Honoraria (Prof. Mudzna M. Asakil)', 'line_item_code' => 'PS-01', 'allocated_amount' => 400000.00],
+            ['category_type' => 'PS', 'line_item_name' => 'Project Leader Honoraria', 'line_item_code' => 'PS-01', 'allocated_amount' => 400000.00],
             ['category_type' => 'PS', 'line_item_name' => 'Research Assistant Honoraria (2 personnel)', 'line_item_code' => 'PS-02', 'allocated_amount' => 360000.00],
             ['category_type' => 'PS', 'line_item_name' => 'Researcher Honoraria', 'line_item_code' => 'PS-03', 'allocated_amount' => 240000.00],
             ['category_type' => 'PS', 'line_item_name' => 'Program Leader Indirect Honoraria', 'line_item_code' => 'PS-04', 'allocated_amount' => 200000.00],

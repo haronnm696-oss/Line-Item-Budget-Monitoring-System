@@ -178,6 +178,10 @@ export const ENDPOINTS = {
   //   POST projects/:id/line-items, PATCH|DELETE line-items/:id
   //   POST projects/:id/tranches, PATCH|DELETE tranches/:id (unreleased only)
   programProjectOptions: '/api/program/project-options',
+  // Funders: GET list, POST { name, acronym }, PATCH :id. The short name
+  // (acronym) labels the funder column of every Line-Item Budget.
+  programFunders: '/api/program/funders',
+  programFunder: (id) => `/api/program/funders/${id}`,
   programLineItems: (projectId) => `/api/program/projects/${projectId}/line-items`,
   programLineItem: (id) => `/api/program/line-items/${id}`,
   programTranches: (projectId) => `/api/program/projects/${projectId}/tranches`,

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Expense;
+use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
 use App\Models\User;
@@ -82,6 +83,7 @@ class ExpenseWorkflowService
         $linkId = $data['purchase_request_id'] ?? null;
 
         [$expense, $request] = AuditLogger::transaction(function () use ($project, $data, $actor, $linkId) {
+            $data['funding_source'] = $this->fundingSource($data['lib_category_id'] ?? null, $data['funding_source'] ?? null, $linkId);
             $expense = Expense::create(array_merge($this->only($data), [
                 'project_id' => $project->id,
                 'purchase_request_id' => $linkId,
@@ -121,6 +123,16 @@ class ExpenseWorkflowService
             $lineItem = (int) ($data['lib_category_id'] ?? $locked->lib_category_id);
             if ($current && $lineItem !== (int) $locked->lib_category_id) {
                 throw ValidationException::withMessages(['lib_category_id' => ["A linked expense stays on its purchase request's line item."]]);
+            }
+
+            // Re-resolved when the line item, the source or the link changes:
+            // a hidden "Funded by" choice (no counterpart) means the funder.
+            if ($newLink || array_key_exists('lib_category_id', $data) || array_key_exists('funding_source', $data)) {
+                $requested = array_key_exists('funding_source', $data) ? $data['funding_source'] : $locked->funding_source;
+                $item = LibCategory::find($lineItem);
+                $data['funding_source'] = $item && ! $item->hasCounterpart() && ! array_key_exists('funding_source', $data)
+                    ? LibCategory::SOURCE_FUNDER
+                    : $this->fundingSource($lineItem, $requested, $newLink ?: $current);
             }
 
             $old = $this->snapshot($locked);
@@ -202,19 +214,40 @@ class ExpenseWorkflowService
     private function requireAvailable(Expense $expense): void
     {
         $row = app(ProjectFinancialService::class)
-            ->balancing($expense->project, (int) $expense->lib_category_id)['line_items'][0] ?? null;
+            ->sourceBalance($expense->project, (int) $expense->lib_category_id, $expense->funding_source);
         if (! $row) {
             return;
         }
         $available = round((float) $row['available'] + ($expense->purchase_request_id ? (float) $expense->amount : 0), 2);
         if (round((float) $expense->amount, 2) > $available) {
+            // Name the share only when the item has two sources.
+            $labels = ProjectFinancialService::sourceLabels($expense->project);
+            $share = ! $row['has_counterpart'] ? '' : ' (' . ($row['source'] === LibCategory::SOURCE_COUNTERPART
+                ? $labels['implementing_agency'] . ' counterpart'
+                : $labels['funder'] . ' share') . ')';
             throw ValidationException::withMessages(['amount' => [sprintf(
-                'The amount (₱%s) is more than the ₱%s available on %s. Lower the amount or ask the Project Leader for a realignment.',
+                'The amount (₱%s) is more than the ₱%s available on %s%s. Lower the amount or ask the Project Leader for a realignment.',
                 number_format((float) $expense->amount, 2),
                 number_format(max(0, $available), 2),
-                $row['name']
+                $row['name'],
+                $share
             )]]);
         }
+    }
+
+    /**
+     * The source an expense draws from. A linked purchase request decides it
+     * (the expense takes over that request's money); otherwise the funder
+     * unless the counterpart is asked for on a line item that has one.
+     */
+    private function fundingSource($lineItemId, ?string $requested, $purchaseRequestId = null): string
+    {
+        if ($purchaseRequestId && $request = PurchaseRequest::find($purchaseRequestId)) {
+            return ProjectFinancialService::source($request->funding_source);
+        }
+        $item = $lineItemId ? LibCategory::find($lineItemId) : null;
+
+        return $item ? $item->resolveFundingSource($requested) : LibCategory::SOURCE_FUNDER;
     }
 
     /**
@@ -378,14 +411,14 @@ class ExpenseWorkflowService
     private function only(array $data): array
     {
         return array_intersect_key($data, array_flip([
-            'lib_category_id', 'description', 'payee', 'reference_no', 'amount', 'expense_date',
+            'lib_category_id', 'funding_source', 'description', 'payee', 'reference_no', 'amount', 'expense_date',
         ]));
     }
 
     private function snapshot(Expense $expense): array
     {
         return $expense->only([
-            'project_id', 'lib_category_id', 'purchase_request_id', 'reference_no', 'payee', 'description', 'amount', 'expense_date', 'workflow_status',
+            'project_id', 'lib_category_id', 'funding_source', 'purchase_request_id', 'reference_no', 'payee', 'description', 'amount', 'expense_date', 'workflow_status',
         ]);
     }
 

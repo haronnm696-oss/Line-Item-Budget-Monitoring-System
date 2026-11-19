@@ -13,6 +13,7 @@ import {
   PS_NOTE, defaultLineItemId, groupLineItems, lineItemAvailable, prefillFromRequest,
   rememberLineItemId, rememberedLineItemId,
 } from '../../lib/expenseForm';
+import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
 
 /** localStorage, or null when the browser blocks it. */
 function browserStorage() {
@@ -23,18 +24,21 @@ function browserStorage() {
   }
 }
 
-const EMPTY = { lib_category_id: '', description: '', amount: '', expense_date: '', payee: '', reference_no: '', purchase_request_id: '' };
+const EMPTY = { lib_category_id: '', funding_source: FUNDER, description: '', amount: '', expense_date: '', payee: '', reference_no: '', purchase_request_id: '' };
 const FIELDS = Object.keys(EMPTY);
 
 /** The stored values as form strings. */
 function toForm(values) {
-  return Object.fromEntries(FIELDS.map((key) => [key, values?.[key] == null ? '' : String(values[key])]));
+  const form = Object.fromEntries(FIELDS.map((key) => [key, values?.[key] == null ? '' : String(values[key])]));
+  return { ...form, funding_source: form.funding_source || FUNDER };
 }
 
 /** Request body for the fields (only the changed ones when `before` is given). */
 function payload(form, before = null) {
   const value = {
     lib_category_id: Number(form.lib_category_id),
+    // Funder unless the counterpart was chosen (offered only when the item has one).
+    funding_source: form.funding_source || FUNDER,
     description: form.description.trim(),
     amount: Number(form.amount),
     expense_date: form.expense_date,
@@ -114,7 +118,11 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   // A linked request's estimate (or an already linked expense) is held in
   // "pending"; it is freed by this expense, so it counts as available here.
   const heldForThis = alreadyLinked ? Number(expense.edit.amount) || 0 : Number(linkedRequest?.estimated_amount) || 0;
-  const available = chosen ? lineItemAvailable(chosen) + heldForThis : null;
+  const labels = balancing.data?.labels;
+  const fundedByShown = hasCounterpart(chosen);
+  const source = effectiveSource(chosen, form.funding_source);
+  // The balance check uses the chosen source of the line item.
+  const available = chosen ? sourceAvailable(chosen, source) + heldForThis : null;
   // Every approved request is listed; linking one switches to its line item.
   const requestOptions = requests;
   const keptReceipts = (documents ?? []).filter((doc) => doc.document_type === 'receipt' && !toRemove.includes(doc.id));
@@ -125,13 +133,20 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
     // A linked request stays on its own line item.
     if (key === 'lib_category_id' && linkedRequest && String(linkedRequest.lib_category_id) !== value) next.purchase_request_id = '';
     if (key === 'lib_category_id' && assistant) rememberLineItemId(browserStorage(), user?.id, projectId, value);
+    // No counterpart on the new line item: back to the funder.
+    if (key === 'lib_category_id') {
+      next.funding_source = effectiveSource(lineItems.find((item) => String(item.id) === value), next.funding_source);
+    }
     setForm(next);
   };
 
   function chooseRequest(event) {
     const id = event.target.value;
     const request = requests.find((row) => String(row.id) === id);
-    setForm(prefillFromRequest(form, request ?? null, linkedRequest ?? null));
+    const next = prefillFromRequest(form, request ?? null, linkedRequest ?? null);
+    // A linked expense draws from its purchase request's source.
+    if (request) next.funding_source = request.funding_source || FUNDER;
+    setForm(next);
   }
 
   function validate(submitting) {
@@ -302,10 +317,32 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
             </select>
             {chosen?.type === 'PS' && <div className="ld-hint" role="note">{PS_NOTE}</div>}
             {chosen && Number(form.amount) > available && (
-              <div className="ld-hint is-risk" role="status">⚠ More than the {peso(available)} available on this line item.</div>
+              <div className="ld-hint is-risk" role="status">
+                ⚠ More than the {peso(available)} available on this line item{fundedByShown ? ` (${sourceName(source, labels)})` : ''}.
+              </div>
             )}
             {err('lib_category_id')}
           </div>
+          {fundedByShown && (
+            <fieldset className="program-field full ld-funded-by">
+              <legend className="program-label">Funded by</legend>
+              {[FUNDER, COUNTERPART].map((value) => (
+                <label key={value} className="ld-radio">
+                  <input
+                    type="radio"
+                    name="ld-exp-source"
+                    value={value}
+                    checked={source === value}
+                    onChange={() => setForm({ ...form, funding_source: value })}
+                    disabled={locked || alreadyLinked || Boolean(linkedRequest)}
+                  />
+                  <span>{sourceName(value, labels)} — {peso(sourceAvailable(chosen, value) + (value === source ? heldForThis : 0))} available</span>
+                </label>
+              ))}
+              {(alreadyLinked || linkedRequest) && <div className="ld-hint">A linked expense uses its purchase request&apos;s funding source.</div>}
+              {err('funding_source')}
+            </fieldset>
+          )}
           <div className="program-field full">
             <label htmlFor="ld-exp-desc">Description</label>
             <input id="ld-exp-desc" className="program-input" maxLength={500} value={form.description} onChange={set('description')} disabled={locked} />

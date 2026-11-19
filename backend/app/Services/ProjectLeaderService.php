@@ -217,6 +217,7 @@ class ProjectLeaderService
             'can_edit' => $mine && in_array($expense->workflow_status, ['draft', 'returned'], true),
             'edit' => $mine ? [
                 'lib_category_id' => $expense->lib_category_id,
+                'funding_source' => $expense->funding_source ?: 'funder',
                 'description' => $expense->description,
                 'amount' => round((float) $expense->amount, 2),
                 'expense_date' => $expense->expense_date?->toDateString(),
@@ -309,8 +310,9 @@ class ProjectLeaderService
             ],
             'kpis' => [
                 'total_budget' => $metrics['budget'],
-                'funder_share' => round((float) $project->funding_agency_amount, 2),
-                'counterpart' => round((float) $project->implementing_agency_counterpart, 2),
+                // Sums of the line items (no separately typed figure).
+                'funder_share' => $this->financials->fundingTotals($project)['funder'],
+                'counterpart' => $this->financials->fundingTotals($project)['implementing_agency'],
                 'total_spent' => $metrics['spent'],
                 'remaining' => $metrics['remaining'],
                 'utilization_pct' => $metrics['utilization_pct'],

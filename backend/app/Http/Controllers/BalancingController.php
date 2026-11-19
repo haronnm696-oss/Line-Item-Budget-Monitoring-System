@@ -18,6 +18,9 @@ class BalancingController extends Controller
             'line_item' => ['nullable', 'integer', Rule::exists((new LibCategory())->getTable(), 'id')->where('project_id', $project->id)],
         ], ['line_item.exists' => 'Choose a line item of this project.']);
 
-        return response()->json($financials->balancing($project, isset($data['line_item']) ? (int) $data['line_item'] : null));
+        return response()->json($financials->balancing($project, isset($data['line_item']) ? (int) $data['line_item'] : null) + [
+            // Labels of the two funding sources: the project's funder short name and the implementing agency.
+            'labels' => ProjectFinancialService::sourceLabels($project->loadMissing('fundingAgency')),
+        ]);
     }
 }

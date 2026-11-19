@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { downloadProgramProjectsCsv, fetchProgramProjects } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
-import { ProjectFormDialog } from '../../components/program/ProjectSetup';
+import { FundersDialog, ProjectFormDialog } from '../../components/program/ProjectSetup';
 import { compactPeso, formatPct, peso } from '../../components/money';
 import { formatDateTime, formatInManila, todayInManila } from '../../lib/datetime';
 
@@ -192,6 +192,7 @@ export default function ProgramProjects() {
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [managingFunders, setManagingFunders] = useState(false);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -387,11 +388,16 @@ export default function ProgramProjects() {
           <button type="button" className="program-btn" onClick={exportCsv} disabled={exportDisabled || exporting}>
             {exporting ? 'Preparing…' : 'Export CSV'}
           </button>
+          <button type="button" className="program-btn" onClick={() => setManagingFunders(true)}>
+            Funders
+          </button>
           <button type="button" className="program-btn primary" onClick={() => setCreating(true)}>
             New project
           </button>
         </div>
       </div>
+
+      {managingFunders && <FundersDialog onClose={() => setManagingFunders(false)} />}
 
       {creating && (
         <ProjectFormDialog

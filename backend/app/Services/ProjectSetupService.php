@@ -9,6 +9,7 @@ use App\Models\ProjectTranche;
 use App\Models\ProjectUser;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\LineItemComputation;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -96,19 +97,100 @@ class ProjectSetupService
     {
         return AuditLogger::transaction(function () use ($project, $data, $actor) {
             $locked = Project::whereKey($project->id)->lockForUpdate()->firstOrFail();
-            $this->requireUniqueName($locked, $data['category_type'], $data['line_item_name']);
-            $this->requireWithinBudget($locked, (float) $data['allocated_amount']);
+            $fields = $this->classification($data);
+            $this->requireUniqueName($locked, $fields + ['line_item_name' => $data['line_item_name']]);
+            $amounts = $this->amounts($data, null);
+            if ($amounts === null) {
+                throw ValidationException::withMessages(['funder_amount' => ['Enter the amounts or the computation.']]);
+            }
+            $this->requireWithinBudget($locked, $amounts['implementing_agency_amount'] + $amounts['funder_amount'], null, $amounts['key']);
 
-            $item = LibCategory::create([
+            $item = LibCategory::create(array_merge($fields, $this->computation($data), [
                 'project_id' => $locked->id,
-                'category_type' => $data['category_type'],
                 'line_item_name' => $data['line_item_name'],
-                'allocated_amount' => $data['allocated_amount'],
-            ]);
+                'implementing_agency_amount' => $amounts['implementing_agency_amount'],
+                'funder_amount' => $amounts['funder_amount'],
+            ]));
             AuditLogger::write('created', $item, [], $this->lineItemSnapshot($item), $actor);
 
             return $item->fresh();
         });
+    }
+
+    /** Category, cost type and groups, with their defaults. */
+    private function classification(array $data, ?LibCategory $current = null): array
+    {
+        $pick = fn (string $key, $default = null) => array_key_exists($key, $data) ? $data[$key] : ($current ? $current->{$key} : $default);
+        $text = fn ($value) => ($value = trim((string) $value)) === '' ? null : $value;
+
+        return [
+            'category_type' => $pick('category_type'),
+            'cost_type' => $pick('cost_type') ?: 'Direct',
+            'expense_group' => $text($pick('expense_group')) ?? trim((string) ($data['line_item_name'] ?? $current?->line_item_name)),
+            'expense_subgroup' => $text($pick('expense_subgroup')),
+        ];
+    }
+
+    /** The computation fields present in $data (all optional). */
+    private function computation(array $data): array
+    {
+        $fields = array_intersect_key($data, array_flip(LineItemComputation::FIELDS));
+        if (array_key_exists('unit_description', $fields)) {
+            $fields['unit_description'] = trim((string) $fields['unit_description']) ?: null;
+        }
+
+        return $fields;
+    }
+
+    /**
+     * The two amounts after this change, or null when they do not change.
+     *
+     * - With a computation (quantity and rate), the funder share is the
+     *   computed amount (as on Form B, where "One (1) Project Leader @
+     *   ₱8,800.00/mo. x 12 mos." is the funder column); the counterpart is
+     *   entered on its own (default 0) and added to it.
+     * - Otherwise the entered implementing_agency_amount / funder_amount.
+     * - Older callers that send only allocated_amount change the funder
+     *   share (the counterpart stays).
+     *
+     * `key` is the field that error messages attach to.
+     *
+     * @return array{implementing_agency_amount: float, funder_amount: float, key: string}|null
+     */
+    private function amounts(array $data, ?LibCategory $current): ?array
+    {
+        $now = fn (string $column) => $current ? round((float) $current->{$column}, 2) : 0.0;
+        $computationSent = array_intersect_key($data, array_flip(LineItemComputation::FIELDS)) !== [];
+        $row = array_merge($current ? $current->only(LineItemComputation::FIELDS) : [], $this->computation($data));
+        $sent = fn (string $key) => array_key_exists($key, $data) && $data[$key] !== null && $data[$key] !== '';
+
+        if (LineItemComputation::present($row) && ($computationSent || $sent('implementing_agency_amount') || $sent('funder_amount') || ! $current)) {
+            $counterpart = $sent('implementing_agency_amount') ? round((float) $data['implementing_agency_amount'], 2) : $now('implementing_agency_amount');
+            // Errors go to the counterpart field when only the counterpart was changed.
+            $key = ! $computationSent && $sent('implementing_agency_amount') && ! $sent('funder_amount') ? 'implementing_agency_amount' : 'funder_amount';
+
+            return ['implementing_agency_amount' => $counterpart, 'funder_amount' => LineItemComputation::amount($row), 'key' => $key];
+        }
+        if ($sent('implementing_agency_amount') || $sent('funder_amount')) {
+            return [
+                'implementing_agency_amount' => $sent('implementing_agency_amount') ? round((float) $data['implementing_agency_amount'], 2) : $now('implementing_agency_amount'),
+                'funder_amount' => $sent('funder_amount') ? round((float) $data['funder_amount'], 2) : $now('funder_amount'),
+                'key' => 'funder_amount',
+            ];
+        }
+        if ($sent('allocated_amount')) {
+            $counterpart = $now('implementing_agency_amount');
+            $funder = round((float) $data['allocated_amount'] - $counterpart, 2);
+            if ($funder < 0) {
+                throw ValidationException::withMessages(['allocated_amount' => [
+                    'The allocated amount cannot be less than the counterpart (₱' . number_format($counterpart, 2) . ').',
+                ]]);
+            }
+
+            return ['implementing_agency_amount' => $counterpart, 'funder_amount' => $funder, 'key' => 'allocated_amount'];
+        }
+
+        return null;
     }
 
     public function updateLineItem(LibCategory $item, array $data, User $actor): LibCategory
@@ -124,26 +206,45 @@ class ProjectSetupService
                 throw ValidationException::withMessages(['category_type' => ['This line item already has expenses, payroll or purchase requests; its category cannot change.']]);
             }
             $name = $data['line_item_name'] ?? $locked->line_item_name;
-            if ($type !== $locked->category_type || $name !== $locked->line_item_name) {
-                $this->requireUniqueName($project, $type, $name, $locked->id);
+            $fields = $this->classification($data + ['line_item_name' => $name], $locked);
+            $identity = fn (array $f) => mb_strtolower(implode('|', [$f['category_type'], $f['cost_type'], $f['expense_group'], $f['expense_subgroup'], $f['line_item_name']]));
+            if ($identity($fields + ['line_item_name' => $name]) !== $identity($this->classification([], $locked) + ['line_item_name' => $locked->line_item_name])) {
+                $this->requireUniqueName($project, $fields + ['line_item_name' => $name], $locked->id);
             }
 
-            if (array_key_exists('allocated_amount', $data) && round((float) $data['allocated_amount'], 2) !== round((float) $locked->allocated_amount, 2)) {
-                $amount = (float) $data['allocated_amount'];
+            $changes = $fields + ['line_item_name' => $name] + $this->computation($data);
+            $amounts = $this->amounts($data, $locked);
+            $changed = $amounts !== null && (
+                round($amounts['implementing_agency_amount'], 2) !== round((float) $locked->implementing_agency_amount, 2)
+                || round($amounts['funder_amount'], 2) !== round((float) $locked->funder_amount, 2)
+            );
+            if ($changed) {
+                $key = $amounts['key'];
                 if ($this->hasVerifiedSpending($project)) {
-                    throw ValidationException::withMessages(['allocated_amount' => [self::REALIGNMENT_ONLY]]);
+                    throw ValidationException::withMessages([$key => [self::REALIGNMENT_ONLY]]);
                 }
-                $row = $this->financials->balancing($project, $locked->id)['line_items'][0] ?? ['spent' => 0, 'pending' => 0];
-                $floor = round((float) $row['spent'] + (float) $row['pending'], 2);
-                if ($amount + 0.001 < $floor) {
-                    throw ValidationException::withMessages(['allocated_amount' => [
-                        'The allocated amount cannot be less than what is already spent and pending on this line item (₱' . number_format($floor, 2) . ').',
-                    ]]);
+                // Each source keeps at least what is spent and pending from it.
+                $row = $this->financials->balancing($project, $locked->id)['line_items'][0] ?? null;
+                $labels = ProjectFinancialService::sourceLabels($project);
+                foreach (LibCategory::SOURCE_COLUMN as $source => $column) {
+                    $bucket = $row['sources'][$source] ?? ['spent' => 0, 'pending' => 0];
+                    $floor = round((float) $bucket['spent'] + (float) $bucket['pending'], 2);
+                    if ($amounts[$column] + 0.001 < $floor) {
+                        $message = $key === 'allocated_amount'
+                            ? 'The allocated amount cannot be less than what is already spent and pending on this line item (₱' . number_format($floor, 2) . ').'
+                            : 'The ' . ($source === LibCategory::SOURCE_COUNTERPART ? $labels['implementing_agency'] . ' counterpart' : $labels['funder'] . ' amount')
+                                . ' cannot be less than what is already spent and pending from it on this line item (₱' . number_format($floor, 2) . ').';
+                        throw ValidationException::withMessages([$key === 'allocated_amount' ? $key : $column => [$message]]);
+                    }
                 }
-                $this->requireWithinBudget($project, $amount, $locked->id);
+                $this->requireWithinBudget($project, $amounts['implementing_agency_amount'] + $amounts['funder_amount'], $locked->id, $key);
+            }
+            if ($amounts !== null) {
+                $changes['implementing_agency_amount'] = $amounts['implementing_agency_amount'];
+                $changes['funder_amount'] = $amounts['funder_amount'];
             }
 
-            $locked->update(array_intersect_key($data, array_flip(['category_type', 'line_item_name', 'allocated_amount'])));
+            $locked->update($changes);
             AuditLogger::write('updated', $locked, $old, $this->lineItemSnapshot($locked->fresh()), $actor);
 
             return $locked->fresh();
@@ -251,6 +352,9 @@ class ProjectSetupService
             'project_leader_id' => $leader !== null ? (int) $leader : null,
             'total_budget' => round((float) $project->total_approved_budget, 2),
             'allocated' => round((float) $project->libCategories()->sum('allocated_amount'), 2),
+            // Funder and counterpart totals are the line-item sums.
+            'funding_totals' => $this->financials->fundingTotals($project),
+            'labels' => ProjectFinancialService::sourceLabels($project),
             'tranches_total' => round((float) $project->tranches()->sum('amount'), 2),
             // After the first verified expense, amounts change only by realignment.
             'allocations_locked' => $this->hasVerifiedSpending($project),
@@ -318,16 +422,16 @@ class ProjectSetupService
         }
     }
 
-    private function requireWithinBudget(Project $project, float $amount, ?int $exceptId = null): void
+    private function requireWithinBudget(Project $project, float $amount, ?int $exceptId = null, string $key = 'allocated_amount'): void
     {
         $budget = round((float) $project->total_approved_budget, 2);
         if ($budget <= 0) {
-            throw ValidationException::withMessages(['allocated_amount' => ["Set the project's total budget first."]]);
+            throw ValidationException::withMessages([$key => ["Set the project's total budget first."]]);
         }
         $others = (float) $project->libCategories()->when($exceptId, fn ($q) => $q->whereKeyNot($exceptId))->sum('allocated_amount');
         $total = round($others + $amount, 2);
         if ($total > $budget) {
-            throw ValidationException::withMessages(['allocated_amount' => [
+            throw ValidationException::withMessages([$key => [
                 'Line items would total ₱' . number_format($total, 2) . ', more than the total budget of ₱' . number_format($budget, 2)
                 . '. ₱' . number_format(max(0, $budget - $others), 2) . ' is left to allocate.',
             ]]);
@@ -345,15 +449,20 @@ class ProjectSetupService
         }
     }
 
-    private function requireUniqueName(Project $project, string $type, string $name, ?int $exceptId = null): void
+    /** One name per place: category, cost type, group and sub-group. */
+    private function requireUniqueName(Project $project, array $fields, ?int $exceptId = null): void
     {
+        $lower = fn ($value) => mb_strtolower(trim((string) $value));
         $exists = $project->libCategories()
-            ->where('category_type', $type)
-            ->whereRaw('LOWER(line_item_name) = ?', [mb_strtolower(trim($name))])
+            ->where('category_type', $fields['category_type'])
             ->when($exceptId, fn ($q) => $q->whereKeyNot($exceptId))
-            ->exists();
+            ->get()
+            ->contains(fn (LibCategory $item) => $lower($item->line_item_name) === $lower($fields['line_item_name'])
+                && ($item->cost_type ?: 'Direct') === $fields['cost_type']
+                && $lower($item->expense_group ?: $item->line_item_name) === $lower($fields['expense_group'])
+                && $lower($item->expense_subgroup) === $lower($fields['expense_subgroup']));
         if ($exists) {
-            throw ValidationException::withMessages(['line_item_name' => ["This project already has a {$type} line item with that name."]]);
+            throw ValidationException::withMessages(['line_item_name' => ["This project already has a {$fields['category_type']} line item with that name in this group."]]);
         }
     }
 
@@ -407,7 +516,13 @@ class ProjectSetupService
         return [
             'project_id' => $item->project_id,
             'category_type' => $item->category_type,
+            'cost_type' => $item->cost_type,
+            'expense_group' => $item->expense_group,
+            'expense_subgroup' => $item->expense_subgroup,
             'line_item_name' => $item->line_item_name,
+            'computation' => $item->computationText(),
+            'implementing_agency_amount' => round((float) $item->implementing_agency_amount, 2),
+            'funder_amount' => round((float) $item->funder_amount, 2),
             'allocated_amount' => round((float) $item->allocated_amount, 2),
         ];
     }
