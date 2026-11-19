@@ -69,6 +69,7 @@ class FormBExportTest extends TestCase
         $this->assertSame('(To be filled-up by MOST-BARMM)', $doc['footer']['title']);
         $this->assertSame(['Implementing', 'MOST-BARMM', 'TOTAL'], $doc['footer']['columns']);
         $this->assertEquals([1178376.00, 2000000.00, 3178376.00], $doc['footer']['values']);
+        $this->assertSame('* Chargeable against the CY 2026', $doc['footer']['note']);
 
         // Body order and structure.
         $labels = collect($doc['rows'])->pluck('label')->all();
@@ -88,7 +89,7 @@ class FormBExportTest extends TestCase
         $this->assertSame([null], collect($doc['signatories'])->pluck('name')->unique()->values()->all());
     }
 
-    public function test_the_csv_has_the_same_rows_with_plain_numbers_and_dashes_for_zero(): void
+    public function test_the_csv_has_the_same_rows_with_plain_numbers_including_zero(): void
     {
         $project = $this->demo();
         $csv = $this->actingAs($this->programLeader)->get("/api/projects/{$project->id}/reports/form-b")->assertOk()->getContent();
@@ -103,11 +104,12 @@ class FormBExportTest extends TestCase
         $this->assertContains('GRAND TOTAL,1178376.00,2000000.00', $lines);
         $this->assertContains('(To be filled-up by MOST-BARMM)', $lines);
         $this->assertContains('Implementing,MOST-BARMM,TOTAL', $lines);
-        $this->assertContains('1178376.00,2000000.00,3178376.00', $lines);
-        // Zero cells print "-": no counterpart on the Indirect PS row, no funder on utilities.
-        $this->assertContains('"      Two (2) Project Support Staff Level 2 @ P1,500.00/qtr. x 4 qtrs.",-,12000.00', $lines);
-        $this->assertContains('      Electricity and water,120000.00,-', $lines);
-        $this->assertStringNotContainsString(',0.00', $csv);
+        // Pre-filled box with the note beside it.
+        $this->assertContains('1178376.00,2000000.00,3178376.00,,* Chargeable against the CY 2026', $lines);
+        // Plain numbers only: zero is 0.00 (the PDF prints "-"), so formulas work.
+        $this->assertContains('"      Two (2) Project Support Staff Level 2 @ P1,500.00/qtr. x 4 qtrs.",0.00,12000.00', $lines);
+        $this->assertContains('      Electricity and water,120000.00,0.00', $lines);
+        $this->assertDoesNotMatchRegularExpression('/,-(,|\r|$)/m', $csv);
         $this->assertStringNotContainsString('₱', $csv);
     }
 
@@ -166,6 +168,7 @@ class FormBExportTest extends TestCase
         $this->assertSame('DOST', $doc['columns'][2]);
         $this->assertSame('(To be filled-up by DOST)', $doc['footer']['title']);
         $this->assertSame(['Implementing', 'DOST', 'TOTAL'], $doc['footer']['columns']);
+        $this->assertSame('* Chargeable against the CY 2026', $doc['footer']['note']);
         $this->assertSame('Six (6) months', collect($doc['details'])->firstWhere('label', 'Total Duration')['value']);
         $this->assertSame('Department of Science and Technology', collect($doc['details'])->firstWhere('label', 'Monitoring Agency')['value']);
         // A lone item named like its group prints on the group line.

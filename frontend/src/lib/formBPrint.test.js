@@ -23,7 +23,7 @@ function doc(short, name, signatories = []) {
       { kind: 'subtotal', label: 'Sub-Total for MOOE', level: 0, implementing_agency: 120000, funder: 1648400 },
       { kind: 'grand', label: 'GRAND TOTAL', level: 0, implementing_agency: 1178376, funder: 2000000 },
     ],
-    footer: { title: `(To be filled-up by ${short})`, columns: ['Implementing', short, 'TOTAL'], values: [1178376, 2000000, 3178376] },
+    footer: { title: `(To be filled-up by ${short})`, columns: ['Implementing', short, 'TOTAL'], values: [1178376, 2000000, 3178376], note: '* Chargeable against the CY 2026' },
     signatories: [
       { label: 'Reviewed by:', name: null, position: null },
       { label: 'Certified Funds Available:', name: null, position: null },
@@ -50,10 +50,12 @@ test('the demo totals print in the official layout', () => {
   assert.ok(html.includes('MINISTRY OF SCIENCE AND TECHNOLOGY - BARMM'));
   assert.ok(html.includes('One (1) Project Leader @ P8,800.00/mo. x 12 mos.'));
   assert.ok(html.includes('<td class="r">-</td>'), 'zero cell prints "-"');
-  assert.ok(!html.includes('0.00</td>\n      <td class="r">-') || true);
+  assert.ok(html.includes('<td class="r">3,178,376.00</td>'), 'the filled-up box is pre-filled');
+  assert.ok(html.includes('<div class="fill-note">* Chargeable against the CY 2026</div>'));
   assert.ok(html.includes('size: A4 portrait'));
   assert.ok(html.includes('Demo &lt;Project&gt;'), 'values are escaped');
-  assert.ok(!/#[0-9a-f]{3,6}\b(?<!#000)(?<!#fff)/i.test(html.replace(/#000|#fff/gi, '')), 'black and white only');
+  const colors = html.match(/#[0-9a-f]{3,6}\b/gi) ?? [];
+  assert.deepEqual([...new Set(colors.map((c) => c.toLowerCase()))].sort(), ['#000', '#fff'], 'black and white only');
 });
 
 test('signatories print only when set (labels and lines always)', () => {

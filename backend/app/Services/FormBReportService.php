@@ -19,7 +19,7 @@ use Carbon\CarbonInterface;
  *   I. PERSONNEL SERVICES (PS) ... Sub-total for PS
  *   II. MAINTENANCE AND OTHER OPERATING EXPENSES (MOOE) ... Sub-Total for MOOE
  *   GRAND TOTAL
- *   (To be filled-up by <short>)  Implementing | <short> | TOTAL
+ *   (To be filled-up by <short>)  Implementing | <short> | TOTAL   * Chargeable against the CY <year>
  *   Reviewed by / Certified Funds Available / Recommending Approval / Approved
  */
 class FormBReportService
@@ -82,13 +82,15 @@ class FormBReportService
             ];
         }
 
+        $year = $project->start_date?->year ?? now()->year;
+
         return [
             'funder' => ['short_name' => $short, 'name' => $fullName],
             'header' => [
                 'form' => "{$short} R&D Form B",
                 'agency' => mb_strtoupper($fullName),
                 'title' => 'Project Line-Item Budget',
-                'year' => 'CY ' . ($project->start_date?->year ?? now()->year),
+                'year' => "CY {$year}",
             ],
             'details' => [
                 ['label' => 'Project Title', 'value' => (string) $project->title],
@@ -102,14 +104,16 @@ class FormBReportService
             'footer' => [
                 'title' => "(To be filled-up by {$short})",
                 'columns' => ['Implementing', $short, 'TOTAL'],
+                // Pre-filled, as on the official form.
                 'values' => [$grand['implementing_agency'], $grand['funder'], $grand['total']],
+                'note' => "* Chargeable against the CY {$year}",
             ],
             'signatories' => $signatories,
             'paper' => count($rows) <= self::A4_MAX_ROWS ? 'A4' : 'Legal',
         ];
     }
 
-    /** The same document as CSV rows: plain numbers, zero as "-". */
+    /** The same document as CSV rows: plain numbers, zero as "0.00". */
     public function csvRows(array $doc): array
     {
         $out = [[$doc['header']['form']], [$doc['header']['agency']], [$doc['header']['title']], [$doc['header']['year']], []];
@@ -127,7 +131,7 @@ class FormBReportService
         $out[] = [];
         $out[] = [$doc['footer']['title']];
         $out[] = $doc['footer']['columns'];
-        $out[] = array_map([self::class, 'csvAmount'], $doc['footer']['values']);
+        $out[] = array_merge(array_map([self::class, 'csvAmount'], $doc['footer']['values']), ['', $doc['footer']['note']]);
         $out[] = [];
         foreach ($doc['signatories'] as $signatory) {
             $out[] = array_values(array_filter([$signatory['label'], $signatory['name'], $signatory['position']], fn ($v) => $v !== null));
@@ -136,14 +140,17 @@ class FormBReportService
         return $out;
     }
 
-    /** "1058376.00", or "-" for zero (blank for a heading). */
+    /**
+     * Plain numbers only ("1058376.00", zero as "0.00") so spreadsheet
+     * formulas work; blank for a heading. The PDF prints zero as "-".
+     */
     public static function csvAmount(?float $amount): string
     {
         if ($amount === null) {
             return '';
         }
 
-        return abs($amount) < 0.005 ? '-' : number_format($amount, 2, '.', '');
+        return number_format(abs($amount) < 0.005 ? 0 : $amount, 2, '.', '');
     }
 
     /** "Twelve (12) months" from the project period (whole months, rounded up). */

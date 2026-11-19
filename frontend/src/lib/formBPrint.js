@@ -76,7 +76,9 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
   .k-subtotal td { font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; }
   .k-grand td { font-weight: bold; border-top: 3px double #000; border-bottom: 1px solid #000; padding-top: 3px; padding-bottom: 3px; }
   tr { page-break-inside: avoid; }
-  .fill { margin-top: 12px; width: 60%; }
+  .fill-row { margin-top: 12px; display: flex; align-items: flex-end; gap: 16px; }
+  .fill { width: 60%; flex: none; }
+  .fill-note { font-style: italic; padding-bottom: 4px; }
   .fill caption { text-align: left; font-style: italic; padding-bottom: 3px; }
   .fill th, .fill td { border: 1px solid #000; padding: 3px 6px; }
   .fill th { text-align: center; }
@@ -100,11 +102,14 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
     <thead><tr><th scope="col">${e(col0)}</th><th scope="col">${e(col1)}</th><th scope="col">${e(col2)}</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <table class="fill">
-    <caption>${e(footer.title)}</caption>
-    <thead><tr>${(footer.columns ?? []).map((c) => `<th scope="col">${e(c)}</th>`).join('')}</tr></thead>
-    <tbody><tr>${(footer.values ?? []).map((v) => `<td class="r">${e(formBAmount(v))}</td>`).join('')}</tr></tbody>
-  </table>
+  <div class="fill-row">
+    <table class="fill">
+      <caption>${e(footer.title)}</caption>
+      <thead><tr>${(footer.columns ?? []).map((c) => `<th scope="col">${e(c)}</th>`).join('')}</tr></thead>
+      <tbody><tr>${(footer.values ?? []).map((v) => `<td class="r">${e(formBAmount(v))}</td>`).join('')}</tr></tbody>
+    </table>
+    ${footer.note ? `<div class="fill-note">${e(footer.note)}</div>` : ''}
+  </div>
   <div class="sigs">${signatories}</div>
 </body>
 </html>`;
