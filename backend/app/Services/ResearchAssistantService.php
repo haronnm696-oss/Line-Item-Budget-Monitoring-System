@@ -361,7 +361,7 @@ class ResearchAssistantService
             'details' => trim(implode(' · ', array_filter([$request->libCategory?->line_item_name, 'Qty ' . $request->quantity]))),
             'line_item' => $request->libCategory?->line_item_name,
             'amount' => round((float) $request->estimated_amount, 2),
-            'workflow_label' => PurchaseRequestService::LABELS[$request->workflow_status] ?? $request->workflow_status,
+            'workflow_label' => PurchaseRequestService::label($request),
             'next_step' => match ($request->workflow_status) {
                 'draft' => $supporting > 0 ? 'Submit when ready' : 'Attach a quotation or invoice, then submit',
                 'submitted' => 'Waiting for the Project Leader',

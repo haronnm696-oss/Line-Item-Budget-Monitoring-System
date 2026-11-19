@@ -26,8 +26,10 @@ use Illuminate\Validation\ValidationException;
  * notification per recipient per hand-off.
  *
  * Self-pay: nobody approves or verifies a batch that includes their own
- * pay. If it pays the Project Leader and no other Project Leader may
- * approve, the approve step goes to the Program Leader; if no Finance/Admin
+ * pay. A project has one Project Leader, so the approve step goes to the
+ * Program Leader when the batch pays the Project Leader, or when no
+ * Project Leader may approve it (they prepared it); never to "another
+ * Project Leader". If no Finance/Admin
  * without pay in it (and not its maker or approver) may verify, the verify
  * step goes to the Program Leader. Both are pending "payroll" approval
  * requests on the Program Leader Approvals page (decideEscalation()). Rows (one per person) are created and computed
@@ -198,9 +200,10 @@ class PayrollService
     // ---------------------------------------------------------------- batch hand-offs
 
     /**
-     * Submit the month. When the batch pays a Project Leader of the project
-     * and no other Project Leader may approve it, the approve step goes to
-     * the Program Leader as a pending "payroll" approval request.
+     * Submit the month. When the batch pays the Project Leader, or no
+     * Project Leader may approve it (see leaderStepEscalation()), the
+     * approve step goes to the Program Leader as a pending "payroll"
+     * approval request.
      */
     public function submit(PayrollBatch $batch, User $actor): PayrollBatch
     {
@@ -215,14 +218,11 @@ class PayrollService
         }
 
         $paidLeaders = $this->paidLeaders($batch);
-        $escalate = $paidLeaders->isNotEmpty() && $this->eligibleLeaders($batch)->isEmpty();
+        $why = $this->leaderStepEscalation($batch);
+        $escalate = $why !== null;
 
-        $batch = AuditLogger::transaction(function () use ($batch, $actor, $escalate, $paidLeaders) {
-            $approval = $escalate ? $this->escalate($batch, 'approve', $actor, sprintf(
-                'The %s payroll includes pay for the Project Leader (%s), so the Program Leader approves it.',
-                $batch->monthLabel(),
-                $paidLeaders->pluck('name')->join(', ')
-            )) : null;
+        $batch = AuditLogger::transaction(function () use ($batch, $actor, $why) {
+            $approval = $why !== null ? $this->escalate($batch, 'approve', $actor, $why) : null;
 
             return $this->move($batch, 'submitted', $actor, 'submitted', PayrollBatch::EDITABLE, [
                 'submitted_at' => now(),
@@ -235,19 +235,84 @@ class PayrollService
         });
 
         if ($escalate) {
-            $this->notify($this->programLeaders(), $batch, 'submitted', $actor, null, [
-                'message' => "{$actor->name} submitted the {$batch->monthLabel()} payroll. It includes pay for the Project Leader, so it comes to you for approval.",
-                'link' => '/program-approvals?project=' . $batch->project_id,
-            ]);
-            $this->notify($paidLeaders, $batch, 'escalated', $actor, null, [
-                'title' => 'Payroll sent to the Program Leader',
-                'message' => "The {$batch->monthLabel()} payroll includes your pay. Waiting for Program Leader (includes your pay).",
-            ]);
+            $this->notifyEscalatedApproval($batch, $actor, $paidLeaders);
         } else {
             $this->notify($this->projectMembers($batch->project_id, 'project-leader'), $batch, 'submitted', $actor);
         }
 
         return $batch;
+    }
+
+    /**
+     * Why the Project Leader step goes to the Program Leader, or null when
+     * the project's Project Leader approves. Escalates when the batch pays
+     * a Project Leader of the project (also in older data with a second
+     * one), or when no Project Leader may approve it (they prepared it, or
+     * the project has none). Never "another Project Leader".
+     */
+    private function leaderStepEscalation(PayrollBatch $batch): ?string
+    {
+        $paidLeaders = $this->paidLeaders($batch);
+        if ($paidLeaders->isNotEmpty()) {
+            return sprintf(
+                'The %s payroll includes pay for the Project Leader (%s), so the Program Leader approves it.',
+                $batch->monthLabel(),
+                $paidLeaders->pluck('name')->join(', ')
+            );
+        }
+
+        if ($this->eligibleLeaders($batch)->isNotEmpty()) {
+            return null;
+        }
+
+        $makers = $this->projectMembers($batch->project_id, 'project-leader')
+            ->filter(fn (User $user) => in_array((int) $user->id, $batch->makerIds(), true));
+
+        return $makers->isNotEmpty()
+            ? sprintf('The %s payroll was prepared by the Project Leader (%s), so the Program Leader approves it.', $batch->monthLabel(), $makers->pluck('name')->join(', '))
+            : sprintf('No Project Leader of this project can approve the %s payroll, so the Program Leader approves it.', $batch->monthLabel());
+    }
+
+    private function notifyEscalatedApproval(PayrollBatch $batch, User $actor, Collection $paidLeaders): void
+    {
+        $why = $paidLeaders->isNotEmpty() ? 'It includes pay for the Project Leader' : 'No Project Leader can approve it (they prepared it, or the project has none)';
+        $this->notify($this->programLeaders(), $batch, 'submitted', $actor, null, [
+            'message' => "{$actor->name} submitted the {$batch->monthLabel()} payroll. {$why}, so it comes to you for approval.",
+            'link' => '/program-approvals?project=' . $batch->project_id,
+        ]);
+        $this->notify($paidLeaders, $batch, 'escalated', $actor, null, [
+            'title' => 'Payroll sent to the Program Leader',
+            'message' => "The {$batch->monthLabel()} payroll includes your pay. Waiting for Program Leader (includes your pay).",
+        ]);
+    }
+
+    /**
+     * A submitted batch still waiting for the Project Leader although the
+     * leader step belongs to the Program Leader (older data, or the roles
+     * changed after it was submitted): escalate it now. One audit entry
+     * ("rerouted"). Returns false when it does not apply.
+     */
+    public function rerouteLeaderStep(PayrollBatch $batch, User $actor): bool
+    {
+        if ($batch->workflow_status !== 'submitted' || $batch->pendingEscalation() !== null) {
+            return false;
+        }
+        $why = $this->leaderStepEscalation($batch);
+        if ($why === null) {
+            return false;
+        }
+
+        AuditLogger::transaction(function () use ($batch, $actor, $why) {
+            // The request is the submitter's, so the Program Leader who
+            // triggered the reroute can still decide it (maker-checker).
+            $approval = $this->escalate($batch, 'approve', User::find($batch->submitted_by) ?? $actor, $why);
+            $old = $batch->only(['approval_request_id']);
+            $batch->update(['approval_request_id' => $approval->id]);
+            AuditLogger::write('rerouted', $batch, $old, ['approval_request_id' => $approval->id], $actor, $why);
+        });
+        $this->notifyEscalatedApproval($batch->fresh(), $actor, $this->paidLeaders($batch));
+
+        return true;
     }
 
     public function endorse(PayrollBatch $batch, User $actor): PayrollBatch
@@ -398,10 +463,6 @@ class PayrollService
         if ($batch->workflow_status === 'submitted') {
             if ($escalated) {
                 return $paid ? 'Waiting for Program Leader (includes your pay)' : "Waiting for Program Leader (includes the Project Leader's pay)";
-            }
-
-            if ($paid && $viewer && $batch->project && $viewer->hasRoleOn($batch->project, 'project-leader')) {
-                return 'Waiting for another Project Leader (includes your pay)';
             }
 
             return 'Waiting for the Project Leader';

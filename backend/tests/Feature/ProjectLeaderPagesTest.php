@@ -134,18 +134,21 @@ class ProjectLeaderPagesTest extends TestCase
         $this->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'x'])->assertForbidden();
         $this->assertSame('submitted', $batch->fresh()->workflow_status);
 
-        // With a second, unpaid Project Leader the paid one still cannot act.
+        // Even with a second Project Leader (older data), a batch that pays the
+        // Project Leader goes to the Program Leader, never "another Project Leader".
         $second = AuditLogger::muted(fn () => $this->member('project-leader'));
         $this->rate($this->researcher, 30000);
         $this->rate($this->projectLeader, 45000);
         $other = $this->submittedBatch('2026-10');
+        $this->assertNotNull($other->fresh()->pendingEscalation());
         $this->actingAs($this->projectLeader)
             ->getJson("/api/projects/{$this->project->id}/review-queue/payroll/{$other->id}")
             ->assertJsonPath('item.can_review', false)
-            ->assertJsonPath('item.waiting_text', 'Waiting for another Project Leader (includes your pay)');
+            ->assertJsonPath('item.waiting_text', 'Waiting for Program Leader (includes your pay)');
         $this->actingAs($second)
             ->getJson("/api/projects/{$this->project->id}/review-queue/payroll/{$other->id}")
-            ->assertJsonPath('item.can_review', true);
+            ->assertJsonPath('item.can_review', false);
+        $this->actingAs($second)->postJson("/api/payroll-batches/{$other->id}/endorse")->assertForbidden();
     }
 
     public function test_a_realignment_above_the_available_amount_is_refused(): void

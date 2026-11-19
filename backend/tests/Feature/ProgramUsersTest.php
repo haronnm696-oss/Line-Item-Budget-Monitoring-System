@@ -139,7 +139,6 @@ class ProgramUsersTest extends TestCase
             ->postJson('/api/program/assignments', [
                 'user_id' => $user->id,
                 'project_id' => $project->id,
-                'role' => 'research-assistant',
             ])
             ->assertCreated();
 
@@ -147,7 +146,7 @@ class ProgramUsersTest extends TestCase
             'user_id' => $user->id,
             'project_id' => $project->id,
         ]);
-        $this->assertSame('research-assistant', $user->roleOn($project));
+        $this->assertSame('researcher', $user->roleOn($project));
 
         $this->actingAs($leader)
             ->postJson('/api/program/assignments', [
@@ -177,18 +176,18 @@ class ProgramUsersTest extends TestCase
             ->assertJsonPath('message', 'Deactivated users cannot be assigned to projects.');
     }
 
-    public function test_a_program_leader_can_edit_and_remove_a_project_role(): void
+    public function test_a_program_leader_can_fix_and_remove_a_project_role(): void
     {
         $leader = $this->userWithRole('program-leader');
         $user = $this->userWithRole('researcher');
         $project = $this->project();
-        $this->assign($user, $project, 'researcher');
+        $this->assign($user, $project, 'research-assistant');
 
         $this->actingAs($leader)
-            ->patchJson("/api/program/assignments/{$user->id}/{$project->id}", ['role' => 'research-assistant'])
+            ->patchJson("/api/program/assignments/{$user->id}/{$project->id}")
             ->assertOk();
 
-        $this->assertSame('research-assistant', $user->fresh()->roleOn($project));
+        $this->assertSame('researcher', $user->fresh()->roleOn($project));
 
         $this->actingAs($leader)
             ->deleteJson("/api/program/assignments/{$user->id}/{$project->id}", ['reason' => 'Moved to another project'])

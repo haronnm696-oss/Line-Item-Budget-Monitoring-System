@@ -58,7 +58,13 @@ class PurchaseRequestController extends Controller
 
     public function submit(Request $request, PurchaseRequest $purchaseRequest)
     {
-        return response()->json(['message' => 'Purchase request submitted to the Project Leader.', 'purchase_request' => $this->row($this->requests->submit($purchaseRequest, $request->user()))]);
+        $submitted = $this->requests->submit($purchaseRequest, $request->user());
+        // Made by the Project Leader: no Project Leader step.
+        $message = $submitted->workflow_status === 'endorsed'
+            ? 'Purchase request submitted. It was made by the Project Leader, so it skips the Project Leader approval.'
+            : 'Purchase request submitted to the Project Leader.';
+
+        return response()->json(['message' => $message, 'purchase_request' => $this->row($submitted)]);
     }
 
     public function endorse(Request $request, PurchaseRequest $purchaseRequest)
@@ -110,7 +116,7 @@ class PurchaseRequestController extends Controller
             'estimated_amount' => round((float) $row->estimated_amount, 2),
             'supplier' => $row->supplier,
             'workflow_status' => $row->workflow_status,
-            'workflow_label' => PurchaseRequestService::LABELS[$row->workflow_status] ?? $row->workflow_status,
+            'workflow_label' => PurchaseRequestService::label($row),
             'return_reason' => $row->return_reason,
             'documents_count' => (int) ($row->documents_count ?? $row->documents()->count()),
             'requested_by' => $person($row->requestedBy),

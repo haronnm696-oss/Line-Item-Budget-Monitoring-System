@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { nextStep } from '../../lib/submitMessage';
 import { useNavigate } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
@@ -56,8 +57,9 @@ export function useRecordActions({ projectId, onChanged }) {
     setFeedback(null);
     setBusyKey(item.key);
     try {
-      await apiWrite('post', SUBMIT_URL[item.type](item.id));
-      changed(`Submitted ${what(item)}. It is waiting for the Project Leader.`);
+      const data = await apiWrite('post', SUBMIT_URL[item.type](item.id));
+      // The server says where it went (Project Leader, Finance/Admin or Program Leader).
+      changed(`Submitted ${what(item)}. ${nextStep(data?.message)}`);
     } catch (error) {
       setFeedback({ tone: 'error', text: errorText(error, 'Could not submit. Please try again.') });
     } finally {

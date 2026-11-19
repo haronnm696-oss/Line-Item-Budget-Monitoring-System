@@ -25,6 +25,13 @@ use Illuminate\Validation\ValidationException;
  * One audit entry per step. The Project Leader is notified on submit,
  * fulfil and cancel; the requester on a decision (and on a cancel by
  * someone else).
+ *
+ * A project has one Project Leader and the maker never approves: a request
+ * made by the project's Project Leader (older data where they also hold an
+ * encoder role, or they became the Project Leader later) skips the Project
+ * Leader step. It is open for an expense at once (endorsed with
+ * pl_reviewed_by empty, "Approved without Project Leader step") and
+ * Finance/Admin is told; Finance/Admin then verifies the linked expense.
  */
 class PurchaseRequestService
 {
@@ -39,7 +46,20 @@ class PurchaseRequestService
         'cancelled' => 'Cancelled',
     ];
 
+    /** Label of an endorsed request that skipped the Project Leader step (made by the Project Leader). */
+    public const NO_LEADER_STEP = 'Approved without Project Leader step (made by the Project Leader)';
+
     private const ENCODERS = ['research-assistant', 'finance-admin'];
+
+    /** The stage label of one request. */
+    public static function label(PurchaseRequest $request): string
+    {
+        if ($request->workflow_status === 'endorsed' && $request->pl_reviewed_by === null) {
+            return self::NO_LEADER_STEP;
+        }
+
+        return self::LABELS[$request->workflow_status] ?? (string) $request->workflow_status;
+    }
     private const EDITABLE = ['draft', 'returned'];
     private const FIELDS = ['lib_category_id', 'description', 'quantity', 'estimated_amount', 'supplier'];
 
@@ -101,16 +121,43 @@ class PurchaseRequestService
             ]);
         }
 
-        $request = $this->moveRecord($request, 'submitted', $actor, 'submitted', self::EDITABLE, 'submitted', [
+        // Made by the project's Project Leader: no Project Leader step.
+        $byLeader = $this->makerLeadsProject($request->project_id, $request->requested_by);
+
+        $request = $this->moveRecord($request, $byLeader ? 'endorsed' : 'submitted', $actor, 'submitted', self::EDITABLE, 'submitted', [
             'submitted_at' => now(),
             'return_reason' => null,
             'pl_reviewed_by' => null,
             'pl_reviewed_at' => null,
         ]);
 
-        $this->notify($this->projectMembers($request->project_id, 'project-leader'), $request, 'submitted', $actor);
+        if ($byLeader) {
+            $this->notify($this->projectMembers($request->project_id, 'finance-admin'), $request, 'leader_submitted', $actor);
+        } else {
+            $this->notify($this->projectMembers($request->project_id, 'project-leader'), $request, 'submitted', $actor);
+        }
 
         return $request;
+    }
+
+    /**
+     * A submitted request made by the project's Project Leader has nobody to
+     * approve it: open it for an expense without the Project Leader step
+     * (one audit entry, "rerouted"). Returns false when it does not apply.
+     */
+    public function skipLeaderStep(PurchaseRequest $request, User $actor): bool
+    {
+        if ($request->workflow_status !== 'submitted' || ! $this->makerLeadsProject($request->project_id, $request->requested_by)) {
+            return false;
+        }
+
+        $this->moveRecord($request, 'endorsed', $actor, 'rerouted', ['submitted'], 'rerouted', [
+            'pl_reviewed_by' => null,
+            'pl_reviewed_at' => null,
+        ], 'Made by the Project Leader, so it skips the Project Leader approval.');
+        $this->notify($this->projectMembers($request->project_id, 'finance-admin'), $request->fresh(), 'leader_submitted', $actor);
+
+        return true;
     }
 
     public function endorse(PurchaseRequest $request, User $actor): PurchaseRequest
@@ -265,6 +312,7 @@ class PurchaseRequestService
         [$title, $message] = match ($event) {
             'submitted' => ['Purchase request waiting for your approval', "{$actor->name} submitted a purchase request: {$what}."],
             'endorsed' => ['Purchase request approved', "{$actor->name} (Project Leader) approved your purchase request: {$what}."],
+            'leader_submitted' => ['Purchase request by the Project Leader', "{$request->requestedBy?->name} (Project Leader) made a purchase request: {$what}. It skips the Project Leader approval; you verify the expense recorded for it."],
             'returned' => ['Purchase request returned to you', "{$actor->name} returned your purchase request: {$request->description}.{$because}"],
             'fulfilled' => ['Purchase request fulfilled', "{$actor->name} recorded an expense (₱" . number_format((float) $expense?->amount, 2) . ") that fulfils the purchase request: {$request->description}."],
             'cancelled' => ['Purchase request cancelled', "{$actor->name} cancelled the approved purchase request: {$request->description}.{$because}"],

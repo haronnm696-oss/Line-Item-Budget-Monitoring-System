@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { decideRegistration } from '../../api/program';
 import { formatDateTime } from '../../lib/datetime';
-import { ACCOUNT_ROLE_OPTIONS, PROJECT_ROLE_OPTIONS } from '../../lib/roles';
+import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
 
 let nextRowKey = 1;
-const newRow = (role = '') => ({ key: nextRowKey++, project_id: '', role });
+const newRow = () => ({ key: nextRowKey++, project_id: '' });
 
 function fieldErrorsFrom(error) {
   const errors = error?.response?.data?.errors ?? {};
@@ -17,9 +17,8 @@ function fieldErrorsFrom(error) {
  * if one row is wrong nothing is saved and that row shows why), or reject
  * with a required reason. The applicant is emailed either way.
  */
-export default function RegistrationReviewPanel({ user, projects, accountRoles, projectRoles, onClose, onDecided }) {
+export default function RegistrationReviewPanel({ user, projects, accountRoles, onClose, onDecided }) {
   const roleOptions = accountRoles?.length ? accountRoles : ACCOUNT_ROLE_OPTIONS;
-  const rowRoleOptions = projectRoles?.length ? projectRoles : PROJECT_ROLE_OPTIONS;
 
   const [role, setRole] = useState('');
   const [rows, setRows] = useState([]);
@@ -31,6 +30,7 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
   const titleRef = useRef(null);
 
   const programWide = role === 'program-leader';
+  const roleLabel = roleOptions.find((option) => option.slug === role)?.label ?? '';
 
   useEffect(() => { titleRef.current?.focus(); }, []);
 
@@ -46,9 +46,7 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
   }
 
   function addRow() {
-    // A new row starts with the account role when it is a project role.
-    const defaultRole = rowRoleOptions.some((option) => option.slug === role) ? role : '';
-    setRows((current) => [...current, newRow(defaultRole)]);
+    setRows((current) => [...current, newRow()]);
   }
 
   async function submit(decision) {
@@ -59,7 +57,6 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
       if (!programWide) {
         rows.forEach((row, index) => {
           if (!row.project_id) local[`assignments.${index}.project_id`] = 'Choose a project.';
-          if (!row.role) local[`assignments.${index}.role`] = 'Choose a role on this project.';
         });
       }
     } else if (!reason.trim()) {
@@ -78,7 +75,8 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
           decision,
           role,
           // A Program Leader is program-wide: project rows are never sent.
-          assignments: programWide ? [] : rows.map((row) => ({ project_id: Number(row.project_id), role: row.role })),
+          // The role on each project is the account role, so rows carry the project only.
+          assignments: programWide ? [] : rows.map((row) => ({ project_id: Number(row.project_id) })),
         }
         : { decision, remarks: reason.trim() };
       const data = await decideRegistration(user.id, payload);
@@ -147,6 +145,7 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
             </div>
 
             <h3 className="ld-panel-sub">Project assignments (optional)</h3>
+            {!programWide && <p className="ld-muted">The person works on each project in their account role{roleLabel ? ` (${roleLabel})` : ''}.</p>}
             {programWide ? (
               <p className="ld-muted">
                 <span aria-hidden="true">ℹ</span> A Program Leader oversees every project, so no project rows are needed.
@@ -185,22 +184,9 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
                             ))}
                           </select>
                         </div>
-                        <div className="program-field">
-                          <label htmlFor={`rr-row-role-${row.key}`}>Role on this project</label>
-                          <select
-                            id={`rr-row-role-${row.key}`}
-                            className="program-select"
-                            value={row.role}
-                            disabled={busy}
-                            aria-invalid={roleError ? 'true' : undefined}
-                            onChange={(event) => updateRow(row.key, { role: event.target.value })}
-                          >
-                            <option value="">Choose a role</option>
-                            {rowRoleOptions.map((option) => (
-                              <option key={option.slug} value={option.slug}>{option.label}</option>
-                            ))}
-                          </select>
-                        </div>
+                        <p className="pu-ro-value rr-row-role">
+                          {roleLabel ? `as ${roleLabel}` : 'Role: choose the account role above'}
+                        </p>
                         <button
                           type="button"
                           className="program-btn"

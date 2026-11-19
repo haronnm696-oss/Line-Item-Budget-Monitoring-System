@@ -77,6 +77,7 @@ class AuditEntryPresenter
         'activated' => 'Account activated',
         'deactivated' => 'Account deactivated',
         'role_changed' => 'Role changed',
+        'rerouted' => 'Routed past the Project Leader step',
         'Password reset' => 'Password reset',
     ];
 

@@ -58,8 +58,9 @@ class ProgramUsersDirectoryTest extends TestCase
 
         $this->assertSame('Research Assistant', $rows['Norjannah Haron']['role_label']);
         $this->assertSame([
-            ['project_id' => $this->urban->id, 'project' => 'Enhancing Urban Mobility in Marawi City', 'project_code' => 'MOST-RD-2026-001', 'role_slug' => 'research-assistant', 'role_label' => 'Research Assistant', 'monthly_rate' => null, 'allowance' => null],
-            ['project_id' => $this->goat->id, 'project' => 'Halal Goat Value Chain Development', 'project_code' => 'MOST-RD-2026-002', 'role_slug' => 'researcher', 'role_label' => 'Researcher', 'monthly_rate' => null, 'allowance' => null],
+            ['project_id' => $this->urban->id, 'project' => 'Enhancing Urban Mobility in Marawi City', 'project_code' => 'MOST-RD-2026-001', 'role_slug' => 'research-assistant', 'role_label' => 'Research Assistant', 'role_mismatch' => false, 'monthly_rate' => null, 'allowance' => null],
+            // Older data: Researcher on a project while the account is a Research Assistant.
+            ['project_id' => $this->goat->id, 'project' => 'Halal Goat Value Chain Development', 'project_code' => 'MOST-RD-2026-002', 'role_slug' => 'researcher', 'role_label' => 'Researcher', 'role_mismatch' => true, 'monthly_rate' => null, 'allowance' => null],
         ], $rows['Norjannah Haron']['assignments']);
         $this->assertFalse($rows['Norjannah Haron']['program_wide']);
         $this->assertSame($assistant->id, $rows['Norjannah Haron']['id']);
@@ -353,28 +354,41 @@ class ProgramUsersDirectoryTest extends TestCase
 
     // ------------------------------------------- edit project assignments
 
-    public function test_changing_a_project_role_writes_one_entry_and_no_entry_when_unchanged(): void
+    public function test_fix_sets_a_mismatched_project_role_to_the_account_role_with_one_entry(): void
     {
+        // Older data: a Research Assistant account holding a Researcher row.
         $person = AuditLogger::muted(function () {
-            $person = $this->person('researcher', 'Sittie Dimaporo', 'MSU-11048');
+            $person = $this->person('research-assistant', 'Sittie Dimaporo', 'MSU-11048');
             $this->assign($person, $this->urban, 'researcher');
 
             return $person;
         });
 
+        $row = collect($this->list()['users'])->firstWhere('id', $person->id);
+        $this->assertTrue($row['assignments'][0]['role_mismatch']);
+
+        // A role other than the account role is refused.
         $this->actingAs($this->leader)
-            ->patchJson("/api/program/assignments/{$person->id}/{$this->urban->id}", ['role' => 'research-assistant'])
+            ->patchJson("/api/program/assignments/{$person->id}/{$this->urban->id}", ['role' => 'finance-admin'])
+            ->assertStatus(422);
+        $this->assertSame(0, AuditTrail::count());
+
+        // Fix: no role sent; the row takes the account role.
+        $this->actingAs($this->leader)
+            ->patchJson("/api/program/assignments/{$person->id}/{$this->urban->id}")
             ->assertOk();
         $this->assertSame('research-assistant', ProjectUser::where('user_id', $person->id)->first()->role->slug);
 
         $entry = AuditTrail::sole();
         $this->assertSame('assignment_updated', $entry->action);
         $this->assertSame(['researcher', 'research-assistant'], [$entry->old_values['role'], $entry->new_values['role']]);
+        $row = collect($this->list()['users'])->firstWhere('id', $person->id);
+        $this->assertFalse($row['assignments'][0]['role_mismatch']);
 
         $this->actingAs($this->leader)
-            ->patchJson("/api/program/assignments/{$person->id}/{$this->urban->id}", ['role' => 'research-assistant'])
+            ->patchJson("/api/program/assignments/{$person->id}/{$this->urban->id}")
             ->assertOk();
-        $this->assertSame(1, AuditTrail::count(), 'same role: nothing logged');
+        $this->assertSame(1, AuditTrail::count(), 'already matching: nothing logged');
     }
 
     public function test_removal_needs_a_reason_writes_one_entry_and_keeps_history(): void
@@ -426,14 +440,16 @@ class ProgramUsersDirectoryTest extends TestCase
             return [$only, $closed];
         });
 
+        // Changing the account role would move the project row too.
         $this->actingAs($this->leader)
-            ->patchJson("/api/program/assignments/{$only->id}/{$this->urban->id}", ['role' => 'researcher'])
+            ->patchJson("/api/program/users/{$only->id}/role", ['role' => 'researcher'])
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Assign another Project Leader to this project first.');
+            ->assertJsonPath('message', "Enhancing Urban Mobility in Marawi City would be left without a Project Leader. Choose the new Project Leader in the project's set-up first; it replaces this one.");
+        $this->assertSame('project-leader', $only->fresh()->primaryRole->slug);
         $this->actingAs($this->leader)
             ->deleteJson("/api/program/assignments/{$only->id}/{$this->urban->id}", ['reason' => 'Leaving'])
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Assign another Project Leader to this project first.');
+            ->assertJsonPath('message', "This project would be left without a Project Leader. Choose the new Project Leader in the project's set-up first; it replaces this one.");
         $this->assertSame(0, AuditTrail::count());
 
         // A finished project has no such guard.
@@ -447,8 +463,9 @@ class ProgramUsersDirectoryTest extends TestCase
             $this->assign($second, $this->urban, 'project-leader');
         });
         $this->actingAs($this->leader)
-            ->patchJson("/api/program/assignments/{$only->id}/{$this->urban->id}", ['role' => 'researcher'])
+            ->patchJson("/api/program/users/{$only->id}/role", ['role' => 'researcher'])
             ->assertOk();
+        $this->assertSame('researcher', ProjectUser::where('user_id', $only->id)->where('project_id', $this->urban->id)->first()->role->slug);
         $this->assertSame(2, AuditTrail::count());
     }
 

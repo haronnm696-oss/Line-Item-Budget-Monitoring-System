@@ -60,7 +60,12 @@ class ExpenseController extends Controller
     {
         $expense = $this->workflow->submit($expense, $request->user());
 
-        return response()->json(['message' => 'Expense submitted to the Project Leader.', 'expense' => $this->row($expense)]);
+        // Recorded by the Project Leader: no Project Leader step.
+        $message = $expense->workflow_status === 'endorsed'
+            ? 'Expense submitted. It was recorded by the Project Leader, so it goes straight to Finance/Admin.'
+            : 'Expense submitted to the Project Leader.';
+
+        return response()->json(['message' => $message, 'expense' => $this->row($expense)]);
     }
 
     public function endorse(Request $request, Expense $expense)

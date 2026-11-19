@@ -51,13 +51,12 @@ class ProgramUserController extends Controller
             'remarks' => ['nullable', 'string', 'max:2000', 'required_if:decision,rejected'],
             'assignments' => ['nullable', 'array', 'max:50'],
             'assignments.*.project_id' => ['required', 'integer', 'exists:projects,id'],
-            'assignments.*.role' => ['required', 'string', Rule::in(ProgramUserService::PROJECT_ROLES)],
+            // Optional: the role on each project is the account role.
+            'assignments.*.role' => ['nullable', 'string'],
         ], [
             'remarks.required_if' => 'A reason for rejection is required.',
             'assignments.*.project_id.required' => 'Choose a project.',
             'assignments.*.project_id.exists' => 'This project no longer exists.',
-            'assignments.*.role.required' => 'Choose a role on this project.',
-            'assignments.*.role.in' => 'Choose a project role (Project Leader, Research Assistant, Researcher or Finance/Admin Staff).',
         ]);
 
         $user = $this->users->decideRegistration(
@@ -248,13 +247,18 @@ class ProgramUserController extends Controller
         $data = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'project_id' => ['required', 'integer', 'exists:projects,id'],
-            'role' => ['required', 'string', Rule::in(ProgramUserService::PROJECT_ROLES)],
+            // Optional: the role on a project is always the account role
+            // (a different one is refused by the service).
+            'role' => ['nullable', 'string'],
+        ], [
+            'user_id.required' => 'Choose a user.',
+            'project_id.required' => 'Choose a project.',
         ]);
 
         $user = User::findOrFail($data['user_id']);
         $project = Project::findOrFail($data['project_id']);
 
-        $this->users->assign($user, $project, $data['role'], $request->user());
+        $this->users->assign($user, $project, $data['role'] ?? null, $request->user());
 
         return response()->json([
             'message' => 'User assigned to project.',
@@ -264,15 +268,16 @@ class ProgramUserController extends Controller
 
     public function updateAssignment(Request $request, User $user, Project $project)
     {
+        // "Fix": the role becomes the account role; a different one is refused.
         $data = $request->validate([
-            'role' => ['required', 'string', Rule::in(ProgramUserService::PROJECT_ROLES)],
+            'role' => ['nullable', 'string'],
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $this->users->updateAssignment($user, $project, $data['role'], $request->user(), $data['reason'] ?? null);
+        $this->users->updateAssignment($user, $project, $data['role'] ?? null, $request->user(), $data['reason'] ?? null);
 
         return response()->json([
-            'message' => 'Project role updated.',
+            'message' => 'Role on this project now matches the account role.',
             'user' => $this->userPayload($user->fresh()->load('primaryRole', 'projectUsers.project', 'projectUsers.role')),
         ]);
     }

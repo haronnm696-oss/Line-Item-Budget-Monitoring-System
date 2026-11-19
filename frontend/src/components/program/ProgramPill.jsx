@@ -28,6 +28,8 @@ const PILL = {
   Returned: ['risk', '↩'],
   Withdrawn: ['neutral', '⊘'],
   'Approved by Project Leader': ['healthy', '✓'],
+  'Approved without Project Leader step (made by the Project Leader)': ['healthy', '✓'],
+  'Waiting for Finance/Admin verification': ['watch', '⚠'],
   Verified: ['healthy', '✓'],
   Fulfilled: ['healthy', '✓'],
   Cancelled: ['neutral', '⊘'],

@@ -105,6 +105,25 @@ trait RunsWorkflow
             ->values();
     }
 
+    /**
+     * A project has one Project Leader, and the maker never approves their
+     * own item: when the maker holds the Project Leader role on the project
+     * (also in older data where they hold another role there too), nobody
+     * is left for the Project Leader step, so the workflow routes around it.
+     */
+    protected function makerLeadsProject(?int $projectId, $makerId): bool
+    {
+        if (! $projectId || ! $makerId) {
+            return false;
+        }
+
+        return ProjectUser::query()
+            ->where('project_id', $projectId)
+            ->where('user_id', $makerId)
+            ->whereHas('role', fn ($q) => $q->where('slug', 'project-leader'))
+            ->exists();
+    }
+
     /** The user with this id, when active. */
     protected function activeUser($userId): Collection
     {
