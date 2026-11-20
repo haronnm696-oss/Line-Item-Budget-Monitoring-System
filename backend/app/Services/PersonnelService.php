@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Project personnel (the team appointed by Special Order, paid PS honoraria
- * through payroll). The one place pay is kept; payroll reads payableFor().
+ * through payroll). The one place pay is kept; payroll reads recordsByPerson().
  *
  * Access:
  *   edit     Program Leader
@@ -147,26 +147,23 @@ class PersonnelService
     }
 
     /**
-     * Payroll: one record per person whose period overlaps the month, the
-     * person still active and assigned to the project. Keyed by user id.
+     * Payroll: every personnel record of the project whose person is still
+     * active and assigned to it, grouped by user id (a person may have more
+     * than one Special Order over time; their periods never overlap).
      *
-     * @return Collection<int, ProjectPersonnel>
+     * @return Collection<int, Collection<int, ProjectPersonnel>>
      */
-    public function payableFor(Project $project, int $year, int $month): Collection
+    public function recordsByPerson(Project $project): Collection
     {
-        $start = Carbon::create($year, $month, 1)->toDateString();
-        $end = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
         $members = ProjectUser::query()->where('project_id', $project->id)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
 
         return ProjectPersonnel::query()
             ->where('project_id', $project->id)
-            ->where(fn ($q) => $q->whereNull('effective_from')->orWhere('effective_from', '<=', $end))
-            ->where(fn ($q) => $q->whereNull('effective_to')->orWhere('effective_to', '>=', $start))
             ->with('user')
             ->orderBy('effective_from')->orderBy('id')
             ->get()
             ->filter(fn (ProjectPersonnel $record) => $record->user && $record->user->is_active && in_array((int) $record->user_id, $members, true))
-            ->keyBy('user_id');
+            ->groupBy(fn (ProjectPersonnel $record) => (int) $record->user_id);
     }
 
     // ---------------------------------------------------------------- rows

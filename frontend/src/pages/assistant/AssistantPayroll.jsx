@@ -20,26 +20,28 @@ import StagePill from '../../components/assistant/StagePill';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
 import { peso } from '../../components/money';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
-import RatesLabelBanner from '../../components/payroll/RatesLabelBanner';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-const RATES_NOT_SET = 'Deduction rates are not set yet. Ask your Program Leader or Finance/Admin.';
 
 /**
- * Payroll (Research Assistant): prepare the month's batch for the project
- * (rows are computed by the server from the pay rates and the deduction
- * rules), review the rows, upload the payroll file and submit the batch;
- * edit and resubmit when it is returned. Nothing is computed here.
+ * Payroll (Research Assistant): prepare the batch for a pay period of
+ * consecutive months (one month or a quarter) for the project. The server
+ * computes each row from Personnel: monthly honorarium x months the
+ * appointment is effective in the period, e.g. "(8,800 x 3 months) =
+ * 26,400.00". Project honoraria have no deductions and no allowances, so
+ * net = gross. Review the rows, upload the payroll file and submit; edit and
+ * resubmit when it is returned. Nothing is computed here.
  */
 export default function AssistantPayroll() {
   const { user } = useAuth();
   const picker = useAssignedProject({ role: 'research-assistant' });
   const { get, update } = useUrlQuery();
   const month = MONTH_RE.test(get('month')) ? get('month') : todayInManila().slice(0, 7);
+  const toParam = MONTH_RE.test(get('to')) && get('to') >= month ? get('to') : month;
   const open = parseOpen(get('open'));
   const projectId = picker.projectId;
 
-  const payroll = useApiData(projectId ? `${ENDPOINTS.payroll(projectId)}?month=${month}` : null);
+  const payroll = useApiData(projectId ? `${ENDPOINTS.payroll(projectId)}?month=${month}&to=${toParam}` : null);
   const batch = payroll.data?.batch ?? null;
   const item = useApiData(projectId && batch ? ENDPOINTS.mySubmission(projectId, 'payroll', batch.id) : null);
   const documents = useApiData(batch ? ENDPOINTS.payrollBatchDocuments(batch.id) : null);
@@ -54,16 +56,21 @@ export default function AssistantPayroll() {
   const run = payroll.data;
   const rows = Array.isArray(run?.rows) ? run.rows : [];
   const psItems = Array.isArray(run?.ps_line_items) ? run.ps_line_items : [];
-  const unsetRules = Array.isArray(run?.unset_rules) ? run.unset_rules : [];
-  const ratesMissing = unsetRules.length > 0;
   const docs = Array.isArray(documents.data?.documents) ? documents.data.documents : [];
   const hasPayrollFile = docs.some((doc) => doc.document_type === 'payroll_file');
   const editable = batch ? batch.editable : true;
   const record = item.data?.item ?? null;
   const chosenLine = lineItemId || (psItems[0] ? String(psItems[0].id) : '');
   const label = run?.month_label ?? month;
+  // The period shown: the batch's own period, or the chosen months.
+  const from = run?.month ?? month;
+  const to = run?.to ?? toParam;
   const missingPeople = Math.max(0, (Number(run?.rated_members) || 0) - rows.length);
-  const unrated = Array.isArray(run?.unrated_members) ? run.unrated_members : [];
+  const notIncluded = Array.isArray(run?.not_included) ? run.not_included : [];
+  const notEffective = notIncluded.filter((person) => person.reason === 'not_effective');
+  const zeroPay = notIncluded.filter((person) => person.reason === 'zero');
+  const legacy = Boolean(run?.legacy_amounts);
+  const needsRecompute = Boolean(batch?.needs_recompute);
 
   async function act(key, send, okText) {
     setBusy(key);
@@ -79,9 +86,9 @@ export default function AssistantPayroll() {
     }
   }
 
-  // The server's message names anyone left out ("Not included: no pay rate set for …").
-  const prepare = () => act('prepare', () => apiWrite('post', ENDPOINTS.payroll(projectId), { month, lib_category_id: Number(chosenLine) }), (data) => `${data?.message ?? `Payroll for ${label} prepared and computed.`} Review the rows, upload the payroll file, then submit.`);
-  const recompute = () => act('compute', () => apiWrite('post', ENDPOINTS.computePayroll(projectId), { month }), (data) => data?.message ?? `Payroll for ${label} recomputed from the current pay rates.`);
+  // The server's message names anyone left out ("Not included: appointment not effective: …").
+  const prepare = () => act('prepare', () => apiWrite('post', ENDPOINTS.payroll(projectId), { month: from, to, lib_category_id: Number(chosenLine) }), (data) => `${data?.message ?? `Payroll for ${label} prepared and computed.`} Review the rows, upload the payroll file, then submit.`);
+  const recompute = () => act('compute', () => apiWrite('post', ENDPOINTS.computePayroll(projectId), { month: from }), (data) => data?.message ?? `Payroll for ${label} recomputed from Personnel.`);
   const submit = () => act('submit', () => apiWrite('post', ENDPOINTS.payrollBatchStep(batch.id, 'submit')), `Payroll for ${label} submitted.`);
   // Payroll register of this month: offered only once the batch is verified
   // (the server lists verified batches only).
@@ -100,15 +107,15 @@ export default function AssistantPayroll() {
     }
   }
   const registerPdf = () => download('register-pdf', async () => {
-    const register = await fetchPayrollRegister(projectId, { month });
+    const register = await fetchPayrollRegister(projectId, { month: from });
     printHtmlDocument(registerDocumentHtml(register, { escape: escapeHtml, money: peso, generated: formatDate(new Date()) }));
   }, `Payroll register for ${label} opened for printing. Choose "Save as PDF" to keep a copy.`);
   const registerCsv = () => download('register-csv', async () => {
-    const { blob, filename } = await downloadPayrollRegisterCsv(projectId, { month });
+    const { blob, filename } = await downloadPayrollRegisterCsv(projectId, { month: from });
     saveBlob(blob, filename);
   }, `Payroll register for ${label} downloaded (CSV).`);
 
-  const batchRecord = batch ? { key: `payroll-${batch.id}`, type: 'payroll', id: batch.id, type_label: 'Payroll', reference: `PAY-${month}`, title: `Payroll ${label}` } : null;
+  const batchRecord = batch ? { key: `payroll-${batch.id}`, type: 'payroll', id: batch.id, type_label: 'Payroll', reference: batch.reference ?? `PAY-${from}`, title: `Payroll ${label}` } : null;
 
   return (
     <div className="ld-page">
@@ -117,22 +124,25 @@ export default function AssistantPayroll() {
           <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Payroll</h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Computed from the pay rates and deduction rules; payroll is not part of LIB spent
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Monthly honorarium x months effective, from Personnel; no deductions or allowances; payroll is not part of LIB spent
           </p>
         </div>
         {projectId && (
           <div className="pl-head-actions">
             <ProjectSelect picker={picker} id="ra-payroll-project" />
             <div className="program-field">
-              <label htmlFor="ra-payroll-month">Month</label>
+              <label htmlFor="ra-payroll-month">First month</label>
               <input id="ra-payroll-month" className="program-input" type="month" value={month}
-                onChange={(event) => { if (MONTH_RE.test(event.target.value)) { actions.setFeedback(null); update({ month: event.target.value }); } }} />
+                onChange={(event) => { if (MONTH_RE.test(event.target.value)) { actions.setFeedback(null); update({ month: event.target.value, to: event.target.value > toParam ? event.target.value : toParam }); } }} />
+            </div>
+            <div className="program-field">
+              <label htmlFor="ra-payroll-to">Last month</label>
+              <input id="ra-payroll-to" className="program-input" type="month" value={toParam} min={month}
+                onChange={(event) => { if (MONTH_RE.test(event.target.value) && event.target.value >= month) { actions.setFeedback(null); update({ to: event.target.value }); } }} />
             </div>
           </div>
         )}
       </div>
-
-      <RatesLabelBanner label={run?.rates_label} />
 
       {actions.feedback && (
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
@@ -142,15 +152,21 @@ export default function AssistantPayroll() {
         <LoadState state={payroll} loadingText="Loading payroll…">
           {run && (
             <>
-              {ratesMissing && (
-                <div className="program-banner error" role="alert">
-                  <b>⚠ {RATES_NOT_SET}</b> Not set: {unsetRules.join(', ')}. You can prepare and review the rows, but the batch cannot be submitted until the rates are set.
+              {notEffective.length > 0 && (
+                <div className="program-banner info" role="status">
+                  <b><span aria-hidden="true">ⓘ</span> Not included: appointment not effective</b> in {label}: {notEffective.map((person) => person.name).join(', ')}. Their Special Order does not cover any month of this period.
                 </div>
               )}
 
-              {unrated.length > 0 && (
+              {zeroPay.length > 0 && (
                 <div className="program-banner info" role="status">
-                  <b>ⓘ Not included (honorarium ₱0.00 this month): {unrated.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until the Program Leader sets their honorarium under Personnel.
+                  <b><span aria-hidden="true">ⓘ</span> Not included (honorarium ₱0.00): {zeroPay.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until the Program Leader sets their honorarium under Personnel.
+                </div>
+              )}
+
+              {needsRecompute && (
+                <div className="program-banner error" role="alert">
+                  <b><span aria-hidden="true">⚠</span> Recompute this payroll before submitting.</b> It was computed with deductions or allowances, which project honoraria do not have.
                 </div>
               )}
 
@@ -159,11 +175,13 @@ export default function AssistantPayroll() {
                   <div className="program-card-head">
                     <div>
                       <div className="program-card-title">Prepare the {label} payroll</div>
-                      <div className="program-card-sub">One row per project member with a monthly rate, computed by the system</div>
+                      <div className="program-card-sub">One row per person whose appointment is effective in the period: monthly honorarium x months effective</div>
                     </div>
                   </div>
-                  {Number(run.rated_members) === 0 ? (
-                    <p className="ld-empty">No one on this project has a monthly rate yet. Ask Finance/Admin or your Program Leader to set pay rates.</p>
+                  {run.overlap_text ? (
+                    <p className="ld-empty" role="alert"><span aria-hidden="true">⊘</span> {run.overlap_text}</p>
+                  ) : Number(run.rated_members) === 0 ? (
+                    <p className="ld-empty">No one on this project has an appointment effective in {label} with a monthly honorarium. Ask your Program Leader to add personnel.</p>
                   ) : psItems.length === 0 ? (
                     <p className="ld-empty">This project has no Personal Services (PS) line item to charge payroll to.</p>
                   ) : (
@@ -186,7 +204,7 @@ export default function AssistantPayroll() {
                     <div className="program-card-head">
                       <div>
                         <div className="program-card-title">{label} payroll</div>
-                        <div className="program-card-sub">{rows.length} {rows.length === 1 ? 'person' : 'people'} · PAY-{month}</div>
+                        <div className="program-card-sub">{rows.length} {rows.length === 1 ? 'person' : 'people'} · {batch.months} {batch.months === 1 ? 'month' : 'months'} · {batch.reference}</div>
                       </div>
                       <StagePill status={batch.workflow_status} />
                     </div>
@@ -208,11 +226,11 @@ export default function AssistantPayroll() {
                         </button>
                       </div>
                     )}
-                    {!verified && <p className="ld-hint">The payroll register for {label} can be downloaded once this month is verified.</p>}
+                    {!verified && <p className="ld-hint">The payroll register for {label} can be downloaded once this payroll is verified.</p>}
 
                     <div className="ra-payroll-totals">
                       <div className="ra-balance"><span>Gross</span><b>{peso(run.totals.gross)}</b></div>
-                      <div className="ra-balance"><span>Deductions</span><b>{peso(run.totals.deductions)}</b></div>
+                      {legacy && <div className="ra-balance"><span>Recorded deductions</span><b>{peso(run.totals.recorded_deductions)}</b></div>}
                       <div className="ra-balance is-available"><span>Net pay</span><b>{peso(run.totals.net)}</b></div>
                     </div>
 
@@ -222,10 +240,9 @@ export default function AssistantPayroll() {
                         <thead>
                           <tr>
                             <th scope="col">Name</th>
-                            <th scope="col" className="num">Basic</th>
-                            <th scope="col" className="num">Allowance</th>
+                            <th scope="col">Computation</th>
                             <th scope="col" className="num">Gross</th>
-                            <th scope="col" className="num">Deductions</th>
+                            {legacy && <th scope="col" className="num">Recorded deductions</th>}
                             <th scope="col" className="num">Net</th>
                             {editable && <th scope="col"><span className="pa-sr-only">Actions</span></th>}
                           </tr>
@@ -237,10 +254,9 @@ export default function AssistantPayroll() {
                                 <div className="project-name">{row.name ?? '—'}</div>
                                 <div className="project-code">{[row.position, row.category].filter(Boolean).join(' · ')}</div>
                               </td>
-                              <td className="num">{peso(row.basic)}</td>
-                              <td className="num">{peso(row.allowance)}</td>
+                              <td>{row.computation}</td>
                               <td className="num">{peso(row.gross)}</td>
-                              <td className="num" title={row.deduction_items.map((d) => `${d.type}: ${peso(d.amount)}`).join('\n')}>{peso(row.deductions)}</td>
+                              {legacy && <td className="num">{peso(row.recorded_deductions)}</td>}
                               <td className="num ld-amount">{peso(row.net)}</td>
                               {editable && (
                                 <td><button type="button" className="program-btn sm" onClick={() => setEditingRow(row)}>Edit</button></td>
@@ -250,8 +266,8 @@ export default function AssistantPayroll() {
                         </tbody>
                       </table>
                     </div>
-                    {run.deductionBreakdown.length > 0 && (
-                      <p className="ld-muted">Deductions: {run.deductionBreakdown.map((d) => `${d.type} ${peso(d.amount)}`).join(' · ')}</p>
+                    {legacy && (
+                      <p className="ld-muted">Recorded before deductions and allowances were removed; a verified payroll stays as recorded.</p>
                     )}
 
                     {editable && (
@@ -259,14 +275,14 @@ export default function AssistantPayroll() {
                         <button type="button" className="program-btn" disabled={busy !== null} onClick={recompute}>{busy === 'compute' ? 'Computing…' : 'Recompute'}</button>
                         {missingPeople > 0 && psItems.length > 0 && (
                           <button type="button" className="program-btn" disabled={busy !== null} onClick={prepare}>
-                            Add {missingPeople} {missingPeople === 1 ? 'person' : 'people'} with a pay rate
+                            Add {missingPeople} {missingPeople === 1 ? 'person' : 'people'} effective in this period
                           </button>
                         )}
                         <button type="button" className="program-btn" onClick={() => actions.upload(batchRecord, { title: 'Upload payroll file' })}>Upload payroll file</button>
                         <button
                           type="button"
                           className="program-btn primary"
-                          disabled={busy !== null || ratesMissing || !hasPayrollFile || rows.length === 0}
+                          disabled={busy !== null || needsRecompute || !hasPayrollFile || rows.length === 0}
                           onClick={submit}
                         >
                           {busy === 'submit' ? 'Submitting…' : batch.workflow_status === 'returned' ? 'Resubmit batch' : 'Submit batch'}
@@ -344,24 +360,24 @@ function OwnDocuments({ docs, onRemoved, onError }) {
   );
 }
 
-/** Edit one row's basic rate and allowance; the server recomputes the deductions. */
+/** Edit one row's monthly honorarium; the server recomputes honorarium x months (net = gross). */
 function RowDialog({ row, onClose, onDone }) {
   const [basic, setBasic] = useState(String(row.basic));
-  const [allowance, setAllowance] = useState(String(row.allowance));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const months = Number(row.months) || 1;
 
   async function save(event) {
     event.preventDefault();
-    if (!(Number(basic) > 0) || !(Number(allowance) >= 0)) {
-      setError('Enter a basic rate above zero and an allowance of zero or more.');
+    if (!(Number(basic) > 0)) {
+      setError('Enter a monthly honorarium above zero.');
       return;
     }
     setBusy(true);
     setError('');
     try {
-      await apiWrite('patch', ENDPOINTS.payrollEntry(row.id), { basic_rate: Number(basic), allowance: Number(allowance) });
-      onDone(`Updated ${row.name}'s payroll row; deductions and net pay were recomputed.`);
+      await apiWrite('patch', ENDPOINTS.payrollEntry(row.id), { basic_rate: Number(basic) });
+      onDone(`Updated ${row.name}'s payroll row; the amount was recomputed (honorarium x ${months} ${months === 1 ? 'month' : 'months'}).`);
     } catch (failure) {
       setError(errorText(failure, 'Could not save. Please try again.'));
       setBusy(false);
@@ -374,18 +390,14 @@ function RowDialog({ row, onClose, onDone }) {
         <div className="program-modal-head">
           <div>
             <div className="program-modal-title" id="ra-row-title">Edit payroll row</div>
-            <div className="program-card-sub">{row.name}{row.position ? ` · ${row.position}` : ''}</div>
+            <div className="program-card-sub">{row.name}{row.position ? ` · ${row.position}` : ''} · {row.computation}</div>
           </div>
           <button type="button" className="program-icon-btn" onClick={onClose} aria-label="Close" disabled={busy}>×</button>
         </div>
         <div className="program-form-grid">
           <div className="program-field">
-            <label htmlFor="ra-row-basic">Basic rate (₱)</label>
+            <label htmlFor="ra-row-basic">Monthly honorarium (₱), for {months} {months === 1 ? 'month' : 'months'}</label>
             <input id="ra-row-basic" className="program-input" type="number" min="0.01" step="0.01" value={basic} onChange={(event) => setBasic(event.target.value)} disabled={busy} />
-          </div>
-          <div className="program-field">
-            <label htmlFor="ra-row-allowance">Allowance (₱)</label>
-            <input id="ra-row-allowance" className="program-input" type="number" min="0" step="0.01" value={allowance} onChange={(event) => setAllowance(event.target.value)} disabled={busy} />
           </div>
         </div>
         {error && <div className="field-err" role="alert">{error}</div>}

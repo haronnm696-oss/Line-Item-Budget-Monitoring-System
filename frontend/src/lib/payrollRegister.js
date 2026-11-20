@@ -1,10 +1,11 @@
 // Payroll register (GET /api/projects/:id/payroll-register): verified
-// payroll batches only, one block per month, one row per person, with each
-// deduction itemized and monthly totals. Shared by Reports (PDF preview)
+// payroll batches only, one block per pay period, one row per person with
+// the computation "(8,800 x 3 months) = 26,400.00", and period totals.
+// Project honoraria have no deductions and no allowances (net = gross);
+// batches verified before that rule stay as recorded, and only then a
+// "Recorded deductions" column is shown. Shared by Reports (PDF preview)
 // and the Research Assistant's Payroll page. Kept free of JSX so it can be
 // tested; the CSV is built by the backend.
-
-import { ratesLabelHtml } from './payrollRatesLabel.js';
 
 /** Reports page period -> API ?period=. */
 export const REGISTER_PERIOD = {
@@ -14,39 +15,35 @@ export const REGISTER_PERIOD = {
 };
 
 /**
- * Flat rows for a table: each person, then a "Month total" row per month,
- * then the grand total. `kind` is 'person' | 'month' | 'grand'.
+ * Flat rows for a table: each person, then a "Period total" row per pay
+ * period, then the grand total. `kind` is 'person' | 'month' | 'grand'.
  */
 export function registerRows(register) {
   const months = Array.isArray(register?.months) ? register.months : [];
   const rows = [];
   months.forEach((month) => {
     (month.rows ?? []).forEach((row) => rows.push({ kind: 'person', month: month.month_label, ...row }));
-    rows.push({ kind: 'month', month: month.month_label, name: 'Month total', position: '', ...month.totals });
+    rows.push({ kind: 'month', month: month.month_label, name: 'Period total', position: '', computation: '', ...month.totals });
   });
-  if (months.length > 0) rows.push({ kind: 'grand', month: 'Grand total', name: '', position: '', ...register.totals });
+  if (months.length > 0) rows.push({ kind: 'grand', month: 'Grand total', name: '', position: '', computation: '', ...register.totals });
   return rows;
 }
 
-/** Column definitions: fixed money columns around one column per deduction type. */
+/** Column definitions. "Recorded deductions" only when an older verified batch has some. */
 export function registerColumns(register) {
-  const types = Array.isArray(register?.deduction_types) ? register.deduction_types : [];
   return [
-    { key: 'month', label: 'Month' },
+    { key: 'month', label: 'Pay period' },
     { key: 'name', label: 'Name' },
     { key: 'position', label: 'Position' },
-    { key: 'monthly_rate', label: 'Monthly rate', money: true },
-    { key: 'allowance', label: 'Allowance', money: true },
+    { key: 'computation', label: 'Computation' },
     { key: 'gross', label: 'Gross pay', money: true },
-    ...types.map((type) => ({ key: `deduction:${type}`, label: type, money: true, deduction: type })),
-    { key: 'total_deductions', label: 'Total deductions', money: true },
+    ...(register?.has_recorded_deductions ? [{ key: 'recorded_deductions', label: 'Recorded deductions', money: true }] : []),
     { key: 'net', label: 'Net pay', money: true },
   ];
 }
 
 /** A cell's raw value (number for money columns). */
 export function registerCell(row, column) {
-  if (column.deduction) return Number(row.deductions?.[column.deduction]) || 0;
   const value = row[column.key];
   return column.money ? Number(value) || 0 : (value ?? '');
 }
@@ -84,7 +81,6 @@ export function registerDocumentHtml(register, { escape, money, generated }) {
     body { font-family: 'Public Sans', system-ui, sans-serif; font-size: 10.5px; color: #221D1A; line-height: 1.4; }
     h1 { font-size: 16px; color: #5E1B25; margin: 0 0 4px; }
     .meta { font-size: 10px; color: #6E655E; margin-bottom: 12px; }
-    .rates-label { border: 1px solid #9A6B10; background: #F8EFD8; color: #9A6B10; font-weight: 700; padding: 6px 10px; margin: 0 0 12px; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #F7F6F2; color: #6E655E; font-weight: 600; text-align: left; padding: 5px 6px; border: 1px solid #CFC9BC; }
     td { padding: 4px 6px; border: 1px solid #E4E0D7; }
@@ -93,11 +89,10 @@ export function registerDocumentHtml(register, { escape, money, generated }) {
   </style>
 </head>
 <body>
-  ${ratesLabelHtml(register?.rates_label, escape)}
   <h1>${escape(title)}</h1>
   <div class="meta">${escape(project.title ?? '')} (${escape(project.code ?? '')}) · Generated ${escape(generated ?? '')}</div>
   ${registerTableHtml(register, escape, money)}
-  <div class="footer">Verified payroll batches only. Payroll is not part of LIB spent. Mindanao State University–Main Campus · LIB Monitoring System.</div>
+  <div class="footer">Verified payroll batches only. Monthly honorarium x months effective; project honoraria have no deductions and no allowances. Payroll is not part of LIB spent. Mindanao State University–Main Campus · LIB Monitoring System.</div>
 </body>
 </html>`;
 }

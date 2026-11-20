@@ -161,7 +161,7 @@ class FinanceService
         ];
     }
 
-    /** Every payroll batch of the project, newest month first, with its next step. */
+    /** Every payroll batch of the project, newest period first, with its next step. */
     public function payrollBatches(Project $project, User $user): array
     {
         return PayrollBatch::query()->where('project_id', $project->id)
@@ -355,7 +355,7 @@ class FinanceService
         $preparer = $batch->submittedBy ?? $batch->preparedBy;
 
         return [
-            'reference' => 'PAY-' . $batch->monthKey(),
+            'reference' => $batch->reference(),
             'title' => 'Payroll ' . $batch->monthLabel(),
             'month' => $batch->monthKey(),
             'details' => $rows->count() . ' ' . ($rows->count() === 1 ? 'person' : 'people') . ' · net ₱' . number_format((float) $rows->sum('net_pay'), 2),
@@ -376,10 +376,9 @@ class FinanceService
             'can_edit' => false,
             'edit' => null,
             'fields' => [
-                ['label' => 'Month', 'value' => $batch->monthLabel()],
+                ['label' => 'Pay period', 'value' => $batch->monthLabel()],
                 ['label' => 'People', 'value' => (string) $rows->count()],
                 ['label' => 'Gross pay', 'value' => round((float) $rows->sum('gross_pay'), 2), 'kind' => 'money'],
-                ['label' => 'Deductions', 'value' => round((float) $rows->sum('total_deductions'), 2), 'kind' => 'money'],
                 ['label' => 'Net pay', 'value' => round((float) $rows->sum('net_pay'), 2), 'kind' => 'money'],
                 ['label' => 'Approved by', 'value' => $batch->plReviewedBy?->name],
                 ['label' => 'Verified by', 'value' => $batch->workflow_status === 'verified' ? $batch->verifiedBy?->name : null],

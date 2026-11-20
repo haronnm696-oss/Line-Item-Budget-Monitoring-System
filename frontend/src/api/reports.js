@@ -8,7 +8,7 @@ export function fetchPayrollRegister(projectId, params = {}) {
   return apiGet(`${ENDPOINTS.payrollRegister(projectId)}${query ? `?${query}` : ''}`);
 }
 
-/** The register CSV, built by the backend (PAYROLL_RATES_LABEL on its first line when set). */
+/** The register CSV, built by the backend. */
 export function downloadPayrollRegisterCsv(projectId, params = {}) {
   return downloadReportCsv(projectId, 'payroll-register', params);
 }

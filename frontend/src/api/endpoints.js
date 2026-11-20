@@ -25,8 +25,7 @@
  *
  * Projects:
  *   GET  /api/projects                      -> list (Program Leader: all; others: assigned projects only)
- *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups and expenses (403 if not assigned);
- *          payroll_rates_label (PAYROLL_RATES_LABEL or null, printed on the Payroll register)
+ *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups and expenses (403 if not assigned)
  *   POST /api/projects                      -> create (not built yet)
  *   PUT  /api/projects/:id                  -> update (not built yet)
  *
@@ -60,16 +59,23 @@
  *   PATCH  /api/notifications/:id/read
  *   PATCH  /api/notifications/read-all
  *
- * Payroll (same workflow as expenses; not part of LIB spent):
- *   GET    /api/projects/:id/payroll?month=YYYY-MM
- *          -> { month, month_label, rows, deductionBreakdown, totals, unset_rules, rates_label, rated_members, ps_line_items }
- *   POST   /api/projects/:id/payroll          -> { month, lib_category_id (PS) } create + compute the month (RA / FIN)
- *   POST   /api/projects/:id/payroll/compute  -> { month } recompute draft / returned rows (RA / FIN)
- *   PATCH  /api/payroll/:id                   -> { basic_rate?, allowance?, lib_category_id? } while the batch is draft / returned
+ * Payroll (same workflow as expenses; not part of LIB spent). A batch covers a pay
+ * period of consecutive months (one month or a quarter); periods of a project never
+ * overlap. Row = monthly honorarium x months effective in the period; no deductions,
+ * no allowances, net = gross.
+ *   GET    /api/projects/:id/payroll?month=YYYY-MM[&to=YYYY-MM]
+ *          -> { month, to, months, month_label, batch, rows: [{ basic, months, computation, gross, net,
+ *               recorded_deductions }], totals: { gross, net, recorded_deductions }, legacy_amounts,
+ *               overlap_text, rated_members, not_included: [{ name, reason, reason_text }], ps_line_items }
+ *          (the batch covering `month`, else the period month..to as it would be prepared)
+ *   POST   /api/projects/:id/payroll          -> { month, to?, lib_category_id (PS) } create + compute the period (RA / FIN);
+ *          422 errors.period when it overlaps another batch
+ *   POST   /api/projects/:id/payroll/compute  -> { month } recompute the draft / returned batch covering it (RA / FIN)
+ *   PATCH  /api/payroll/:id                   -> { basic_rate?, lib_category_id? } while the batch is draft / returned
  *   POST   /api/payroll-batches/:id/submit | endorse | return { reason } | verify | reject { reason }
- *          (the whole month at once; GET payroll returns the month's batch)
+ *          (the whole period at once; submit refused while batch.needs_recompute)
  *   Documents: GET/POST /api/payroll-batches/:id/documents (document_type payroll_file | other)
- *   Who is paid and how much comes from Personnel (below); rows start with no allowance.
+ *   Who is paid and how much comes from Personnel (below).
  *
  * Personnel (PersonnelService): the team appointed by Special Order, paid PS honoraria
  * through payroll (Job Order / professional services go through expenses).
@@ -122,8 +128,8 @@
  *       Same rows as the /reports/form-b CSV. Funder names come from the project (never hard-coded).
  *       (percent cells are plain numbers, never "<0.1")
  *   GET /api/projects/:id/payroll-register?period=all|year|90d&month=YYYY-MM
- *       -> { project, period, period_label, rates_label, deduction_types,
- *            months: [{ month, month_label, batch_id, verified_at, verified_by, rows, totals }], totals }
+ *       -> { project, period, period_label, has_recorded_deductions,
+ *            months: [{ month, month_label, months, batch_id, verified_at, verified_by, rows, totals }], totals }
  *       VERIFIED payroll batches only; CSV: /reports/payroll-register with the same params.
  *       Any user of the project (and the Program Leader); 403 otherwise.
  *
@@ -166,7 +172,7 @@
  *   GET  /api/projects/:id/verification-queue?tab=waiting|verified|rejected&type=expense|payroll
  *                                            -> { counts, items, late_receipts }
  *   GET  /api/projects/:id/verification-queue/:type/:id -> { item } (can_verify, blocked_text, fields)
- *   GET  /api/projects/:id/payroll-batches   -> { batches, rates_label } (every month, with next step)
+ *   GET  /api/projects/:id/payroll-batches   -> { batches } (every pay period, with next step)
  *   POST /api/expenses/:id/request-receipt   -> Notify RA (verified expense without a receipt; one audit entry)
  * Read-only for any project member:
  *   GET  /api/projects/:id/budget-summary    -> { project, kpis, monthly_expenses, category_summary, line_items, transactions }

@@ -45,7 +45,7 @@ class ConnectionWalkthroughTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['documents.disk' => 'local', 'payroll.deductions' => []]);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
 
         AuditLogger::muted(function () {

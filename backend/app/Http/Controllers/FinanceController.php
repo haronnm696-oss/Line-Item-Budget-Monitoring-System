@@ -57,14 +57,13 @@ class FinanceController extends Controller
         return response()->json(['item' => $this->finance->show($project, $request->user(), $type, $id)]);
     }
 
-    /** GET /api/projects/{project}/payroll-batches — every month's batch with its next step. */
+    /** GET /api/projects/{project}/payroll-batches — every payroll period's batch with its next step. */
     public function payrollBatches(Request $request, Project $project)
     {
         $this->finance->requireFinance($project, $request->user());
 
         return response()->json([
             'batches' => $this->finance->payrollBatches($project, $request->user()),
-            'rates_label' => config('payroll.rates_label'),
         ]);
     }
 

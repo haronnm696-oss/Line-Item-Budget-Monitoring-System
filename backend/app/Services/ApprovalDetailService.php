@@ -298,7 +298,6 @@ class ApprovalDetailService
             'workflow_status' => $batch->workflow_status,
             'people' => $rows->count(),
             'gross_total' => round((float) $rows->sum('gross_pay'), 2),
-            'deductions_total' => round((float) $rows->sum('total_deductions'), 2),
             'net_total' => round((float) $rows->sum('net_pay'), 2),
         ];
     }

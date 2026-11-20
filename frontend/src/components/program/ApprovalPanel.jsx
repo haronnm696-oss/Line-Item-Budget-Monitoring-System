@@ -132,11 +132,10 @@ function Liquidation({ details }) {
 function Payroll({ details }) {
   return (
     <dl className="ld-fields">
-      <div><dt>Payroll month</dt><dd>{details.month}</dd></div>
+      <div><dt>Pay period</dt><dd>{details.month}</dd></div>
       <div><dt>Step sent to you</dt><dd>{details.step}</dd></div>
       <div><dt>People paid</dt><dd>{details.people}</dd></div>
       <div><dt>Gross pay</dt><dd>{peso(details.gross_total)}</dd></div>
-      <div><dt>Deductions</dt><dd>{peso(details.deductions_total)}</dd></div>
       <div><dt>Net pay</dt><dd><b>{peso(details.net_total)}</b></dd></div>
     </dl>
   );

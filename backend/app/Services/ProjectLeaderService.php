@@ -243,10 +243,9 @@ class ProjectLeaderService
             'workflow_label' => PayrollService::LABELS[$batch->workflow_status] ?? $batch->workflow_status,
             'submitted_by' => $person($batch->submittedBy ?? $batch->preparedBy),
             'fields' => [
-                ['label' => 'Month', 'value' => $batch->monthLabel()],
+                ['label' => 'Pay period', 'value' => $batch->monthLabel()],
                 ['label' => 'People', 'value' => (string) $rows->count()],
                 ['label' => 'Gross pay', 'value' => round((float) $rows->sum('gross_pay'), 2), 'kind' => 'money'],
-                ['label' => 'Deductions', 'value' => round((float) $rows->sum('total_deductions'), 2), 'kind' => 'money'],
                 ['label' => 'Net pay', 'value' => round((float) $rows->sum('net_pay'), 2), 'kind' => 'money'],
                 ['label' => 'Verified by', 'value' => $batch->verifiedBy?->name],
             ],

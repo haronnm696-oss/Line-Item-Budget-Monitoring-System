@@ -33,7 +33,7 @@ class FinanceAndResearcherPagesTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
-        config(['payroll.deductions' => [], 'documents.disk' => 'local']);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
         $this->ps = AuditLogger::muted(fn () => LibCategory::create([
             'project_id' => $this->project->id, 'category_type' => 'PS',
@@ -277,7 +277,7 @@ class FinanceAndResearcherPagesTest extends TestCase
             ['delete', "/api/documents/{$document->id}", []],
             ['post', "/api/projects/{$p}/payroll", ['month' => '2026-12', 'lib_category_id' => $this->ps->id]],
             ['post', "/api/projects/{$p}/payroll/compute", ['month' => '2026-11']],
-            ['patch', "/api/payroll/{$payrollRow->id}", ['allowance' => 1]],
+            ['patch', "/api/payroll/{$payrollRow->id}", ['basic_rate' => 1]],
             ['post', "/api/payroll-batches/{$batch->id}/endorse", []],
             ['post', "/api/payroll-batches/{$batch->id}/return", ['reason' => 'x']],
             ['post', "/api/payroll-batches/{$batch->id}/verify", []],

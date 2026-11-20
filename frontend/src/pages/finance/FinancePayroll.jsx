@@ -13,10 +13,9 @@ import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { peso } from '../../components/money';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
-import RatesLabelBanner from '../../components/payroll/RatesLabelBanner';
 
 /**
- * Payroll (Finance/Admin): every monthly batch of the project with its
+ * Payroll (Finance/Admin): every pay-period batch of the project with its
  * stage and next step; a batch opens in the side panel. Verifying happens
  * from the Verification queue (the panel's buttons are the same). The
  * Personnel section (read-only; the Program Leader keeps it) shows who is
@@ -42,7 +41,7 @@ export default function FinancePayroll() {
           <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Payroll</h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Monthly batches; payroll is not part of LIB spent
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}One batch per pay period; no deductions or allowances; payroll is not part of LIB spent
           </p>
         </div>
         <div className="pl-head-actions">
@@ -50,8 +49,6 @@ export default function FinancePayroll() {
           {picker.projectId && <Link className="program-btn" to={`/verification-queue${q}${q ? '&' : '?'}type=payroll`}>Payroll to verify</Link>}
         </div>
       </div>
-
-      <RatesLabelBanner label={list.data?.rates_label} />
 
       {actions.feedback && (
         <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
@@ -65,7 +62,7 @@ export default function FinancePayroll() {
                 <caption className="pa-sr-only">Payroll batches</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Month</th>
+                    <th scope="col">Pay period</th>
                     <th scope="col">People and net pay</th>
                     <th scope="col" className="num">Gross</th>
                     <th scope="col">Status and next step</th>
@@ -74,7 +71,7 @@ export default function FinancePayroll() {
                 <tbody>
                   {batches.map((batch) => (
                     <tr key={batch.key}>
-                      <td data-label="Month">
+                      <td data-label="Pay period">
                         <button type="button" className="ld-link" onClick={() => update({ open: batch.key })}>{batch.reference}</button>
                         <div className="ra-type">{batch.title}</div>
                       </td>

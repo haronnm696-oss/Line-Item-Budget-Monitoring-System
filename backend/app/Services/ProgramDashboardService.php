@@ -779,15 +779,15 @@ class ProgramDashboardService
 
     /**
      * Most recent recorded expense (any status) or payroll period. A payroll
-     * entry counts from the last day of its pay month, capped at today.
+     * batch counts from the last day of its period's last month, capped at today.
      */
     protected function lastEntryDate(Project $project, Carbon $today): ?string
     {
         $expense = $project->expenses()->max('expense_date');
-        $payroll = $project->payrolls()
-            ->orderByDesc('pay_year')
-            ->orderByDesc('pay_month')
-            ->first(['pay_year', 'pay_month']);
+        $payrollEnd = \App\Models\PayrollBatch::query()->where('project_id', $project->id)->get()
+            ->map(fn (\App\Models\PayrollBatch $batch) => $batch->periodEnd())
+            ->sortByDesc(fn (Carbon $date) => $date->timestamp)
+            ->first();
 
         $dates = collect();
 
@@ -795,8 +795,8 @@ class ProgramDashboardService
             $dates->push(Carbon::parse($expense)->startOfDay());
         }
 
-        if ($payroll) {
-            $end = Carbon::create((int) $payroll->pay_year, (int) $payroll->pay_month, 1)->endOfMonth()->startOfDay();
+        if ($payrollEnd) {
+            $end = $payrollEnd->copy()->endOfMonth()->startOfDay();
             $dates->push($end->greaterThan($today) ? $today->copy() : $end);
         }
 

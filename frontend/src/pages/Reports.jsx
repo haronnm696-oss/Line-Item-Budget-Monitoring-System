@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { csvPct, formatPct, peso } from '../components/money';
-import { ratesLabel, ratesLabelHtml } from '../lib/payrollRatesLabel';
 import { REGISTER_PERIOD, registerCell, registerColumns, registerRows, registerTableHtml } from '../lib/payrollRegister';
 import { printHtmlDocument, saveBlob } from '../lib/download';
 import { downloadPayrollRegisterCsv, downloadReportCsv, fetchFormB, fetchPayrollRegister } from '../api/reports';
@@ -41,7 +40,7 @@ const REPORT_TYPES = [
     key: 'payroll-register',
     icon: '▥',
     title: 'Payroll register',
-    desc: 'Monthly payroll per personnel with gross pay, itemized deductions, and net pay.',
+    desc: 'Verified payroll per pay period and person: monthly honorarium x months effective, gross and net pay (no deductions or allowances).',
   },
   {
     key: 'monthly-summary',
@@ -197,8 +196,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const registerStatus = !registerKey ? 'idle'
     : registerResult?.key !== registerKey ? 'loading' : registerResult.error ? 'error' : 'ready';
   const register = registerStatus === 'ready' ? registerResult.data : null;
-  // PAYROLL_RATES_LABEL: printed at the top of the Payroll register (PDF and CSV).
-  const payrollRatesLabel = ratesLabel(register?.rates_label ?? detail?.payroll_rates_label);
 
   function retryProjects() {
     setProjectsAttempt((value) => value + 1);
@@ -536,7 +533,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           </div>
         </div>
 
-        ${key === 'payroll-register' ? ratesLabelHtml(payrollRatesLabel, escapeHtml) : ''}
         <div class="report-title">${escapeHtml(title)}</div>
         <div class="report-sub">${escapeHtml(subtitle)}</div>
 
@@ -603,7 +599,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         { key: 'status', label: 'Status' },
       ];
     } else if (key === 'payroll-register') {
-      // The register's own columns (one per deduction) and month totals.
+      // The register's own columns (computation, gross, net) and period totals.
       rows = registerRows(register).map((row) => ({
         bold: row.kind !== 'person',
         cells: registerColumns(register).map((column) => {
@@ -627,9 +623,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         <div className="panel-head">
           <h3>Live Report Preview</h3>
           <span className="hint">{printReport?.title} · {rows.length} row(s)</span>
-          {key === 'payroll-register' && payrollRatesLabel && (
-            <div className="program-banner warn" role="note"><b><span aria-hidden="true">⚠</span> {payrollRatesLabel}</b></div>
-          )}
           <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {detailStatus === 'error' ? (
               <span className="rp-error" role="alert">
@@ -800,7 +793,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     : registerStatus === 'loading' ? <p className="rp-note">Loading payroll…</p>
       : register && register.months.length === 0
         ? <p className="rp-note">No verified payroll for this period. Draft, waiting and returned batches are not included.</p>
-        : register ? <p className="rp-note">{register.months.length} verified {register.months.length === 1 ? 'month' : 'months'} · {payrollRatesLabel ? `⚠ ${payrollRatesLabel}` : 'verified batches only'}</p>
+        : register ? <p className="rp-note">{register.months.length} verified {register.months.length === 1 ? 'pay period' : 'pay periods'} · verified batches only</p>
           : null;
 
   // ?report=<key>&format=pdf|csv (the PDF / CSV buttons on the role

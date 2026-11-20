@@ -30,7 +30,7 @@ class LeaderStepRoutingTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
-        config(['payroll.deductions' => [], 'documents.disk' => 'local']);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
         $this->ps = AuditLogger::muted(fn () => LibCategory::create([
             'project_id' => $this->project->id, 'category_type' => 'PS',
