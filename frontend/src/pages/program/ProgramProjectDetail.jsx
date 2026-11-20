@@ -12,6 +12,9 @@ import PersonnelSection from '../../components/personnel/PersonnelSection';
 import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
 import { agreementLines } from '../../lib/projectAgreement';
 import { formBBlocker } from '../../lib/formBPrint';
+import { formatShare, releaseShare, releaseSummary, splitAmounts } from '../../lib/releasePlan';
+import { apiWrite } from '../../api/http';
+import { errorText } from '../../api/leader';
 
 
 function actionLabel(action) {
@@ -32,6 +35,8 @@ export default function ProgramProjectDetail() {
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [splitBusy, setSplitBusy] = useState(false);
+  const [splitError, setSplitError] = useState('');
 
   function saved(message) {
     setDialog(null);
@@ -92,6 +97,25 @@ export default function ProgramProjectDetail() {
   const setup = data.setup ?? null;
   const left = setup ? setup.total_budget - setup.allocated : 0;
   const formBReason = formBBlocker(project);
+  // Releases are portions of the funder total (setup.funder_total).
+  const funderTotal = Number(setup?.funder_total ?? 0) || 0;
+  const releasePlan = releaseSummary(tranches, funderTotal);
+  const splitPreview = splitAmounts(funderTotal);
+
+  async function splitReleases() {
+    if (splitBusy) return;
+    setNotice('');
+    setSplitError('');
+    setSplitBusy(true);
+    try {
+      const result = await apiWrite('post', ENDPOINTS.programTranchesSplit(project.id));
+      saved(result?.message ?? 'Release 1 (70%) and Release 2 (30%) added.');
+    } catch (failure) {
+      setSplitError(errorText(failure, 'Could not save. Please try again.'));
+    } finally {
+      setSplitBusy(false);
+    }
+  }
 
   return (
     <>
@@ -229,12 +253,40 @@ export default function ProgramProjectDetail() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Releases</div>
-            <div className="program-card-sub">Planned releases, listed by planned date, and their liquidation. A release keeps its number for good. Releasing the funds goes through the fund release approval.</div>
+            <div className="program-card-sub">Portions of the funder&apos;s grant released to the project, as set in the MOA. Purchases go through purchase requests.</div>
+            <div className="program-card-sub">Listed by planned date, with their liquidation. A release keeps its number for good. Releasing the funds goes through the fund release approval.</div>
           </div>
           {setup && (
-            <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'tranche' }); }}>Add release</button>
+            <div className="program-head-actions">
+              {tranches.length === 0 && funderTotal > 0 && (
+                <button type="button" className="program-btn" disabled={splitBusy} onClick={splitReleases} aria-describedby="pd-split-hint">
+                  {splitBusy ? 'Adding…' : 'Split 70% / 30%'}
+                </button>
+              )}
+              <button type="button" className="program-btn" onClick={() => { setNotice(''); setSplitError(''); setDialog({ kind: 'tranche' }); }}>Add release</button>
+            </div>
           )}
         </div>
+        {splitError && <div className="program-banner error" role="alert">{splitError}</div>}
+        {setup && funderTotal > 0 && (
+          <p className={`ld-hint${releasePlan.unscheduled < 0 ? ' is-risk' : ''}`} role="status">
+            Planned {peso(releasePlan.planned)} of {peso(releasePlan.funderTotal)} funder total ({formatShare(releasePlan.percent)})
+            {releasePlan.unscheduled >= 0
+              ? ` · ${peso(releasePlan.unscheduled)} not yet scheduled`
+              : ` · ⚠ ${peso(-releasePlan.unscheduled)} over the funder total`}
+          </p>
+        )}
+        {setup && setup.funder_total_source !== 'moa' && (
+          <p className="pu-hint" role="note">
+            <span aria-hidden="true">ⓘ </span>Enter the grant amount from the MOA for exact percentages.{' '}
+            <button type="button" className="program-btn sm" onClick={() => { setNotice(''); setDialog({ kind: 'details' }); }}>Edit details</button>
+          </p>
+        )}
+        {setup && tranches.length === 0 && funderTotal > 0 && (
+          <p className="pu-hint" id="pd-split-hint">
+            Split 70% / 30% adds Release 1 ({peso(splitPreview[0])}, on the project start date) and Release 2 ({peso(splitPreview[1])}, halfway through the period). You can edit both afterwards.
+          </p>
+        )}
         {tranches.length === 0 ? (
           <p className="pl-inbox-empty">No releases scheduled.</p>
         ) : (
@@ -258,7 +310,10 @@ export default function ProgramProjectDetail() {
                       {tranche.milestone && <div className="project-code">{tranche.milestone}</div>}
                     </td>
                     <td>{formatDate(tranche.planned_release_date)}</td>
-                    <td className="num">{peso(tranche.amount)}</td>
+                    <td className="num">
+                      {peso(tranche.amount)}
+                      {funderTotal > 0 && <span className="project-code"> · {formatShare(releaseShare(tranche.amount, funderTotal))}</span>}
+                    </td>
                     <td>
                       <ProgramPill
                         value={tranche.status}

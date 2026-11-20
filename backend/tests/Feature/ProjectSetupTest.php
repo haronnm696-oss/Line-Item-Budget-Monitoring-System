@@ -203,7 +203,8 @@ class ProjectSetupTest extends TestCase
             ->assertJsonPath('errors.tranche.0', 'The funds for this release are already released, so it cannot be changed.');
         $this->deleteJson("/api/program/tranches/{$id}")->assertStatus(422);
 
-        $second = $this->postJson($url, ['amount' => 100000, 'planned_release_date' => '2027-03-01'])->assertCreated()
+        // The funder total is the fixture's funder line items (500,000): 50,000 is left.
+        $second = $this->postJson($url, ['amount' => 50000, 'planned_release_date' => '2027-03-01'])->assertCreated()
             ->assertJsonPath('tranche.name', 'Release 2')->json('tranche.id');
         $audit = AuditTrail::count();
         $this->deleteJson("/api/program/tranches/{$second}")->assertOk();

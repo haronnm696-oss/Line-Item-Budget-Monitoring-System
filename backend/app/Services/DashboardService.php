@@ -6,6 +6,7 @@ use App\Support\Percent;
 use App\Models\ApprovalRequest;
 use App\Models\Project;
 use App\Models\ProjectTranche;
+use App\Support\ReleaseLiquidation;
 use Illuminate\Http\Request;
 
 class DashboardService
@@ -286,6 +287,8 @@ class DashboardService
                 'upcoming_amount' => max(0, $totalAmount - $releasedAmount),
                 'total_amount' => $totalAmount,
                 'progress_pct' => $this->pct($releasedAmount, $totalAmount),
+                // Shown on the fund release request form (a warning, not a block).
+                'liquidation_warning' => ReleaseLiquidation::warning($project),
             ],
         ];
     }

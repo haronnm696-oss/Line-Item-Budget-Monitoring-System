@@ -4,6 +4,7 @@ import DocumentList from '../leader/DocumentList';
 import ProgramPill from './ProgramPill';
 import { peso } from '../money';
 import { formatDate, formatDateTime } from '../../lib/datetime';
+import { reviewPanelWarning } from '../../lib/releasePlan';
 
 const HISTORY_ICON = { requested: '•', approved: '✓', returned: '↩', resubmitted: '↻', withdrawn: '⊘' };
 const TRANCHE_STATUS = { released: 'Released', due: 'Due', pending: 'Not yet due', overdue: 'Overdue' };
@@ -189,6 +190,8 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
   const approval = result?.id === approvalId ? result.approval : null;
   const error = result?.id === approvalId ? result.error : null;
   const [detailTitle, Details] = DETAILS[approval?.details?.kind] ?? [];
+  // Beside Approve: an earlier released release has no approved liquidation (a warning, not a block).
+  const liquidationWarning = reviewPanelWarning(approval);
 
   async function decide(decision) {
     if (busy) return;
@@ -270,6 +273,9 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
 
             {approval.can_decide && (
               <div className="ld-panel-actions pa-panel-actions">
+                {liquidationWarning && (
+                  <p className="ld-waiting pa-return-field" role="status"><span aria-hidden="true">⚠</span> {liquidationWarning}</p>
+                )}
                 {returning && (
                   <div className="program-field pa-return-field">
                     <label htmlFor="pa-return-reason">Reason for returning (required)</label>

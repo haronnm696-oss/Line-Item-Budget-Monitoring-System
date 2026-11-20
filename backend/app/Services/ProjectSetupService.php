@@ -41,6 +41,7 @@ class ProjectSetupService
     public function createProject(array $data, User $actor): Project
     {
         $leader = $this->leaderOrFail($data['project_leader_id']);
+        $this->requireGrantWithinBudget($data, (float) $data['total_approved_budget']);
 
         return AuditLogger::transaction(function () use ($data, $leader, $actor) {
             $project = Project::create([
@@ -60,13 +61,33 @@ class ProjectSetupService
         });
     }
 
-    /** The MOA fields present in $data; blank text is stored as null. */
+    /**
+     * The MOA fields present in $data; blank text is stored as null. The
+     * grant amount (funding_agency_amount) is stored as 0 when blank, which
+     * means "not entered".
+     */
     private function moaValues(array $data): array
     {
-        return array_map(
+        $values = array_map(
             fn ($value) => ($value = trim((string) $value)) === '' ? null : $value,
             array_intersect_key($data, array_flip(Project::MOA_FIELDS))
         );
+        if (array_key_exists('funding_agency_amount', $data)) {
+            $values['funding_agency_amount'] = round((float) ($data['funding_agency_amount'] ?? 0), 2);
+        }
+
+        return $values;
+    }
+
+    /** The grant from the funder cannot be more than the project's total budget. */
+    private function requireGrantWithinBudget(array $data, float $budget): void
+    {
+        $grant = round((float) ($data['funding_agency_amount'] ?? 0), 2);
+        if ($grant > round($budget, 2)) {
+            throw ValidationException::withMessages(['funding_agency_amount' => [
+                'The grant amount (₱' . number_format($grant, 2) . ') cannot be more than the total budget (₱' . number_format($budget, 2) . ').',
+            ]]);
+        }
     }
 
     /** Funder, funder reference, period, total budget, Project Leader, the MOA fields and the printed Form B fields. */
@@ -85,6 +106,13 @@ class ProjectSetupService
                         'The total budget cannot be less than the line items already allocated (₱' . number_format($allocated, 2) . ').',
                     ]]);
                 }
+            }
+
+            if (array_key_exists('funding_agency_amount', $data) || array_key_exists('total_approved_budget', $data)) {
+                $this->requireGrantWithinBudget(
+                    ['funding_agency_amount' => array_key_exists('funding_agency_amount', $data) ? $data['funding_agency_amount'] : $locked->funding_agency_amount],
+                    (float) ($data['total_approved_budget'] ?? $locked->total_approved_budget)
+                );
             }
 
             $print = array_map(
@@ -301,6 +329,49 @@ class ProjectSetupService
         });
     }
 
+    /**
+     * A project with no releases yet: Release 1 and Release 2 as 70% and
+     * 30% of the funder total (centavos, the last takes the remainder).
+     * Release 1 is planned on the project start date, Release 2 halfway
+     * through the period; the Program Leader edits them as usual.
+     *
+     * @return array<int, ProjectTranche>
+     */
+    public function splitTranches(Project $project, User $actor, array $percents = [70, 30]): array
+    {
+        return AuditLogger::transaction(function () use ($project, $actor, $percents) {
+            $locked = Project::whereKey($project->id)->lockForUpdate()->firstOrFail();
+            if ($locked->tranches()->exists()) {
+                throw ValidationException::withMessages(['tranche' => ['This project already has releases. Edit them instead.']]);
+            }
+            $total = $this->financials->funderTotal($locked);
+            if ($total <= 0) {
+                throw ValidationException::withMessages(['tranche' => ["Set the project's total budget first (Edit details)."]]);
+            }
+
+            $start = $locked->start_date?->copy() ?? now()->startOfDay();
+            $end = $locked->end_date && $locked->end_date->gt($start) ? $locked->end_date : null;
+            $dates = [$start, $end ? $start->copy()->addDays(intdiv($start->diffInDays($end), 2)) : $start->copy()->addMonths(6)];
+            $milestones = ['Upon signing of the MOA', 'Upon liquidation of Release 1'];
+
+            $created = [];
+            foreach (self::splitAmounts($total, $percents) as $i => $amount) {
+                $tranche = ProjectTranche::create([
+                    'project_id' => $locked->id,
+                    'sequence' => $i + 1,
+                    'name' => $milestones[$i] ?? '',
+                    'amount' => $amount,
+                    'planned_release_date' => ($dates[$i] ?? end($dates))->toDateString(),
+                    'status' => 'upcoming',
+                ]);
+                AuditLogger::write('created', $tranche, [], $this->trancheSnapshot($tranche), $actor);
+                $created[] = $tranche->fresh();
+            }
+
+            return $created;
+        });
+    }
+
     public function updateTranche(ProjectTranche $tranche, array $data, User $actor): ProjectTranche
     {
         return AuditLogger::transaction(function () use ($tranche, $data, $actor) {
@@ -356,6 +427,7 @@ class ProjectSetupService
         $pendingTranches = ApprovalRequest::query()
             ->where('project_id', $project->id)->where('type', 'disbursement')->where('status', 'pending')
             ->pluck('project_tranche_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $basis = $this->financials->funderTotalBasis($project);
 
         return [
             'funding_agency_id' => $project->funding_agency_id,
@@ -373,6 +445,12 @@ class ProjectSetupService
             'funding_totals' => $this->financials->fundingTotals($project),
             'labels' => ProjectFinancialService::sourceLabels($project),
             'tranches_total' => round((float) $project->tranches()->sum('amount'), 2),
+            // The funder's grant: the cap for planned releases and the base of their percent.
+            'funder_total' => $basis['amount'],
+            // moa | line_items | budget: where the funder total came from.
+            'funder_total_source' => $basis['source'],
+            // "Grant amount from the funder (per MOA)"; null when not entered.
+            'funder_grant' => (float) $project->funding_agency_amount > 0 ? round((float) $project->funding_agency_amount, 2) : null,
             // After the first verified expense, amounts change only by realignment.
             'allocations_locked' => $this->hasVerifiedSpending($project),
             'used_line_items' => $usedIds,
@@ -455,15 +533,37 @@ class ProjectSetupService
         }
     }
 
+    /** Planned releases may not exceed the funder total (ProjectFinancialService::funderTotal). */
     private function requireTranchesWithinBudget(Project $project, float $amount, ?int $exceptId = null): void
     {
-        $budget = round((float) $project->total_approved_budget, 2);
+        $cap = $this->financials->funderTotal($project);
         $others = (float) $project->tranches()->when($exceptId, fn ($q) => $q->whereKeyNot($exceptId))->sum('amount');
-        if ($budget > 0 && round($others + $amount, 2) > $budget) {
+        if ($cap > 0 && round($others + $amount, 2) > $cap) {
             throw ValidationException::withMessages(['amount' => [
-                'Releases would total ₱' . number_format($others + $amount, 2) . ', more than the total budget of ₱' . number_format($budget, 2) . '.',
+                'Releases would total ₱' . number_format($others + $amount, 2) . ', more than the funder total of ₱' . number_format($cap, 2) . '.',
             ]]);
         }
+    }
+
+    /**
+     * Shares of $total in whole centavos, in order; the last share takes the
+     * remainder so the amounts add up to $total exactly.
+     *
+     * @param  array<int, float>  $percents
+     * @return array<int, float>
+     */
+    public static function splitAmounts(float $total, array $percents): array
+    {
+        $cents = (int) round($total * 100);
+        $amounts = [];
+        $given = 0;
+        foreach (array_values($percents) as $i => $percent) {
+            $share = $i === count($percents) - 1 ? $cents - $given : (int) round($cents * $percent / 100);
+            $given += $share;
+            $amounts[] = round($share / 100, 2);
+        }
+
+        return $amounts;
     }
 
     /** One name per place: category, cost type, group and sub-group. */
@@ -530,6 +630,7 @@ class ProjectSetupService
             'moa_date' => $project->moa_date?->toDateString(),
             'rd_committee_approved_date' => $project->rd_committee_approved_date?->toDateString(),
             'fund_source' => $project->fund_source,
+            'funding_agency_amount' => round((float) $project->funding_agency_amount, 2),
         ] + $project->only(Project::formBPrintFields());
     }
 
