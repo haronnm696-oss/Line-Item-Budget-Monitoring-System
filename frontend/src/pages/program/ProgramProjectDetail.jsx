@@ -161,7 +161,7 @@ export default function ProgramProjectDetail() {
           <p className={`ld-hint${left < 0 ? ' is-risk' : ''}`} role="status">
             Line items: {peso(setup.allocated)} of the {peso(setup.total_budget)} total budget
             {left >= 0 ? ` · ${peso(left)} left to allocate` : ` · ⚠ ${peso(-left)} over the total budget`}
-            {setup.allocations_locked ? ' · Verified expenses exist: allocated amounts change only through a realignment request.' : ''}
+            {setup.allocations_locked ? ' · Verified expenses or payroll exist: allocated amounts change only through a realignment request.' : ''}
           </p>
         )}
         {setup?.funding_totals && (

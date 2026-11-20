@@ -11,7 +11,8 @@ function shortPeso(amount) {
 }
 
 /**
- * Verified expenses per month of the current year (descriptive only).
+ * Spent per month of the current year: verified expenses and verified
+ * payroll (descriptive only).
  * `months` is the Overview payload's monthly_expenses: 12 items with
  * { month, label, amount, is_future }. Future months are empty slots and are
  * never estimated.
@@ -38,7 +39,7 @@ export default function MonthlyExpenseTrend({ months = [] }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Monthly expense trend</div>
-          <div className="program-card-sub">Spent per month, {year}</div>
+          <div className="program-card-sub">Spent per month, {year} · verified expenses and verified payroll</div>
         </div>
       </div>
 

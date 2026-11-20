@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ApprovalRequest;
+use App\Models\Document;
 use App\Models\Expense;
 use App\Models\PayrollBatch;
 use App\Models\Project;
@@ -331,7 +332,7 @@ class ProjectLeaderService
             ],
             'monthly_expenses' => $this->program->monthlyExpenses(collect([$project]), now()->startOfDay()),
             'category_summary' => $this->program->categorySummary(collect([$project]), $metrics['budget']),
-            'transactions' => $this->transactionRows($this->spentQuery($project)->limit(5)->get()),
+            'transactions' => $this->spentRows($project)->take(5)->values()->all(),
             'requests' => $requests->take(5)->values()->all(),
         ];
     }
@@ -380,30 +381,75 @@ class ProjectLeaderService
     // ---------------------------------------------------------------- transactions
 
     /**
-     * Verified (spent) expenses of the project, newest first, 25 per page.
+     * Spent transactions of the project, newest first, 25 per page: verified
+     * expenses and verified payroll (one row per batch and line item), the
+     * same records Total spent adds up.
      *
      * @param array{from?: string, to?: string, line_item?: int, category?: string, page?: int} $filters
      */
     public function transactions(Project $project, array $filters): array
     {
-        $query = $this->spentQuery($project)
-            ->when($filters['from'] ?? null, fn ($q, $from) => $q->whereDate('expense_date', '>=', $from))
-            ->when($filters['to'] ?? null, fn ($q, $to) => $q->whereDate('expense_date', '<=', $to))
-            ->when($filters['line_item'] ?? null, fn ($q, $id) => $q->where('lib_category_id', $id))
-            ->when($filters['category'] ?? null, fn ($q, $type) => $q->whereHas('libCategory', fn ($c) => $c->where('category_type', $type)));
+        $all = $this->spentRows($project, $filters);
 
-        $total = (clone $query)->count();
-        $amount = round((float) (clone $query)->sum('amount'), 2);
+        $total = $all->count();
+        $amount = round((float) $all->sum('amount'), 2);
         $lastPage = max(1, (int) ceil($total / self::PER_PAGE));
         $page = min(max(1, (int) ($filters['page'] ?? 1)), $lastPage);
-        $rows = $query->forPage($page, self::PER_PAGE)->get();
 
         return [
-            'transactions' => $this->transactionRows($rows),
+            'transactions' => $all->forPage($page, self::PER_PAGE)->values()->all(),
             'meta' => ['page' => $page, 'per_page' => self::PER_PAGE, 'total' => $total, 'last_page' => $lastPage, 'amount' => $amount],
             'line_items' => $project->libCategories()->orderBy('category_type')->orderBy('id')->get()
                 ->map(fn ($item) => ['id' => $item->id, 'name' => $item->line_item_name, 'type' => $item->category_type])->values()->all(),
         ];
+    }
+
+    /**
+     * Every spent row (transactionRows() shape, plus `kind` expense / payroll),
+     * newest first, with the Transactions filters applied.
+     *
+     * @param array{from?: string, to?: string, line_item?: int, category?: string} $filters
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    public function spentRows(Project $project, array $filters = [])
+    {
+        $from = $filters['from'] ?? null;
+        $to = $filters['to'] ?? null;
+        $lineItem = $filters['line_item'] ?? null;
+        $type = $filters['category'] ?? null;
+
+        $expenses = $this->spentQuery($project)
+            ->when($from, fn ($q) => $q->whereDate('expense_date', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('expense_date', '<=', $to))
+            ->when($lineItem, fn ($q) => $q->where('lib_category_id', $lineItem))
+            ->when($type, fn ($q) => $q->whereHas('libCategory', fn ($c) => $c->where('category_type', $type)))
+            ->get();
+
+        $payroll = ProjectFinancialService::payrollEntries([(int) $project->id])
+            ->filter(fn (array $p) => (! $from || $p['date'] >= $from) && (! $to || $p['date'] <= $to)
+                && (! $lineItem || (int) $p['lib_category_id'] === (int) $lineItem)
+                && (! $type || $p['type'] === $type))
+            ->map(fn (array $p) => [
+                'kind' => 'payroll',
+                'id' => $p['key'],
+                'batch_id' => $p['batch_id'],
+                'date' => $p['date'],
+                'description' => $p['description'],
+                'payee' => null,
+                'reference_no' => $p['reference_no'],
+                'line_item' => $p['line_item'],
+                'category' => $p['type'],
+                'amount' => $p['amount'],
+                'receipts_count' => null,
+                'documents_count' => $p['batch_id'] ? Document::query()->where('documentable_type', (new PayrollBatch())->getMorphClass())->where('documentable_id', $p['batch_id'])->count() : 0,
+                'recorded_by' => $p['recorded_by'],
+                'verified_by' => $p['verified_by'],
+                'verified_at' => $p['verified_at'],
+            ]);
+
+        return collect($this->transactionRows($expenses))->concat($payroll)
+            ->sortBy([['date', 'desc'], ['verified_at', 'desc']])
+            ->values();
     }
 
     public function spentQuery(Project $project)
@@ -418,6 +464,7 @@ class ProjectLeaderService
     public function transactionRows($expenses): array
     {
         return collect($expenses)->map(fn (Expense $expense) => [
+            'kind' => 'expense',
             'id' => $expense->id,
             'date' => $expense->expense_date?->toDateString(),
             'description' => $expense->description,

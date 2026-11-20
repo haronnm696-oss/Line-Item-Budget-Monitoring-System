@@ -16,8 +16,8 @@ class ProjectController extends Controller
     /**
      * Project list: every project for the Program Leader, otherwise only the
      * projects the user is assigned to. Spent comes from
-     * ProjectFinancialService: verified expenses only (payroll is excluded),
-     * the same figure as the Program Leader dashboard.
+     * ProjectFinancialService: verified expenses and verified payroll, the
+     * same figure as the Program Leader dashboard.
      */
     public function index(Request $request)
     {

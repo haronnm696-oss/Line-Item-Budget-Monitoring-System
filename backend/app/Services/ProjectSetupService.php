@@ -30,7 +30,7 @@ use Illuminate\Validation\ValidationException;
  */
 class ProjectSetupService
 {
-    public const REALIGNMENT_ONLY = 'This project already has verified expenses. Change allocated amounts through a realignment request.';
+    public const REALIGNMENT_ONLY = 'This project already has verified expenses or payroll. Change allocated amounts through a realignment request.';
 
     public function __construct(private ProjectFinancialService $financials)
     {
@@ -495,7 +495,8 @@ class ProjectSetupService
 
     private function hasVerifiedSpending(Project $project): bool
     {
-        return ProjectFinancialService::onlySpent($project->expenses())->exists();
+        return ProjectFinancialService::onlySpent($project->expenses())->exists()
+            || ProjectFinancialService::onlySpentPayroll($project->payrolls())->exists();
     }
 
     private function projectSnapshot(Project $project): array

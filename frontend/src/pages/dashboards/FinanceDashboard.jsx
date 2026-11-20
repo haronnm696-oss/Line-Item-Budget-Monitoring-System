@@ -105,7 +105,7 @@ export default function FinanceDashboard() {
                   )}
                   <p className="fin-note">
                     After you verify, the amount is added to Total spent on every dashboard and appears in reports.
-                    A rejection returns the record to the Research Assistant with your reason. Payroll is not counted in LIB spent.
+                    A rejection returns the record to the Research Assistant with your reason. Spent = verified expenses and verified payroll.
                   </p>
                   <LateReceipts items={data.late_receipts} onOpen={(row) => update({ open: row.key })} />
                 </section>

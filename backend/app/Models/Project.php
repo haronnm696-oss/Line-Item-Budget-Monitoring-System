@@ -139,21 +139,25 @@ class Project extends Model
     }
 
     /**
-     * Total spent = verified expenses only, optionally by PS/MOOE.
-     *
-     * Payroll is intentionally excluded: LIB utilization is driven by the
-     * expense ledger so every dashboard and report produces the same number.
+     * Total spent = verified expenses + verified payroll (the same rule as
+     * ProjectFinancialService), optionally by PS/MOOE.
      */
     public function totalSpent(?string $categoryType = null): float
     {
-        return (float) $this->expenses()
+        $byType = function ($q) use ($categoryType) {
+            if ($categoryType) {
+                $q->where('category_type', $categoryType);
+            }
+        };
+
+        return round((float) $this->expenses()
             ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
-            ->whereHas('libCategory', function ($q) use ($categoryType) {
-                if ($categoryType) {
-                    $q->where('category_type', $categoryType);
-                }
-            })
-            ->sum('amount');
+            ->whereHas('libCategory', $byType)
+            ->sum('amount')
+            + (float) $this->payrolls()
+                ->tap(fn ($query) => ProjectFinancialService::onlySpentPayroll($query))
+                ->whereHas('libCategory', $byType)
+                ->sum('gross_pay'), 2);
     }
 
     public function totalRemaining(?string $categoryType = null): float

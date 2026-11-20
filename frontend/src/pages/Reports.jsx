@@ -34,7 +34,7 @@ const REPORT_TYPES = [
     key: 'ledger',
     icon: '₱',
     title: 'Expense ledger',
-    desc: 'Chronological list of all verified expenses with reference numbers and attachments index.',
+    desc: 'Chronological list of expenses and verified payroll with reference numbers and attachments index. Spent = verified expenses and verified payroll.',
   },
   {
     key: 'payroll-register',
@@ -455,7 +455,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       `;
     } else if (key === 'ledger') {
       const rows = buildLedgerRows();
-      subtitle = 'Chronological list of all verified expenses with reference numbers';
+      subtitle = 'Chronological list of expenses and verified payroll with reference numbers. Spent = verified expenses and verified payroll';
       tableHtml = `
         <table>
           <thead>

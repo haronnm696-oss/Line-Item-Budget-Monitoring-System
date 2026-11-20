@@ -41,7 +41,7 @@ export default function FinancePayroll() {
           <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Payroll</h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}One batch per pay period; no deductions or allowances; payroll is not part of LIB spent
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}One batch per pay period; no deductions or allowances. Spent = verified expenses and verified payroll
           </p>
         </div>
         <div className="pl-head-actions">

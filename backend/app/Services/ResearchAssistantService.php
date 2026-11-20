@@ -328,7 +328,7 @@ class ResearchAssistantService
             'next_step' => match ($batch->workflow_status) {
                 'draft' => $documents->where('document_type', 'payroll_file')->isEmpty() ? 'Upload the payroll file, then submit' : 'Submit when ready',
                 'returned' => 'Correct it and submit again',
-                'verified' => 'Verified (payroll is not part of LIB spent)',
+                'verified' => 'Verified (counted in spent)',
                 default => $this->payroll->waitingText($batch, $user),
             },
             'escalated' => $batch->pendingEscalation() !== null,

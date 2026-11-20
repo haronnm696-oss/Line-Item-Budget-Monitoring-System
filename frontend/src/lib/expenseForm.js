@@ -7,6 +7,24 @@ export const LINE_ITEM_GROUPS = ['PS', 'MOOE'];
 
 export const PS_NOTE = 'Salaries and honoraria are recorded through Payroll.';
 
+/** Shown when honoraria lines are left out of the line item choices. */
+export const HONORARIA_NOTE = 'Honoraria are paid through Payroll';
+
+/**
+ * Line items an expense may be charged to: every one except honoraria lines
+ * (PS line items with personnel linked, `honoraria: true` from the
+ * balancing query). They are paid through Payroll, so the same pay is never
+ * counted twice. The server refuses them too.
+ */
+export function expenseLineItems(items) {
+  return (Array.isArray(items) ? items : []).filter((item) => !item?.honoraria);
+}
+
+/** The honoraria lines left out of the choices (for the note). */
+export function honorariaLineItems(items) {
+  return (Array.isArray(items) ? items : []).filter((item) => item?.honoraria);
+}
+
 /** Available balance of a line item: allocated - spent - pending. */
 export function lineItemAvailable(item) {
   if (item?.available != null) return Number(item.available) || 0;

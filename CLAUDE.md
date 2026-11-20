@@ -45,7 +45,7 @@ Local mail testing: set `MAIL_MAILER=log` in `backend/.env`; reset links land in
 
 ### Backend layering
 - Controllers are thin; business logic lives in `app/Services/`.
-- `ProjectFinancialService` is the single source of truth for budget, spent, remaining, utilization, and receipt compliance. Every screen must use it so numbers never drift. "Spent" = verified expenses only; payroll is excluded from LIB utilization.
+- `ProjectFinancialService` is the single source of truth for budget, spent, remaining, utilization, and receipt compliance. Every screen must use it so numbers never drift. "Spent" = verified expenses + verified payroll (gross pay, charged to each row's PS line item, funder share); "pending" includes payroll waiting for approval or verification. PS line items with personnel linked (honoraria lines) are paid through Payroll only: expenses on them are refused.
 - `ApprovalRequest` (types: disbursement, budget_realignment, payroll, liquidation) implements maker-checker: a user cannot approve a request they created. New requests must have a `justification` (enforced in the model's `creating` hook); legacy rows may have NULL justification and must still display.
 - Audit logging goes through `AuditTrail::log()` / `AuditTrail::record()`.
 - Migrations must be additive — never drop/rename columns or delete data (production data on Aiven). Money columns are `decimal(15,2)`.

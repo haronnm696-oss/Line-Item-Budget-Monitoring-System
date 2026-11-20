@@ -466,7 +466,9 @@ class PayrollTest extends TestCase
 
         // Three rows, three hand-offs: 1 + 2 + 1 notifications (one per recipient per hand-off).
         $this->assertSame(4, DB::table('notifications')->count());
-        $this->assertSame(0.0, app(ProjectFinancialService::class)->spent($this->project));
+        // A verified batch is spent: 30,000 + 20,000 + 45,000.
+        $this->assertSame(95000.0, app(ProjectFinancialService::class)->spent($this->project));
+        $this->assertSame(95000.0, app(ProjectFinancialService::class)->spentPayroll($this->project));
 
         // Files of a verified payroll stay.
         $this->actingAs($this->assistant)->post("/api/payroll-batches/{$batch->id}/documents", [

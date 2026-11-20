@@ -44,7 +44,11 @@ use Illuminate\Validation\ValidationException;
  * row still carrying an allowance or deductions from before must be
  * recomputed before the batch is submitted; verified batches stay as
  * recorded.
- * The rows' workflow columns follow the batch. Payroll is not LIB spent.
+ * The rows' workflow columns follow the batch. A verified batch is spent
+ * (ProjectFinancialService), charged to each row's PS line item from the
+ * funder's share; submitted / approved batches are pending. A batch may not
+ * charge a line item more than its available amount (checked on submit and
+ * again when it is verified).
  */
 class PayrollService
 {
@@ -67,8 +71,51 @@ class PayrollService
 
     public const NEEDS_RECOMPUTE = 'Recompute this payroll before submitting: it was computed with deductions or allowances, which project honoraria do not have.';
 
-    public function __construct(private PayrollCalculator $calculator, private PersonnelService $personnel)
+    public function __construct(private PayrollCalculator $calculator, private PersonnelService $personnel, private ProjectFinancialService $financials)
     {
+    }
+
+    /**
+     * A batch may not charge any line item more than its available amount
+     * (allocated - spent - pending, funder share: ProjectFinancialService).
+     * $isPending: the batch is already counted in "pending" (submitted or
+     * approved), so its own amount is added back.
+     *
+     * @return array<int, string> one message per line item over its balance
+     */
+    public function overBalance(PayrollBatch $batch, bool $isPending): array
+    {
+        $balances = collect($this->financials->balancing($batch->project)['line_items'])->keyBy('id');
+        $labels = ProjectFinancialService::sourceLabels($batch->project);
+        $messages = [];
+
+        foreach ($batch->rows()->get()->groupBy('lib_category_id') as $lineItemId => $rows) {
+            $line = $balances->get((int) $lineItemId);
+            if (! $line) {
+                continue;
+            }
+            $amount = round((float) $rows->sum('gross_pay'), 2);
+            $available = round((float) $line['sources'][ProjectFinancialService::PAYROLL_SOURCE]['available'] + ($isPending ? $amount : 0), 2);
+            if ($amount > $available + 0.004) {
+                $messages[] = sprintf(
+                    'The %s payroll charges ₱%s to %s, more than the ₱%s available%s. Ask the Project Leader for a realignment, or take people out of this payroll.',
+                    $batch->monthLabel(),
+                    number_format($amount, 2),
+                    $line['name'],
+                    number_format(max(0, $available), 2),
+                    $line['has_counterpart'] ? ' from the ' . $labels['funder'] . ' share' : ''
+                );
+            }
+        }
+
+        return $messages;
+    }
+
+    private function requireWithinBalance(PayrollBatch $batch, bool $isPending): void
+    {
+        if ($messages = $this->overBalance($batch, $isPending)) {
+            throw ValidationException::withMessages(['amount' => $messages]);
+        }
     }
 
     /** The project's batch whose period includes the month, if any. */
@@ -274,6 +321,7 @@ class PayrollService
         if ($this->needsRecompute($batch)) {
             throw ValidationException::withMessages(['rows' => [self::NEEDS_RECOMPUTE]]);
         }
+        $this->requireWithinBalance($batch, false);
         // Same rule as the Payroll page: the signed payroll file goes with the batch.
         if (! $batch->documents()->where('document_type', 'payroll_file')->exists()) {
             throw ValidationException::withMessages(['documents' => ['Upload the payroll file before submitting.']]);
@@ -417,6 +465,8 @@ class PayrollService
     {
         $this->checkVerifier($batch, $actor, 'verify');
         $this->requireState($batch, ['endorsed'], 'verified');
+        // Verifying makes it spent: it must still fit its line items.
+        $this->requireWithinBalance($batch, true);
 
         $batch = $this->move($batch, 'verified', $actor, 'verified', ['endorsed'], [
             'verified_by' => $actor->id,
@@ -492,6 +542,9 @@ class PayrollService
         }
 
         $this->requireNotSame($batch->pl_reviewed_by, $actor, 'You approved this payroll; another person must verify it.');
+        if ($decision === 'approved') {
+            $this->requireWithinBalance($batch, true);
+        }
 
         return $decision === 'approved'
             ? $this->move($batch, 'verified', $actor, 'verified', ['endorsed'], ['verified_by' => $actor->id, 'verified_at' => now()], $remarks)

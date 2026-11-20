@@ -140,9 +140,11 @@ class FinanceService
             'kpis' => [
                 'to_verify' => $queue['counts']['waiting'],
                 'to_verify_actionable' => collect($queue['items'])->where('can_verify', true)->count(),
-                // Expense amount verified this month (payroll is not spent), and the
-                // counts of expenses and payroll batches verified, kept separate.
-                'verified_this_month' => round((float) (clone $verifiedExpenses)->sum('amount'), 2),
+                // Amount verified this month (expenses and payroll: both are spent),
+                // and the counts of expenses and payroll batches verified, kept separate.
+                'verified_this_month' => round((float) (clone $verifiedExpenses)->sum('amount')
+                    + (float) ProjectFinancialService::onlySpentPayroll(\App\Models\Payroll::query())
+                        ->whereIn('payroll_batch_id', (clone $verifiedBatches)->select('id'))->sum('gross_pay'), 2),
                 'verified_this_month_expenses' => (clone $verifiedExpenses)->count(),
                 'verified_this_month_payroll' => (clone $verifiedBatches)->count(),
                 'month_label' => Carbon::now('Asia/Manila')->format('F Y'),
@@ -365,14 +367,15 @@ class FinanceService
             'next_step' => match ($batch->workflow_status) {
                 'draft' => 'Being prepared',
                 'returned' => 'Returned to the preparer',
-                'verified' => 'Verified (payroll is not part of LIB spent)',
+                'verified' => 'Verified (counted in spent)',
                 default => $this->payroll->waitingText($batch, $user),
             },
             'submitted_by' => ['id' => $preparer?->id, 'name' => $preparer?->name],
             'approval_note' => null,
             'can_verify' => $canVerify,
             'blocked_text' => $blocked,
-            'counts_as_spent' => false,
+            // Verified payroll is spent, charged to each person's PS line item.
+            'counts_as_spent' => true,
             'can_edit' => false,
             'edit' => null,
             'fields' => [

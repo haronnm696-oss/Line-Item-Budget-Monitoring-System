@@ -92,7 +92,7 @@ export function registerDocumentHtml(register, { escape, money, generated }) {
   <h1>${escape(title)}</h1>
   <div class="meta">${escape(project.title ?? '')} (${escape(project.code ?? '')}) · Generated ${escape(generated ?? '')}</div>
   ${registerTableHtml(register, escape, money)}
-  <div class="footer">Verified payroll batches only. Monthly honorarium x months effective; project honoraria have no deductions and no allowances. Payroll is not part of LIB spent. Mindanao State University–Main Campus · LIB Monitoring System.</div>
+  <div class="footer">Verified payroll batches only. Monthly honorarium x months effective; project honoraria have no deductions and no allowances. Spent = verified expenses and verified payroll. Mindanao State University–Main Campus · LIB Monitoring System.</div>
 </body>
 </html>`;
 }

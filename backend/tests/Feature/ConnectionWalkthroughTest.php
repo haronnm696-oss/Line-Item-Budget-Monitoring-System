@@ -180,7 +180,8 @@ class ConnectionWalkthroughTest extends TestCase
         [$audit, $notes] = $this->mark();
         $this->actingAs($this->fin)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk();
         $this->assertStep($audit, $notes, 'verified', $this->ra, 'payroll');
-        $this->assertEquals(array_fill(0, 5, 2500.5), $this->spentEverywhere()); // payroll is not LIB spent
+        // Spent = verified expenses and verified payroll: 2,500.50 + 20,000 + 30,000 on every page.
+        $this->assertEquals(array_fill(0, 5, 52500.5), $this->spentEverywhere());
 
         // A batch that pays the Project Leader goes to the Program Leader instead.
         $this->addPersonnel($p, $this->pl, 45000);
@@ -204,6 +205,8 @@ class ConnectionWalkthroughTest extends TestCase
         $this->assertSame($notes + 1, DB::table('notifications')->count());
         $this->assertSame(2, $this->countNotes($this->fin, 'payroll', 'endorsed')); // one per batch
         $this->actingAs($this->fin)->postJson("/api/payroll-batches/{$escalated->id}/verify")->assertOk()->assertJsonPath('batch.workflow_status', 'verified');
+        // + 20,000 + 30,000 + 45,000 (December, including the Project Leader's pay).
+        $this->assertEquals(array_fill(0, 5, 147500.5), $this->spentEverywhere());
 
         // ------------------------------------------------ 4. Fund release: PL requests, Program Leader approves
         $released = fn () => $this->actingAs($this->pl)->getJson("/api/projects/{$p}/tranches")->assertOk()->json('summary.released_amount');
@@ -228,8 +231,11 @@ class ConnectionWalkthroughTest extends TestCase
 
         // ------------------------------------------------ 5. Researcher: reads verified data, every write is 403
         $this->actingAs($this->res);
-        $this->getJson("/api/projects/{$p}/budget-summary")->assertOk()->assertJsonPath('kpis.total_spent', 2500.5);
-        $this->assertSame([$expense], collect($this->getJson("/api/projects/{$p}/transactions")->assertOk()->json('transactions'))->pluck('id')->all());
+        $this->getJson("/api/projects/{$p}/budget-summary")->assertOk()->assertJsonPath('kpis.total_spent', 147500.5);
+        $transactions = $this->getJson("/api/projects/{$p}/transactions")->assertOk();
+        $this->assertSame([$expense], collect($transactions->json('transactions'))->where('kind', 'expense')->pluck('id')->all());
+        $this->assertCount(2, collect($transactions->json('transactions'))->where('kind', 'payroll')); // November and December
+        $transactions->assertJsonPath('meta.amount', 147500.5);
         $writes = [
             ['POST', "/api/projects/{$p}/expenses", $this->expensePayload()],
             ['PATCH', "/api/expenses/{$second}", ['description' => 'x']],

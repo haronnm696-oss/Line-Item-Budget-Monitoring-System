@@ -14,7 +14,8 @@ use Illuminate\Validation\ValidationException;
  * recorded before that rule (verified batches stay as recorded).
  * The batch carries the workflow (draft -> submitted ->
  * endorsed -> verified, or returned); the row's workflow columns follow the
- * batch. Payroll is not part of LIB spent / utilization.
+ * batch. Rows of a verified batch are spent (gross pay, charged to the
+ * row's PS line item from the funder's share): ProjectFinancialService.
  */
 class Payroll extends Model
 {

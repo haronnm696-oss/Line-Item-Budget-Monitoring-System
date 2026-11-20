@@ -39,9 +39,8 @@ export function useVerifyActions({ projectId, onChanged }) {
     setBusyKey(item.key);
     try {
       await apiWrite('post', STEP_URL[item.type](item.id, 'verify'));
-      changed(item.type === 'expense'
-        ? `Verified ${what(item)}. It is now counted in Total spent.`
-        : `Verified ${what(item)}. Payroll is not counted in LIB spent.`);
+      // Spent = verified expenses and verified payroll.
+      changed(`Verified ${what(item)}. It is now counted in Total spent.`);
     } catch (error) {
       setFeedback({ tone: 'error', text: errorText(error, 'Could not verify. Please try again.') });
     } finally {

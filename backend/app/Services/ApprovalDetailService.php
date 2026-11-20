@@ -268,21 +268,38 @@ class ApprovalDetailService
                 ->get();
         }
 
+        // Spent = verified expenses and verified payroll: payroll in the window counts too.
+        $payroll = $window === null ? collect() : ProjectFinancialService::payrollEntries([(int) $project->id])
+            ->filter(fn (array $p) => $p['date'] >= $window['from'] && ($window['to'] === null || $p['date'] <= $window['to']))
+            ->map(fn (array $p) => [
+                'kind' => 'payroll',
+                'id' => $p['key'],
+                'date' => $p['date'],
+                'reference_no' => $p['reference_no'],
+                'payee' => null,
+                'description' => $p['description'],
+                'line_item' => $p['line_item'],
+                'amount' => $p['amount'],
+            ]);
+        $rows = $expenses->map(fn (Expense $e) => [
+            'kind' => 'expense',
+            'id' => $e->id,
+            'date' => $e->expense_date ? Carbon::parse($e->expense_date)->toDateString() : null,
+            'reference_no' => $e->reference_no,
+            'payee' => $e->payee,
+            'description' => $e->description,
+            'line_item' => $e->libCategory?->line_item_name,
+            'amount' => round((float) $e->amount, 2),
+        ])->concat($payroll)->sortBy('date')->values();
+
         return [
             'kind' => 'liquidation',
             'tranche' => $tranche ? $this->trancheRow($tranche) : null,
             'released_amount' => $tranche && $tranche->status === 'released' ? round((float) $tranche->amount, 2) : 0.0,
             'period' => $window,
-            'expenses' => $expenses->map(fn (Expense $e) => [
-                'id' => $e->id,
-                'date' => $e->expense_date ? Carbon::parse($e->expense_date)->toDateString() : null,
-                'reference_no' => $e->reference_no,
-                'payee' => $e->payee,
-                'description' => $e->description,
-                'line_item' => $e->libCategory?->line_item_name,
-                'amount' => round((float) $e->amount, 2),
-            ])->values()->all(),
-            'expenses_total' => round((float) $expenses->sum('amount'), 2),
+            // Verified expenses and verified payroll in the period.
+            'expenses' => $rows->all(),
+            'expenses_total' => round((float) $rows->sum('amount'), 2),
         ];
     }
 

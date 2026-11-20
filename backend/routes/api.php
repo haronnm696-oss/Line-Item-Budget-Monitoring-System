@@ -86,7 +86,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
 
     // Payroll (PayrollService): create / compute a month's rows; submit,
     // approve / return and verify / reject act on the month's batch.
-    // Not part of LIB spent.
+    // A verified batch counts as spent (ProjectFinancialService).
     Route::get('/projects/{project}/payroll', [PayrollController::class, 'index']);
     Route::post('/projects/{project}/payroll', [PayrollController::class, 'store']);
     Route::post('/projects/{project}/payroll/compute', [PayrollController::class, 'compute']);

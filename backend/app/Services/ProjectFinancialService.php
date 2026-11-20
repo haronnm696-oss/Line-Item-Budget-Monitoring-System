@@ -5,8 +5,12 @@ namespace App\Services;
 use App\Support\Percent;
 use App\Models\Expense;
 use App\Models\LibCategory;
+use App\Models\Payroll;
 use App\Models\Project;
+use App\Models\ProjectPersonnel;
 use App\Models\PurchaseRequest;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Canonical financial calculations for a project.
@@ -15,11 +19,24 @@ use App\Models\PurchaseRequest;
  * read budget, spent, remaining, utilization, and receipt compliance from
  * this service so the numbers can never drift between screens.
  *
- * Spent is deliberately limited to verified expense records. Payroll is a
- * separate module and is not part of the LIB expense utilization figures.
+ *   Spent   = verified expenses + verified payroll
+ *   Pending = expenses and payroll waiting for approval or verification
+ *             (plus open approved purchase requests, see balancing())
+ *
+ * Payroll is charged to each row's PS line item (the person's linked line
+ * item), from the funder's share. Its amount is the gross pay (for current
+ * batches gross = net: honoraria have no deductions). Receipt compliance is
+ * about expenses only.
  */
 class ProjectFinancialService
 {
+    /** Payroll rows count as spent once their batch is verified (the rows mirror the batch). */
+    public const PAYROLL_SPENT_STAGE = 'verified';
+
+    /** Payroll always draws from the funder's share of its line item. */
+    public const PAYROLL_SOURCE = LibCategory::SOURCE_FUNDER;
+
+    public const SPENT_RULE = 'Spent = verified expenses and verified payroll';
     /**
      * Approved project budget. Falls back to the sum of line items only when
      * the project has no approved budget recorded.
@@ -39,10 +56,10 @@ class ProjectFinancialService
     public const SPENT_STATUS = 'verified';
 
     /**
-     * The single rule for "spent": only verified expense records count
-     * (payroll is excluded). Every screen, report and command that sums or
-     * lists spending applies this to its expense query, so the figures can
-     * never drift apart.
+     * The expense half of "spent": only verified expense records count. The
+     * payroll half is onlySpentPayroll(). Every screen, report and command
+     * that sums spending goes through spent() / spentByLineItem() /
+     * spentEntries(), so the figures can never drift apart.
      *
      * @template T of \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
      * @param T $expenses
@@ -52,6 +69,138 @@ class ProjectFinancialService
     {
         return $expenses->where('status', self::SPENT_STATUS);
     }
+
+    /**
+     * The payroll half of "spent": rows of verified batches.
+     *
+     * @template T of \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
+     * @param T $payrolls
+     * @return T
+     */
+    public static function onlySpentPayroll($payrolls)
+    {
+        return $payrolls->where('workflow_status', self::PAYROLL_SPENT_STAGE);
+    }
+
+    /** Payroll rows waiting for approval or verification (submitted, or approved by the Project Leader). */
+    public static function onlyPendingPayroll($payrolls)
+    {
+        return $payrolls->whereIn('workflow_status', self::PENDING_STAGES);
+    }
+
+    /**
+     * Spent per line item: [lib_category_id => verified expenses + verified payroll].
+     *
+     * @return Collection<int, float>
+     */
+    public static function spentByLineItem(int $projectId): Collection
+    {
+        $expenses = self::onlySpent(Expense::query())->where('project_id', $projectId)
+            ->selectRaw('lib_category_id, SUM(amount) as total')->groupBy('lib_category_id')
+            ->pluck('total', 'lib_category_id');
+        $payroll = self::onlySpentPayroll(Payroll::query())->where('project_id', $projectId)
+            ->selectRaw('lib_category_id, SUM(gross_pay) as total')->groupBy('lib_category_id')
+            ->pluck('total', 'lib_category_id');
+
+        return $expenses->keys()->merge($payroll->keys())->unique()
+            ->mapWithKeys(fn ($id) => [(int) $id => round((float) ($expenses[$id] ?? 0) + (float) ($payroll[$id] ?? 0), 2)]);
+    }
+
+    /**
+     * Verified payroll as spent entries, one per batch and line item, for
+     * lists, ledgers and monthly charts. `date` is the last day of the pay
+     * period, or the verification date when that is earlier.
+     *
+     * @param array<int, int> $projectIds
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function payrollEntries(array $projectIds): Collection
+    {
+        if ($projectIds === []) {
+            return collect();
+        }
+
+        return self::onlySpentPayroll(Payroll::query())->whereIn('project_id', $projectIds)
+            ->with(['batch.verifiedBy', 'batch.preparedBy', 'libCategory'])
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn (Payroll $row) => ($row->payroll_batch_id ? 'b' . $row->payroll_batch_id : 'r' . $row->id) . ':' . $row->lib_category_id)
+            ->map(function (Collection $rows) {
+                $first = $rows->first();
+                $batch = $first->batch;
+                $end = $batch ? $batch->periodEnd()->copy()->endOfMonth() : Carbon::create($first->pay_year, $first->pay_month, 1)->endOfMonth();
+                $verifiedAt = $batch?->verified_at ?? $first->verified_at;
+                $date = $verifiedAt && Carbon::parse($verifiedAt)->lt($end) ? Carbon::parse($verifiedAt) : $end;
+                $label = $batch ? $batch->monthLabel() : Carbon::create($first->pay_year, $first->pay_month, 1)->format('F Y');
+                $people = $rows->count();
+
+                return [
+                    'kind' => 'payroll',
+                    'key' => 'payroll-' . ($batch?->id ?? 'r' . $first->id) . '-' . $first->lib_category_id,
+                    'project_id' => (int) $first->project_id,
+                    'batch_id' => $batch?->id,
+                    'lib_category_id' => (int) $first->lib_category_id,
+                    'line_item' => $first->libCategory?->line_item_name,
+                    'type' => $first->libCategory?->category_type,
+                    'amount' => round((float) $rows->sum('gross_pay'), 2),
+                    'date' => $date->toDateString(),
+                    'description' => 'Payroll ' . $label . ' (' . $people . ' ' . ($people === 1 ? 'person' : 'people') . ')',
+                    'reference_no' => $batch ? $batch->reference() : 'PAY-' . $first->monthKey(),
+                    'people' => $people,
+                    'recorded_by' => $batch?->preparedBy?->name,
+                    'verified_by' => $batch?->verifiedBy?->name,
+                    'verified_at' => $verifiedAt ? Carbon::parse($verifiedAt)->toIso8601String() : null,
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * Every spent amount of the projects as [kind, project_id,
+     * lib_category_id, type (PS / MOOE / null), amount, date]: verified
+     * expenses (by expense date) and verified payroll (payrollEntries()).
+     *
+     * @param array<int, int> $projectIds
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function spentEntries(array $projectIds): Collection
+    {
+        if ($projectIds === []) {
+            return collect();
+        }
+        $expenses = self::onlySpent(Expense::query())->whereIn('project_id', $projectIds)
+            ->with('libCategory:id,category_type')
+            ->get(['id', 'project_id', 'lib_category_id', 'amount', 'expense_date'])
+            ->map(fn (Expense $e) => [
+                'kind' => 'expense',
+                'project_id' => (int) $e->project_id,
+                'lib_category_id' => $e->lib_category_id ? (int) $e->lib_category_id : null,
+                'type' => $e->libCategory?->category_type,
+                'amount' => round((float) $e->amount, 2),
+                'date' => $e->expense_date?->toDateString(),
+            ]);
+
+        return $expenses->concat(self::payrollEntries($projectIds)->map(fn (array $p) => array_intersect_key($p, array_flip(['kind', 'project_id', 'lib_category_id', 'type', 'amount', 'date']))))->values();
+    }
+
+    /**
+     * Honoraria lines: PS line items that personnel (Special Orders) are
+     * linked to. They are paid through Payroll only, never through expenses,
+     * so the same pay is never counted twice.
+     *
+     * @return array<int, int>
+     */
+    public static function honorariaLineIds(int $projectId): array
+    {
+        $ps = LibCategory::query()->where('project_id', $projectId)->where('category_type', 'PS')->pluck('id');
+
+        return ProjectPersonnel::query()->where('project_id', $projectId)
+            ->whereIn('lib_category_id', $ps)
+            ->distinct()->pluck('lib_category_id')
+            ->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    public const HONORARIA_LINE = 'Honoraria are paid through Payroll.';
 
     /**
      * The single receipt rule: an expense has a receipt when a "receipt"
@@ -74,12 +223,20 @@ class ProjectFinancialService
         return self::onlySpent($expenses)->whereDoesntHave('receipts');
     }
 
-    /**
-     * Spend is the sum of verified expense records only.
-     */
+    /** Spent = verified expenses + verified payroll. */
     public function spent(Project $project): float
     {
+        return round($this->spentExpenses($project) + $this->spentPayroll($project), 2);
+    }
+
+    public function spentExpenses(Project $project): float
+    {
         return round((float) self::onlySpent($project->expenses())->sum('amount'), 2);
+    }
+
+    public function spentPayroll(Project $project): float
+    {
+        return round((float) self::onlySpentPayroll($project->payrolls())->sum('gross_pay'), 2);
     }
 
     /**
@@ -91,7 +248,9 @@ class ProjectFinancialService
     public function financials(Project $project): array
     {
         $budget = $this->budget($project);
-        $spent = $this->spent($project);
+        $spentExpenses = $this->spentExpenses($project);
+        $spentPayroll = $this->spentPayroll($project);
+        $spent = round($spentExpenses + $spentPayroll, 2);
         $expenseCount = (int) $project->expenses()->count();
         $verifiedCount = (int) self::onlySpent($project->expenses())->count();
         $receiptsCount = (int) self::withReceipt(self::onlySpent($project->expenses()))->count();
@@ -99,6 +258,9 @@ class ProjectFinancialService
         return [
             'budget' => $budget,
             'spent' => $spent,
+            // The two parts of spent (they add up to it).
+            'spent_expenses' => $spentExpenses,
+            'spent_payroll' => $spentPayroll,
             'remaining' => round($budget - $spent, 2),
             'utilization_pct' => $this->pct($spent, $budget),
             'expenses_count' => $expenseCount,
@@ -150,17 +312,19 @@ class ProjectFinancialService
 
     /**
      * Balancing query per line item and funding source: allocated, spent,
-     * pending and available = allocated - spent - pending. Payroll is not
-     * included. Each expense and purchase request draws from one source of
-     * its line item (funding_source: the funder by default, or the
-     * implementing agency counterpart); row totals are both sources summed.
+     * pending and available = allocated - spent - pending. Each expense and
+     * purchase request draws from one source of its line item
+     * (funding_source: the funder by default, or the implementing agency
+     * counterpart); payroll always draws from the funder. Row totals are both
+     * sources summed.
      *
-     *   spent    verified expenses
+     *   spent    verified expenses + verified payroll
      *   pending  expenses submitted or approved by the Project Leader, plus
      *            any not-yet-verified expense linked to a purchase request
      *            (it took over that request's money), plus purchase
      *            requests that are approved and still open (not fulfilled,
-     *            not cancelled)
+     *            not cancelled), plus payroll submitted or approved by the
+     *            Project Leader (waiting for verification)
      *
      * A fulfilled request stops counting and its linked expense counts
      * instead, so the same money is never counted twice.
@@ -184,25 +348,37 @@ class ProjectFinancialService
                 ->orWhere(fn ($linked) => $linked->whereNotNull('purchase_request_id')->whereIn('workflow_status', ['draft', 'returned']));
         }), 'amount');
         $pendingRequests = $sums(PurchaseRequest::query()->where('workflow_status', PurchaseRequest::OPEN_APPROVED), 'estimated_amount');
+        // Payroll has no funding_source column: it is the funder's share.
+        $payrollSums = fn ($query) => $query->where('project_id', $project->id)
+            ->selectRaw('lib_category_id, SUM(gross_pay) as total')->groupBy('lib_category_id')
+            ->pluck('total', 'lib_category_id')
+            ->mapWithKeys(fn ($total, $id) => [$id . ':' . self::PAYROLL_SOURCE => round((float) $total, 2)]);
+        $spentPayroll = $payrollSums(self::onlySpentPayroll(Payroll::query()));
+        $pendingPayroll = $payrollSums(self::onlyPendingPayroll(Payroll::query()));
+        $honoraria = self::honorariaLineIds($project->id);
 
         $rows = $project->libCategories()
             ->when($lineItemId, fn ($q) => $q->whereKey($lineItemId))
             ->orderBy('category_type')->orderBy('id')
             ->get()
-            ->map(function (LibCategory $item) use ($spent, $pendingExpenses, $pendingRequests) {
+            ->map(function (LibCategory $item) use ($spent, $pendingExpenses, $pendingRequests, $spentPayroll, $pendingPayroll, $honoraria) {
                 $sources = [];
                 foreach (LibCategory::SOURCES as $source) {
                     $key = $item->id . ':' . $source;
                     $allocated = $item->amountFor($source);
-                    $itemSpent = $spent[$key] ?? 0.0;
+                    $fromPayroll = $spentPayroll[$key] ?? 0.0;
+                    $itemSpent = round(($spent[$key] ?? 0.0) + $fromPayroll, 2);
                     $fromExpenses = $pendingExpenses[$key] ?? 0.0;
                     $fromRequests = $pendingRequests[$key] ?? 0.0;
-                    $pending = round($fromExpenses + $fromRequests, 2);
+                    $payrollWaiting = $pendingPayroll[$key] ?? 0.0;
+                    $pending = round($fromExpenses + $fromRequests + $payrollWaiting, 2);
                     $sources[$source] = [
                         'allocated' => $allocated,
                         'spent' => $itemSpent,
+                        'spent_payroll' => $fromPayroll,
                         'pending_expenses' => $fromExpenses,
                         'pending_purchase_requests' => $fromRequests,
+                        'pending_payroll' => $payrollWaiting,
                         'pending' => $pending,
                         'available' => round($allocated - $itemSpent - $pending, 2),
                     ];
@@ -219,11 +395,15 @@ class ProjectFinancialService
                     'name' => $item->line_item_name,
                     'allocated' => round((float) $item->allocated_amount, 2),
                     'spent' => $sum('spent'),
+                    'spent_payroll' => $sum('spent_payroll'),
                     'pending_expenses' => $sum('pending_expenses'),
                     'pending_purchase_requests' => $sum('pending_purchase_requests'),
+                    'pending_payroll' => $sum('pending_payroll'),
                     'pending' => $sum('pending'),
                     'available' => $sum('available'),
                     'has_counterpart' => $item->hasCounterpart(),
+                    // Personnel are linked to it: paid through Payroll, never recorded as an expense.
+                    'honoraria' => in_array((int) $item->id, $honoraria, true),
                     'sources' => $sources,
                 ];
             })
@@ -236,7 +416,9 @@ class ProjectFinancialService
             'totals' => [
                 'allocated' => $total('allocated'),
                 'spent' => $total('spent'),
+                'spent_payroll' => $total('spent_payroll'),
                 'pending' => $total('pending'),
+                'pending_payroll' => $total('pending_payroll'),
                 'available' => $total('available'),
             ],
         ];
@@ -312,9 +494,7 @@ class ProjectFinancialService
     {
         $project->loadMissing('fundingAgency');
         $items = $project->libCategories()->orderBy('id')->get();
-        $spent = self::onlySpent(Expense::query())->where('project_id', $project->id)
-            ->selectRaw('lib_category_id, SUM(amount) as total')->groupBy('lib_category_id')
-            ->pluck('total', 'lib_category_id');
+        $spent = self::spentByLineItem($project->id);
 
         $row = fn (LibCategory $item) => [
             'id' => $item->id,

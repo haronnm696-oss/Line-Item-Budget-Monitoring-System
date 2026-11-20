@@ -196,6 +196,8 @@ class PayrollController extends Controller
             'editable' => $batch->isEditable(),
             // A draft / returned batch still carrying old allowances or deductions.
             'needs_recompute' => $this->payroll->needsRecompute($batch),
+            // Line items this draft / returned batch would overspend (submit is refused while any).
+            'over_balance' => $batch->isEditable() ? $this->payroll->overBalance($batch, false) : [],
             // Self-pay escalation to the Program Leader: 'approve' / 'verify' step, or null.
             'escalated_step' => ($batch->pendingEscalation()?->payload ?? [])['step'] ?? null,
             'waiting_text' => $this->payroll->waitingText($batch, request()->user()),

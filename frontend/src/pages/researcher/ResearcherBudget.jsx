@@ -51,7 +51,7 @@ export default function ResearcherBudget() {
             Budget <span className="res-readonly"><span aria-hidden="true">👁</span> Read-only access</span>
           </h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Spent = verified expenses only; payroll is not included
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Spent = verified expenses and verified payroll
           </p>
         </div>
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="res-budget-project" /></div>

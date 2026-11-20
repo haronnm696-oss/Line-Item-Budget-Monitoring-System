@@ -59,7 +59,13 @@
  *   PATCH  /api/notifications/:id/read
  *   PATCH  /api/notifications/read-all
  *
- * Payroll (same workflow as expenses; not part of LIB spent). A batch covers a pay
+ * Spent = verified expenses and verified payroll (ProjectFinancialService); pending
+ * includes payroll submitted or approved by the Project Leader. Balancing rows carry
+ * spent_payroll, pending_payroll and honoraria (personnel linked: no expenses allowed).
+ *
+ * Payroll (same workflow as expenses; a verified batch is spent, charged to each
+ * row's PS line item, funder share; batch.over_balance lists line items it would
+ * overspend, and submit / verify are refused while any). A batch covers a pay
  * period of consecutive months (one month or a quarter); periods of a project never
  * overlap. Row = monthly honorarium x months effective in the period; no deductions,
  * no allowances, net = gross.

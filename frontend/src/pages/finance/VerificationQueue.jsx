@@ -59,7 +59,7 @@ export default function VerificationQueue() {
           <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Verification queue</h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Verified expenses are counted in Total spent; payroll is not
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Spent = verified expenses and verified payroll
           </p>
         </div>
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="fin-queue-project" /></div>

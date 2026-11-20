@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  defaultLineItemId, groupLineItems, lineItemAvailable, prefillFromRequest,
+  HONORARIA_NOTE, defaultLineItemId, expenseLineItems, groupLineItems, honorariaLineItems, lineItemAvailable, prefillFromRequest,
   rememberLineItemId, rememberedLineItemId, singleLineItemId,
 } from './expenseForm.js';
 
@@ -93,4 +93,18 @@ test('a request without a supplier leaves the payee as it was', () => {
   const legacy = { id: 7, lib_category_id: 1, description: 'Ink', estimated_amount: 80, supplier: null };
   assert.equal(prefillFromRequest(blank, legacy).payee, '');
   assert.equal(prefillFromRequest({ ...blank, payee: 'Typed' }, legacy).payee, 'Typed');
+});
+
+test('honoraria lines (personnel linked) are not offered for expenses', () => {
+  const withHonoraria = [
+    ...items,
+    { id: 4, type: 'PS', name: 'Honoraria of project staff', honoraria: true, available: 90000 },
+  ];
+  assert.deepEqual(expenseLineItems(withHonoraria).map((item) => item.id), [1, 2, 3]);
+  assert.deepEqual(honorariaLineItems(withHonoraria).map((item) => item.id), [4]);
+  // The grouped options no longer list it, and with one line left it is not defaulted to.
+  assert.ok(!groupLineItems(expenseLineItems(withHonoraria)).flatMap((g) => g.items).some((item) => item.honoraria));
+  assert.equal(defaultLineItemId(expenseLineItems([withHonoraria[3], items[0]])), '1');
+  assert.equal(HONORARIA_NOTE, 'Honoraria are paid through Payroll');
+  assert.deepEqual(expenseLineItems(null), []);
 });

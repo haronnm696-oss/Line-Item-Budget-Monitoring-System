@@ -71,6 +71,8 @@ export default function AssistantPayroll() {
   const zeroPay = notIncluded.filter((person) => person.reason === 'zero');
   const legacy = Boolean(run?.legacy_amounts);
   const needsRecompute = Boolean(batch?.needs_recompute);
+  // Line items this batch would overspend: submit is refused until it fits.
+  const overBalance = Array.isArray(batch?.over_balance) ? batch.over_balance : [];
 
   async function act(key, send, okText) {
     setBusy(key);
@@ -124,7 +126,7 @@ export default function AssistantPayroll() {
           <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Payroll</h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Monthly honorarium x months effective, from Personnel; no deductions or allowances; payroll is not part of LIB spent
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Monthly honorarium x months effective, from Personnel; no deductions or allowances. Spent = verified expenses and verified payroll
           </p>
         </div>
         {projectId && (
@@ -161,6 +163,13 @@ export default function AssistantPayroll() {
               {zeroPay.length > 0 && (
                 <div className="program-banner info" role="status">
                   <b><span aria-hidden="true">ⓘ</span> Not included (honorarium ₱0.00): {zeroPay.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until the Program Leader sets their honorarium under Personnel.
+                </div>
+              )}
+
+              {overBalance.length > 0 && (
+                <div className="program-banner error" role="alert">
+                  <b><span aria-hidden="true">⚠</span> This payroll is more than the line item has available.</b>
+                  {overBalance.map((text) => <div key={text}>{text}</div>)}
                 </div>
               )}
 
@@ -282,7 +291,7 @@ export default function AssistantPayroll() {
                         <button
                           type="button"
                           className="program-btn primary"
-                          disabled={busy !== null || needsRecompute || !hasPayrollFile || rows.length === 0}
+                          disabled={busy !== null || needsRecompute || overBalance.length > 0 || !hasPayrollFile || rows.length === 0}
                           onClick={submit}
                         >
                           {busy === 'submit' ? 'Submitting…' : batch.workflow_status === 'returned' ? 'Resubmit batch' : 'Submit batch'}

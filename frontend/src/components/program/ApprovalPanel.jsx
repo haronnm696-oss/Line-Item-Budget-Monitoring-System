@@ -89,18 +89,18 @@ function Liquidation({ details }) {
       </dl>
       {period && (
         <p className="ld-muted">
-          Verified expenses dated {formatDate(period.from)} to {period.to ? formatDate(period.to) : 'today'}
+          Spent (verified expenses and verified payroll) dated {formatDate(period.from)} to {period.to ? formatDate(period.to) : 'today'}
           {period.starts === 'project_start'
             ? ' (first release: from the project start to the next release).'
             : ' (from this release to the next one).'}
         </p>
       )}
       {expenses.length === 0 ? (
-        <p className="ld-muted">{period ? 'No verified expenses in this period.' : 'Expenses are shown once the funds for this release are released.'}</p>
+        <p className="ld-muted">{period ? 'No verified expenses or payroll in this period.' : 'Spending is shown once the funds for this release are released.'}</p>
       ) : (
         <div className="ra-table-wrap">
           <table className="program-table ld-table">
-            <caption className="pa-sr-only">Verified expenses charged against the release</caption>
+            <caption className="pa-sr-only">Verified expenses and payroll charged against the release</caption>
             <thead>
               <tr>
                 <th scope="col">Date</th>
@@ -111,7 +111,7 @@ function Liquidation({ details }) {
             </thead>
             <tbody>
               {expenses.map((row) => (
-                <tr key={row.id}>
+                <tr key={`${row.kind ?? 'expense'}-${row.id}`}>
                   <td>{formatDate(row.date)}</td>
                   <td>{row.reference_no ?? '—'}</td>
                   <td>{row.payee ?? row.description ?? '—'}{row.line_item ? <div className="project-code">{row.line_item}</div> : null}</td>
