@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MoneyInput;
+use App\Rules\DateInRange;
 use App\Models\LibCategory;
 use App\Models\Payroll;
 use App\Models\PayrollBatch;
@@ -21,7 +23,7 @@ use Illuminate\Validation\Rule;
  */
 class PayrollController extends Controller
 {
-    private const MONTH = ['regex:/^\d{4}-(0[1-9]|1[0-2])$/'];
+    private const MONTH = ['bail', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'];
 
     public function __construct(private PayrollService $payroll)
     {
@@ -35,8 +37,8 @@ class PayrollController extends Controller
     public function index(Request $request, Project $project)
     {
         $data = $request->validate([
-            'month' => array_merge(['nullable'], self::MONTH),
-            'to' => array_merge(['nullable'], self::MONTH),
+            'month' => array_merge(['nullable'], self::MONTH, [new DateInRange()]),
+            'to' => array_merge(['nullable'], self::MONTH, [new DateInRange()]),
         ], $this->monthMessage());
         $from = $this->first($data['month'] ?? now('Asia/Manila')->format('Y-m'));
         $to = isset($data['to']) ? $this->first($data['to']) : $from;
@@ -48,8 +50,8 @@ class PayrollController extends Controller
     public function store(Request $request, Project $project)
     {
         $data = $request->validate([
-            'month' => array_merge(['required'], self::MONTH),
-            'to' => array_merge(['nullable'], self::MONTH),
+            'month' => array_merge(['required'], self::MONTH, [new DateInRange()]),
+            'to' => array_merge(['nullable'], self::MONTH, [new DateInRange()]),
             'lib_category_id' => ['required', 'integer', $this->psLineItem($project)],
         ], $this->monthMessage() + ['lib_category_id.exists' => 'Choose a Personal Services (PS) line item of this project.']);
         $from = $this->first($data['month']);
@@ -65,7 +67,7 @@ class PayrollController extends Controller
     /** POST /api/projects/{project}/payroll/compute { month } — recompute the draft / returned batch covering the month. */
     public function compute(Request $request, Project $project)
     {
-        $data = $request->validate(['month' => array_merge(['required'], self::MONTH)], $this->monthMessage());
+        $data = $request->validate(['month' => array_merge(['required'], self::MONTH, [new DateInRange()])], $this->monthMessage());
         $month = $this->first($data['month']);
 
         $result = $this->payroll->computeMonth($project, $month->year, $month->month, $request->user());
@@ -84,7 +86,7 @@ class PayrollController extends Controller
     public function update(Request $request, Payroll $payroll)
     {
         $data = $request->validate([
-            'basic_rate' => ['sometimes', 'numeric', 'gt:0', 'max:9999999999999.99'],
+            'basic_rate' => array_merge(['sometimes', 'gt:0'], MoneyInput::RULES),
             'allowance' => ['prohibited'],
             'lib_category_id' => ['sometimes', 'integer', $this->psLineItem($payroll->project)],
         ], [

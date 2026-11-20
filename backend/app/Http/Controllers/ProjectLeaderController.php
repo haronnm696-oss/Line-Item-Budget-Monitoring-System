@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\DateInRange;
 use App\Models\LibCategory;
 use App\Models\Project;
 use App\Services\ProjectLeaderService;
@@ -69,8 +70,8 @@ class ProjectLeaderController extends Controller
     public function transactions(Request $request, Project $project)
     {
         $data = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'from' => ['bail', 'nullable', new DateInRange(), 'date'],
+            'to' => ['bail', 'nullable', new DateInRange(), 'date', 'after_or_equal:from'],
             'line_item' => ['nullable', 'integer', Rule::exists((new LibCategory())->getTable(), 'id')->where('project_id', $project->id)],
             'category' => ['nullable', Rule::in(['PS', 'MOOE'])],
             'page' => ['nullable', 'integer', 'min:1'],

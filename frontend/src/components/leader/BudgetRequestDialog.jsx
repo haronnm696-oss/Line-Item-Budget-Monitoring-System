@@ -9,6 +9,8 @@ import { peso } from '../money';
 import { formatDate } from '../../lib/datetime';
 import { requestFormWarning } from '../../lib/releasePlan';
 import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
+import MoneyInput from '../MoneyInput';
+import { moneyNumber, parseMoney } from '../../lib/moneyInput';
 
 const TYPES = [
   ['fund_release', 'Fund release'],
@@ -62,7 +64,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
   const moneySource = effectiveSource(source, form.fundingSource);
   // Money moves within one source: its available amount is the limit.
   const available = source ? sourceAvailable(source, moneySource) : null;
-  const overAvailable = type === 'realignment' && available != null && Number(amount) > available;
+  const overAvailable = type === 'realignment' && available != null && moneyNumber(amount) > available;
   const documentCount = documentsAfter(documents, toRemove, files);
 
   function validate() {
@@ -72,11 +74,13 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
     if (type === 'realignment') {
       if (!fromId || !toId) next.from_lib_category_id = 'Choose both line items.';
       else if (fromId === toId) next.to_lib_category_id = 'The source and destination line items must be different.';
-      if (!(Number(amount) > 0)) next.amount = 'Enter an amount greater than zero.';
+      if (parseMoney(amount).error) next.amount = parseMoney(amount).error;
+      else if (!(moneyNumber(amount) > 0)) next.amount = 'Enter an amount greater than zero.';
       else if (overAvailable) next.amount = `The source line item has only ${peso(available)} available.`;
     }
     if (type === 'liquidation') {
-      if (!(Number(amount) > 0)) next.amount = 'Enter the amount liquidated.';
+      if (parseMoney(amount).error) next.amount = parseMoney(amount).error;
+      else if (!(moneyNumber(amount) > 0)) next.amount = 'Enter the amount liquidated.';
       if (documentCount === 0) next.files = 'Attach at least one supporting document.';
     }
     return next;
@@ -244,13 +248,8 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
             </div>
             <div className="program-field">
               <label htmlFor="ld-amount">Amount (₱)</label>
-              <input
+              <MoneyInput
                 id="ld-amount"
-                className="program-input"
-                type="number"
-                min="0.01"
-                step="0.01"
-                max={available != null ? Math.max(available, 0) : undefined}
                 value={amount}
                 onChange={set('amount')}
                 aria-invalid={overAvailable || Boolean(errors.amount)}
@@ -270,7 +269,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
             </div>
             <div className="program-field">
               <label htmlFor="ld-liq-amount">Amount liquidated (₱)</label>
-              <input id="ld-liq-amount" className="program-input" type="number" min="0.01" step="0.01" value={amount} onChange={set('amount')} disabled={busy} />
+              <MoneyInput id="ld-liq-amount" value={amount} onChange={set('amount')} disabled={busy} />
               {err('amount')}
             </div>
             <div className="program-field">

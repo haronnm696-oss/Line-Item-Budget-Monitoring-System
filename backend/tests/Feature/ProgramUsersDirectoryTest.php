@@ -187,7 +187,10 @@ class ProgramUsersDirectoryTest extends TestCase
         $this->assertCount(1, $entries, 'exactly one audit entry');
         $this->assertSame('updated', $entries[0]->action);
         $this->assertSame($this->leader->id, (int) $entries[0]->user_id);
-        $this->assertSame(['name', 'position', 'email'], array_keys($entries[0]->new_values), 'only changed fields');
+        // Which fields were stored, not their order: MySQL's JSON type re-sorts keys.
+        $stored = array_keys($entries[0]->new_values);
+        sort($stored);
+        $this->assertSame(['email', 'name', 'position'], $stored, 'only changed fields');
     }
 
     public function test_role_status_and_assignment_actions_each_write_exactly_one_entry(): void

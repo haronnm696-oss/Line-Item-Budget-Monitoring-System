@@ -9,6 +9,9 @@ import { RATE_PERIODS, computedAmount, hasComputation, periodsLabel, previewComp
 import { sourceLabels } from '../../lib/fundingSource';
 import { durationInWords, periodErrors } from '../../lib/projectAgreement';
 import { amountFromPercent, percentError, percentFromAmount } from '../../lib/releasePlan';
+import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
+import { DATE_BOUNDS, dateRangeError } from '../../lib/dateRange';
+import MoneyInput from '../MoneyInput';
 
 /*
  * Program Leader project set-up dialogs (New project, Edit details, line
@@ -17,17 +20,6 @@ import { amountFromPercent, percentError, percentFromAmount } from '../../lib/re
  * clear messages.
  */
 
-const MONEY = /^\d+(\.\d{1,2})?$/;
-
-/** '' -> error text; else null. */
-export function moneyError(text, { positive = false } = {}) {
-  const value = String(text ?? '').trim();
-  if (value === '') return 'Enter an amount.';
-  if (value.startsWith('-')) return 'The amount cannot be negative.';
-  if (!MONEY.test(value)) return 'Enter a number with at most two decimals.';
-  if (positive && !(Number(value) > 0)) return 'The amount must be more than zero.';
-  return null;
-}
 
 // Open dialogs, innermost last: Escape closes only the top one.
 const openDialogs = [];
@@ -90,8 +82,12 @@ export function Field({ id, label, error, hint, full = false, children }) {
   );
 }
 
-/** Runs a write: busy state, server field errors, or a general message. */
-export function useSave(onSaved) {
+/**
+ * Runs a write: busy state, server field errors, or a general message
+ * (`failText`; a server error never shows the server's own text). On a
+ * failure the dialog stays open, so what was typed is kept.
+ */
+export function useSave(onSaved, { failText = 'Could not save. Please try again.' } = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [serverErrors, setServerErrors] = useState({});
@@ -105,7 +101,7 @@ export function useSave(onSaved) {
       data = await apiWrite(method, url, body);
     } catch (failure) {
       setServerErrors(fieldErrors(failure));
-      setError(errorText(failure, 'Could not save. Please try again.'));
+      setError(errorText(failure, failText));
       setBusy(false);
       return;
     }
@@ -140,6 +136,8 @@ const MOA_FIELDS = ['moa_number', 'moa_date', 'rd_committee_approved_date', 'fun
 const MOA_LIMITS = { moa_number: 100, fund_source: 255 };
 const FORM_B_FIELDS = ['implementing_agency_name', 'monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
 
+const PROJECT_SAVE_ERROR = 'The project could not be saved. Please try again; if it keeps failing, tell the system administrator.';
+
 export function ProjectFormDialog({ mode, projectId = null, setup = null, onClose, onSaved }) {
   const creating = mode === 'create';
   const options = useApiData(ENDPOINTS.programProjectOptions);
@@ -152,15 +150,15 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     funder_reference: setup?.funder_reference ?? '',
     start_date: setup?.start_date ?? '',
     end_date: setup?.end_date ?? '',
-    total_approved_budget: setup?.total_budget ? String(setup.total_budget) : '',
+    total_approved_budget: setup?.total_budget ? moneyText(setup.total_budget) : '',
     project_leader_id: setup?.project_leader_id ? String(setup.project_leader_id) : '',
     ...Object.fromEntries(MOA_FIELDS.map((key) => [key, setup?.agreement?.[key] ?? ''])),
     // The funder's grant per the MOA (projects.funding_agency_amount); blank = not entered.
-    funding_agency_amount: setup?.funder_grant ? String(setup.funder_grant) : '',
+    funding_agency_amount: setup?.funder_grant ? moneyText(setup.funder_grant) : '',
     ...Object.fromEntries(FORM_B_FIELDS.map((key) => [key, setup?.form_b?.[key] ?? ''])),
   });
   const [local, setLocal] = useState({});
-  const { busy, error, serverErrors, save } = useSave(onSaved);
+  const { busy, error, serverErrors, save } = useSave(onSaved, { failText: PROJECT_SAVE_ERROR });
   const errors = { ...serverErrors, ...local };
   const duration = durationInWords(form.start_date, form.end_date);
   const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
@@ -172,19 +170,23 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     if (creating && !form.code.trim()) next.code = 'Enter the project code.';
     if (!form.funding_agency_id) next.funding_agency_id = 'Choose the funder.';
     Object.assign(next, periodErrors(form.start_date, form.end_date));
+    for (const key of ['moa_date', 'rd_committee_approved_date']) {
+      const rangeError = dateRangeError(form[key]);
+      if (rangeError) next[key] = rangeError;
+    }
     for (const [key, limit] of Object.entries(MOA_LIMITS)) {
       if (String(form[key] ?? '').trim().length > limit) next[key] = `Use ${limit} characters or fewer.`;
     }
     const budgetError = moneyError(form.total_approved_budget, { positive: true });
     if (budgetError) next.total_approved_budget = budgetError;
-    else if (setup && Number(form.total_approved_budget) < Number(setup.allocated)) {
+    else if (setup && moneyNumber(form.total_approved_budget) < Number(setup.allocated)) {
       next.total_approved_budget = `The total budget cannot be less than the line items already allocated (${peso(setup.allocated)}).`;
     }
     if (String(form.funding_agency_amount).trim() !== '') {
       const grantError = moneyError(form.funding_agency_amount);
       if (grantError) next.funding_agency_amount = grantError;
-      else if (!budgetError && Number(form.funding_agency_amount) > Number(form.total_approved_budget) + 0.001) {
-        next.funding_agency_amount = `The grant amount cannot be more than the total budget (${peso(form.total_approved_budget)}).`;
+      else if (!budgetError && moneyNumber(form.funding_agency_amount) > moneyNumber(form.total_approved_budget) + 0.001) {
+        next.funding_agency_amount = `The grant amount cannot be more than the total budget (${peso(moneyNumber(form.total_approved_budget))}).`;
       }
     }
     if (!form.project_leader_id) next.project_leader_id = 'Choose the Project Leader.';
@@ -199,10 +201,10 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
       funder_reference: form.funder_reference.trim() || null,
       start_date: form.start_date,
       end_date: form.end_date,
-      total_approved_budget: Number(form.total_approved_budget),
+      total_approved_budget: moneyNumber(form.total_approved_budget),
       project_leader_id: Number(form.project_leader_id),
       ...Object.fromEntries(MOA_FIELDS.map((key) => [key, String(form[key] ?? '').trim() || null])),
-      funding_agency_amount: String(form.funding_agency_amount).trim() === '' ? null : Number(form.funding_agency_amount),
+      funding_agency_amount: String(form.funding_agency_amount).trim() === '' ? null : moneyNumber(form.funding_agency_amount),
     };
     if (creating) {
       save('post', ENDPOINTS.programProjects, { ...body, title: form.title.trim(), code: form.code.trim() }, 'Project created.');
@@ -214,7 +216,9 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
 
   const text = (key, label, type = 'text', extra = {}) => (
     <Field id={`ps-${key}`} label={label} error={errors[key]} {...extra}>
-      {(a11y) => <input {...a11y} className="program-input" type={type} value={form[key]} disabled={busy} onChange={set(key)} inputMode={key === 'total_approved_budget' || key === 'funding_agency_amount' ? 'decimal' : undefined} />}
+      {(a11y) => (type === 'money'
+        ? <MoneyInput {...a11y} value={form[key]} disabled={busy} onChange={set(key)} />
+        : <input {...a11y} className="program-input" type={type} value={form[key]} disabled={busy} onChange={set(key)} {...(type === 'date' ? DATE_BOUNDS : {})} />)}
     </Field>
   );
 
@@ -237,7 +241,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
           {text('funder_reference', 'Funder reference', 'text', { hint: 'Optional' })}
           {text('start_date', 'Start date', 'date')}
           {text('end_date', 'End date', 'date', { hint: duration ? `Duration: ${duration}` : 'After the start date' })}
-          {text('total_approved_budget', 'Total budget (₱)')}
+          {text('total_approved_budget', 'Total budget (₱)', 'money', { hint: 'For example 3,178,376.00' })}
           <Field id="ps-project_leader_id" label="Project Leader" error={errors.project_leader_id}>
             {(a11y) => (
               <select {...a11y} className="program-select" value={form.project_leader_id} disabled={busy || options.status !== 'ready'} onChange={set('project_leader_id')}>
@@ -253,8 +257,8 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
             {text('moa_number', 'MOA number')}
             {text('moa_date', 'MOA date', 'date')}
             {text('rd_committee_approved_date', "Approved by the funder's R&D committee", 'date')}
-            {text('funding_agency_amount', 'Grant amount from the funder (per MOA) (₱)', 'text', {
-              hint: 'For example 2000000.00. Releases are planned as parts of this amount.',
+            {text('funding_agency_amount', 'Grant amount from the funder (per MOA) (₱)', 'money', {
+              hint: 'For example 2,000,000.00. Releases are planned as parts of this amount.',
             })}
             {text('fund_source', 'Fund source', 'text', { full: true, hint: 'For example MOST-BARMM GAAB 2024 Program Funds. Printed on Form B as "Chargeable against …".' })}
           </div>
@@ -308,18 +312,20 @@ function lineItemForm(item) {
     line_item_name: text(item?.name),
     quantity: text(item?.quantity),
     unit_description: text(item?.unit_description),
-    rate: text(item?.rate),
+    rate: moneyText(item?.rate),
     rate_period: text(item?.rate_period),
     periods: text(item?.periods),
-    implementing_agency_amount: item ? text(item.implementing_agency_amount ?? 0) : '',
-    funder_amount: item ? text(item.funder_amount ?? item.allocated ?? 0) : '',
+    implementing_agency_amount: item ? moneyText(item.implementing_agency_amount ?? 0) : '',
+    funder_amount: item ? moneyText(item.funder_amount ?? item.allocated ?? 0) : '',
   };
 }
 
 /** Request body from the form (computation fields as numbers or null). */
 function lineItemBody(form, computed) {
   const number = (value) => (String(value).trim() === '' ? null : Number(value));
-  const counterpart = number(form.implementing_agency_amount) ?? 0;
+  // Peso fields accept "8,800.00" (lib/moneyInput).
+  const money = (value) => (String(value).trim() === '' ? null : moneyNumber(value));
+  const counterpart = money(form.implementing_agency_amount) ?? 0;
   return {
     category_type: form.category_type,
     cost_type: form.cost_type,
@@ -328,12 +334,12 @@ function lineItemBody(form, computed) {
     line_item_name: form.line_item_name.trim(),
     quantity: number(form.quantity),
     unit_description: form.unit_description.trim() || null,
-    rate: number(form.rate),
+    rate: money(form.rate),
     rate_period: form.rate_period || null,
     periods: number(form.periods),
     implementing_agency_amount: counterpart,
     // With a computation the funder amount is the computed amount (the server sets it too).
-    funder_amount: computed != null ? computed : (number(form.funder_amount) ?? 0),
+    funder_amount: computed != null ? computed : (money(form.funder_amount) ?? 0),
   };
 }
 
@@ -355,9 +361,9 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
   const errors = { ...serverErrors, ...local };
   const computing = hasComputation(form);
   const computed = computing ? computedAmount(form) : null;
-  const counterpart = Number(form.implementing_agency_amount) || 0;
+  const counterpart = moneyNumber(form.implementing_agency_amount) || 0;
   // As on Form B: the computation is the funder amount; the counterpart is added.
-  const funder = computed != null ? computed : Number(form.funder_amount) || 0;
+  const funder = computed != null ? computed : moneyNumber(form.funder_amount) || 0;
   const total = Math.round((counterpart + funder) * 100) / 100;
   const others = Number(setup.allocated) - (editing ? Number(item.allocated) : 0);
   const left = Math.max(0, Number(setup.total_budget) - others);
@@ -415,7 +421,9 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
 
   const input = (key, label, extra = {}) => (
     <Field id={`ps-li-${key}`} label={label} error={errors[key]} hint={extra.hint} full={extra.full}>
-      {(a11y) => (
+      {(a11y) => (extra.money ? (
+        <MoneyInput {...a11y} value={form[key]} disabled={busy || extra.disabled} onChange={set(key)} />
+      ) : (
         <input
           {...a11y}
           className="program-input"
@@ -426,7 +434,7 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
           list={extra.list}
           readOnly={extra.readOnly}
         />
-      )}
+      ))}
     </Field>
   );
 
@@ -464,7 +472,7 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
           </div>
           {input('quantity', 'How many', { inputMode: 'numeric', disabled: amountLocked })}
           {input('unit_description', 'Who or what', { hint: 'e.g. Project Leader, Laptop' })}
-          {input('rate', 'Amount each (₱)', { inputMode: 'decimal', disabled: amountLocked })}
+          {input('rate', 'Amount each (₱)', { money: true, disabled: amountLocked })}
           <Field id="ps-li-rate_period" label="Paid every" error={errors.rate_period}>
             {(a11y) => (
               <select {...a11y} className="program-select" value={form.rate_period} disabled={busy || amountLocked} onChange={setRatePeriod}>
@@ -482,7 +490,7 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
           {preview && <p className="pu-hint program-field full" aria-live="polite">{preview}</p>}
 
           {input('implementing_agency_amount', `${labels.implementing_agency} counterpart (₱)`, {
-            inputMode: 'decimal', disabled: amountLocked, hint: 'Leave blank or 0 when there is none',
+            money: true, disabled: amountLocked, hint: 'Leave blank or 0 when there is none',
           })}
           <Field
             id="ps-li-funder_amount"
@@ -490,17 +498,11 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
             error={errors.funder_amount}
             hint={computing ? 'Set by the computation above.' : undefined}
           >
-            {(a11y) => (
-              <input
-                {...a11y}
-                className="program-input"
-                inputMode="decimal"
-                value={computing ? (computed != null ? computed.toFixed(2) : '') : form.funder_amount}
-                readOnly={computing}
-                disabled={busy || amountLocked}
-                onChange={set('funder_amount')}
-              />
-            )}
+            {(a11y) => (computing ? (
+              <input {...a11y} className="program-input" value={computed != null ? moneyText(computed) : ''} readOnly disabled={busy || amountLocked} />
+            ) : (
+              <MoneyInput {...a11y} value={form.funder_amount} disabled={busy || amountLocked} onChange={set('funder_amount')} />
+            ))}
           </Field>
         </div>
         <p className="ld-hint" role="status">
@@ -531,7 +533,7 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
   const editing = Boolean(tranche);
   const funderTotal = Number(setup.funder_total ?? setup.total_budget) || 0;
   const [form, setForm] = useState(() => {
-    const amount = tranche ? Number(tranche.amount).toFixed(2) : '';
+    const amount = tranche ? moneyText(tranche.amount) : '';
     return {
       milestone: tranche?.milestone ?? '',
       amount,
@@ -564,14 +566,15 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
     if (shareError) next.percent = shareError;
     const amountError = moneyError(form.amount, { positive: true });
     if (amountError) next.amount = amountError;
-    else if (funderTotal > 0 && others + Number(form.amount) > funderTotal + 0.001) {
-      next.amount = `Releases would total ${peso(others + Number(form.amount))}, more than the funder total of ${peso(funderTotal)}.`;
+    else if (funderTotal > 0 && others + moneyNumber(form.amount) > funderTotal + 0.001) {
+      next.amount = `Releases would total ${peso(others + moneyNumber(form.amount))}, more than the funder total of ${peso(funderTotal)}.`;
     }
     if (!form.planned_release_date) next.planned_release_date = 'Enter the planned release date.';
+    else if (dateRangeError(form.planned_release_date)) next.planned_release_date = dateRangeError(form.planned_release_date);
     setLocal(next);
     if (Object.keys(next).length) return;
 
-    const body = { name: form.milestone.trim() || null, amount: Number(form.amount), planned_release_date: form.planned_release_date };
+    const body = { name: form.milestone.trim() || null, amount: moneyNumber(form.amount), planned_release_date: form.planned_release_date };
     if (editing) save('patch', ENDPOINTS.programTranche(tranche.id), body, 'Release saved.');
     else save('post', ENDPOINTS.programTranches(projectId), body, 'Release added.');
   }
@@ -582,7 +585,7 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
         {error && <div className="program-banner error" role="alert">{error}</div>}
         <div className="program-form-grid">
           <Field id="ps-tranche-amount" label="Amount (₱)" error={errors.amount}>
-            {(a11y) => <input {...a11y} className="program-input" inputMode="decimal" value={form.amount} disabled={busy} onChange={setAmount} />}
+            {(a11y) => <MoneyInput {...a11y} value={form.amount} disabled={busy} onChange={setAmount} />}
           </Field>
           <Field
             id="ps-tranche-percent"
@@ -593,7 +596,7 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
             {(a11y) => <input {...a11y} className="program-input" inputMode="decimal" value={form.percent} disabled={busy || !(funderTotal > 0)} onChange={setPercent} />}
           </Field>
           <Field id="ps-tranche-date" label="Planned release date" error={errors.planned_release_date}>
-            {(a11y) => <input {...a11y} className="program-input" type="date" value={form.planned_release_date} disabled={busy} onChange={set('planned_release_date')} />}
+            {(a11y) => <input {...a11y} className="program-input" type="date" {...DATE_BOUNDS} value={form.planned_release_date} disabled={busy} onChange={set('planned_release_date')} />}
           </Field>
           <Field id="ps-tranche-name" label="Milestone (optional)" full error={errors.name} hint="e.g. Upon signing of the MOA, Upon liquidation of Release 1">
             {(a11y) => <input {...a11y} className="program-input" value={form.milestone} disabled={busy} onChange={set('milestone')} />}

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MoneyInput;
+use App\Rules\DateInRange;
 use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\ProjectPersonnel;
@@ -82,9 +84,9 @@ class PersonnelController extends Controller
             'lib_category_id' => ['required', 'integer', Rule::exists((new LibCategory())->getTable(), 'id')
                 ->where('project_id', $project->id)->where('category_type', 'PS')],
             'special_order_no' => ['required', 'string', 'max:100'],
-            'effective_from' => array_merge(['required', 'date_format:Y-m-d'], $within),
-            'effective_to' => array_merge(['required', 'date_format:Y-m-d', 'after_or_equal:effective_from'], $within),
-            'monthly_honorarium' => ['required', 'numeric', 'min:0', 'max:9999999999999.99', 'regex:/^\d+(\.\d{1,2})?$/'],
+            'effective_from' => array_merge(['bail', 'required', new DateInRange(), 'date_format:Y-m-d'], $within),
+            'effective_to' => array_merge(['bail', 'required', new DateInRange(), 'date_format:Y-m-d', 'after_or_equal:effective_from'], $within),
+            'monthly_honorarium' => array_merge(['required'], MoneyInput::RULES),
             'bank_account' => ['sometimes', 'nullable', 'string', 'max:34', 'regex:/^[0-9][0-9 -]*[0-9]$/'],
         ];
     }

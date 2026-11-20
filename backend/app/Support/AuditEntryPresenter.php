@@ -191,6 +191,59 @@ class AuditEntryPresenter
         'bank_account_masked' => 'Bank account',
     ];
 
+    /**
+     * The order changed fields are listed in, per record type. Stored
+     * old/new values are JSON, and MySQL's JSON type re-sorts object keys
+     * (shorter keys first), so their key order differs from SQLite's and
+     * must never decide what a reader sees. Fields not listed here follow
+     * in FIELD_LABELS order, then any others alphabetically, so every
+     * database shows the same order.
+     */
+    private const FIELD_ORDER = [
+        'LibCategory' => [
+            'line_item_name', 'line_item_code', 'category_type', 'cost_type', 'expense_group', 'expense_subgroup',
+            'computation', 'quantity', 'unit_description', 'rate', 'rate_period', 'periods',
+            'implementing_agency_amount', 'funder_amount', 'allocated_amount',
+        ],
+        'Project' => [
+            'title', 'code', 'funding_agency_id', 'funder_reference', 'project_leader_id', 'project_leader',
+            'start_date', 'end_date', 'status', 'total_approved_budget', 'funding_agency_amount', 'implementing_agency_counterpart',
+            'moa_number', 'moa_date', 'rd_committee_approved_date', 'fund_source',
+            'implementing_agency_name', 'monitoring_agency',
+            'reviewed_by_name', 'reviewed_by_position', 'funds_certified_by_name', 'funds_certified_by_position',
+            'recommending_approval_name', 'recommending_approval_position', 'approved_by_name', 'approved_by_position',
+        ],
+        'ProjectTranche' => ['release_number', 'sequence', 'name', 'amount', 'percentage', 'planned_release_date', 'status', 'released_at', 'notes'],
+        'Expense' => [
+            'lib_category_id', 'funding_source', 'description', 'amount', 'expense_date', 'payee', 'reference_no',
+            'purchase_request_id', 'recorded_by', 'workflow_status', 'status', 'pl_reviewed_by', 'verified_by', 'review_notes', 'remarks',
+        ],
+        'PurchaseRequest' => [
+            'lib_category_id', 'funding_source', 'description', 'quantity', 'estimated_amount', 'supplier',
+            'status', 'submitted_by', 'fulfilled_by', 'cancelled_by', 'cancel_reason',
+        ],
+        'ProjectPersonnel' => [
+            'user_id', 'position', 'lib_category_id', 'special_order_no', 'effective_from', 'effective_to',
+            'monthly_honorarium', 'bank_account_masked',
+        ],
+        'Payroll' => [
+            'personnel_id', 'lib_category_id', 'pay_month', 'pay_year', 'months', 'basic_rate', 'monthly_rate',
+            'allowance', 'gross_pay', 'total_deductions', 'net_pay', 'workflow_status', 'status', 'computed_by',
+        ],
+        'PayrollBatch' => ['pay_month', 'pay_year', 'workflow_status', 'status'],
+        'ApprovalRequest' => [
+            'type', 'title', 'amount', 'project_tranche_id', 'lib_category_id', 'funding_source', 'justification',
+            'status', 'requested_by', 'reviewed_by', 'review_notes', 'remarks',
+        ],
+        'Liquidation' => ['title', 'project_tranche_id', 'amount', 'due_date', 'submitted_at', 'status', 'reviewed_by', 'remarks'],
+        'User' => [
+            'name', 'first_name', 'last_name', 'email', 'employee_id', 'position', 'contact_number',
+            'college', 'department', 'role_id', 'role', 'is_active',
+        ],
+        'ProjectUser' => ['user_id', 'role_id', 'role'],
+        'Document' => ['document_type', 'file_name', 'uploaded_by'],
+    ];
+
     private const MONEY = [
         'amount', 'allocated_amount', 'total_approved_budget', 'funding_agency_amount', 'budget', 'spent', 'remaining',
         'implementing_agency_counterpart', 'basic_rate', 'gross_pay', 'total_deductions', 'net_pay',
@@ -655,7 +708,7 @@ class AuditEntryPresenter
             default => 'diff',
         };
 
-        $keys = array_values(array_unique(array_merge(array_keys($old), array_keys($new))));
+        $keys = self::orderedKeys($type, array_merge(array_keys($old), array_keys($new)));
         $lines = [];
         // Old titles name a release by an old number; show its stored one.
         $this->entryRelease = $this->releaseOf($entry, $type, $old, $new);
@@ -700,6 +753,32 @@ class AuditEntryPresenter
         }
 
         return $lines;
+    }
+
+    /**
+     * $keys in the fixed order for $type (FIELD_ORDER), then the others in
+     * FIELD_LABELS order, then any left alphabetically: never the stored
+     * JSON key order, which depends on the database.
+     *
+     * @param  array<int, int|string>  $keys
+     * @return array<int, int|string>
+     */
+    public static function orderedKeys(string $type, array $keys): array
+    {
+        $keys = array_values(array_unique($keys));
+        // First place wins: a field in FIELD_ORDER keeps that rank, not its FIELD_LABELS one.
+        $rank = [];
+        foreach (array_merge(self::FIELD_ORDER[$type] ?? [], array_keys(self::FIELD_LABELS)) as $field) {
+            $rank[$field] ??= count($rank);
+        }
+        usort($keys, function ($a, $b) use ($rank) {
+            $ra = $rank[$a] ?? PHP_INT_MAX;
+            $rb = $rank[$b] ?? PHP_INT_MAX;
+
+            return $ra <=> $rb ?: strcmp((string) $a, (string) $b);
+        });
+
+        return $keys;
     }
 
     private function isHidden(string $key, AuditTrail $entry, string $type): bool

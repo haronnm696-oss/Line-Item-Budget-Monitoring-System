@@ -62,7 +62,7 @@ test('linking a purchase request fills line item, amount and payee', () => {
   const next = prefillFromRequest(blank, pr);
   assert.equal(next.purchase_request_id, '5');
   assert.equal(next.lib_category_id, '1');
-  assert.equal(next.amount, '1250.5');
+  assert.equal(next.amount, '1,250.50');
   assert.equal(next.payee, 'ABC Store');
   assert.equal(next.description, 'Bond paper');
   assert.equal(next.expense_date, '2026-11-17');
@@ -80,7 +80,7 @@ test('switching requests replaces the previous prefill; unlinking clears it', ()
   const first = prefillFromRequest(blank, pr);
   const second = prefillFromRequest(first, pr2, pr);
   assert.equal(second.lib_category_id, '3');
-  assert.equal(second.amount, '300');
+  assert.equal(second.amount, '300.00');
   assert.equal(second.payee, '');
   assert.equal(second.description, 'Bus fare');
   const none = prefillFromRequest(second, null, pr2);

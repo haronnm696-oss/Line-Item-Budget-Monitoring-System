@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MoneyInput;
 use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
@@ -96,7 +97,7 @@ class PurchaseRequestController extends Controller
             'lib_category_id' => [$required, 'integer', Rule::exists((new LibCategory())->getTable(), 'id')->where('project_id', $project->id)],
             'description' => [$required, 'string', 'max:500'],
             'quantity' => [$required, 'integer', 'min:1', 'max:1000000'],
-            'estimated_amount' => [$required, 'numeric', 'gt:0', 'max:9999999999999.99'],
+            'estimated_amount' => array_merge([$required, 'gt:0'], MoneyInput::RULES),
             'supplier' => ['sometimes', 'nullable', 'string', 'max:255'],
             'funding_source' => ['sometimes', 'nullable', Rule::in(LibCategory::SOURCES)],
         ], ['lib_category_id.exists' => 'Choose a line item of this project.']);

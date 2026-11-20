@@ -47,3 +47,14 @@ test('a successful request returns the server data', async () => {
 test('a failed read is an error, never sample data', async () => {
   await assert.rejects(() => performRead(async () => { throw httpError(404); }), { message: LOAD_ERROR, status: 404 });
 });
+
+test('a server error never shows the server text, only the fallback', async () => {
+  const { failureMessage } = await import('./apiResult.js');
+  const fallback = 'The project could not be saved. Please try again; if it keeps failing, tell the system administrator.';
+  assert.equal(failureMessage({ message: 'Server Error' }, 500, fallback), fallback);
+  assert.equal(failureMessage({ message: "SQLSTATE[HY000]: General error: 1364 Field 'implementing_agency_counterpart' doesn't have a default value" }, 500, fallback), fallback);
+  assert.equal(failureMessage(null, 0, fallback), fallback);
+  // Validation and other 4xx messages are still shown.
+  assert.equal(failureMessage({ message: 'The given data was invalid.', errors: { code: ['Another project already uses this code.'] } }, 422, fallback), 'Another project already uses this code.');
+  assert.equal(failureMessage({ message: 'You cannot change this project.' }, 403, fallback), 'You cannot change this project.');
+});

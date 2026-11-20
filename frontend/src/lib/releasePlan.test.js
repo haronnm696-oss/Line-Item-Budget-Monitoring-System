@@ -23,12 +23,14 @@ test('the summary gives planned, its percent and what is not yet scheduled', () 
 });
 
 test('percent and amount convert both ways, in centavos', () => {
-  assert.equal(amountFromPercent('70', 1210000), '847000.00');
+  assert.equal(amountFromPercent('70', 1210000), '847,000.00');
   assert.equal(amountFromPercent('33.33', 1000), '333.30');
-  assert.equal(amountFromPercent('30', 1000000.01), '300000.00');
+  assert.equal(amountFromPercent('30', 1000000.01), '300,000.00');
   assert.equal(percentFromAmount('847000', 1210000), '70');
   assert.equal(percentFromAmount('333.33', 1000), '33.33');
   assert.equal(percentFromAmount('363000.00', 1210000), '30');
+  assert.equal(percentFromAmount('847,000.00', 1210000), '70');
+  assert.equal(percentFromAmount('₱ 363,000', 1210000), '30');
   // Nothing to compute from.
   assert.equal(amountFromPercent('', 1000), '');
   assert.equal(amountFromPercent('abc', 1000), '');

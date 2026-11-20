@@ -1,3 +1,4 @@
+import { DATE_RANGE_ERROR, inDateRange } from './dateRange.js';
 import { numberWords } from './lineItemComputation.js';
 
 /*
@@ -50,8 +51,10 @@ export function durationInWords(start, end) {
 export function periodErrors(start, end) {
   const errors = {};
   if (!start) errors.start_date = 'Enter the start date.';
+  else if (!inDateRange(start)) errors.start_date = DATE_RANGE_ERROR;
   if (!end) errors.end_date = 'Enter the end date.';
-  else if (start && end <= start) errors.end_date = 'The end date must be after the start date.';
+  else if (!inDateRange(end)) errors.end_date = DATE_RANGE_ERROR;
+  else if (start && !errors.start_date && end <= start) errors.end_date = 'The end date must be after the start date.';
   return errors;
 }
 

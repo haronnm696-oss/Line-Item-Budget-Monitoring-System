@@ -7,6 +7,8 @@ import { useApiData } from '../../lib/useApiData';
 import { formatDate } from '../../lib/datetime';
 import { periodText, personnelForm, validatePersonnel } from '../../lib/personnel';
 import { Dialog, Field, RemoveDialog, useSave } from '../program/ProjectSetup';
+import MoneyInput from '../MoneyInput';
+import { DATE_MAX, DATE_MIN } from '../../lib/dateRange';
 import LoadState from '../LoadState';
 import { peso } from '../money';
 
@@ -159,7 +161,9 @@ function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
 
   const input = (key, label, extra = {}, type = 'text') => (
     <Field id={`pn-${key}`} label={label} error={errors[key]} {...extra}>
-      {(a11y) => (
+      {(a11y) => (type === 'money' ? (
+        <MoneyInput {...a11y} value={form[key]} disabled={busy} onChange={set(key)} />
+      ) : (
         <input
           {...a11y}
           className="program-input"
@@ -167,12 +171,12 @@ function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
           value={form[key]}
           disabled={busy}
           onChange={set(key)}
-          min={type === 'date' ? period.start ?? undefined : undefined}
-          max={type === 'date' ? period.end ?? undefined : undefined}
-          inputMode={key === 'monthly_honorarium' ? 'decimal' : key === 'bank_account' ? 'numeric' : undefined}
+          min={type === 'date' ? period.start ?? DATE_MIN : undefined}
+          max={type === 'date' ? period.end ?? DATE_MAX : undefined}
+          inputMode={key === 'bank_account' ? 'numeric' : undefined}
           autoComplete="off"
         />
-      )}
+      ))}
     </Field>
   );
 
@@ -207,7 +211,7 @@ function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
           {input('special_order_no', 'Special Order number', { full: true, hint: 'For example "SO No. 1111-OP s. 2025"' })}
           {input('effective_from', 'Effective from', { hint: periodHint }, 'date')}
           {input('effective_to', 'Effective to', {}, 'date')}
-          {input('monthly_honorarium', 'Monthly honorarium (₱)', { hint: 'Zero or more, at most two decimals' })}
+          {input('monthly_honorarium', 'Monthly honorarium (₱)', { hint: 'Zero or more, at most two decimals, e.g. 7,500.00' }, 'money')}
           {input('bank_account', 'Bank account number (optional)', {
             hint: record?.bank_account_masked
               ? `Stored: ${record.bank_account_masked}. Leave blank to keep it.`
