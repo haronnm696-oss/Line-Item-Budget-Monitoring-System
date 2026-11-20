@@ -1,4 +1,3 @@
-import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
@@ -11,12 +10,10 @@ import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import ReviewRow from '../../components/leader/ReviewRow';
-import { useReviewActions } from '../../components/leader/useReviewActions';
-import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { formatPct, peso } from '../../components/money';
 import { REQUEST_STATUS } from '../../lib/budgetRequestForm';
+import { spendingAlert } from '../../lib/leaderOverview';
 
 function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -29,24 +26,12 @@ function greeting() {
   return 'Good evening';
 }
 
-const BURN_PILL = {
-  ok: ['healthy', '✓'],
-  warn: ['watch', '⚠'],
-  over: ['risk', '✕'],
-  neutral: ['neutral', '•'],
-};
-
-
 /** Project Leader Overview: one project's budget, review queue, alerts and requests (descriptive only). */
 export default function ProjectLeaderDashboard() {
   const { user } = useAuth();
   const picker = useAssignedProject({ role: 'project-leader' });
   const url = picker.projectId ? ENDPOINTS.leaderOverview(picker.projectId) : null;
   const overview = useApiData(url);
-  const { retry } = overview;
-  const reload = useCallback(async () => retry(), [retry]);
-  const actions = useReviewActions(reload);
-  const [recording, setRecording] = useState(false);
 
   const data = overview.data;
   const firstName = (user?.name ?? 'there').replace(/^Dr\.?\s+/i, '').split(' ')[0];
@@ -60,32 +45,13 @@ export default function ProjectLeaderDashboard() {
           <h1 className="program-h1">{data?.project?.title ?? picker.project?.title ?? 'Project budget'}</h1>
           {data && <ProjectMeta project={data.project} />}
         </div>
-        <div className="pl-head-actions">
-          <ProjectSelect picker={picker} id="overview-project" />
-          {/* With no project led, these stay hidden; the page shows notAssignedText instead. */}
-          {picker.projectId && (
-            <>
-              <Link className="program-btn" to={`/reports${projectQuery}`}>Generate report</Link>
-              <button type="button" className="program-btn" onClick={() => { actions.setFeedback(null); setRecording(true); }}>
-                Record transaction
-              </button>
-              <Link className="program-btn primary" to={`/my-requests${projectQuery}${projectQuery ? '&' : '?'}new=fund_release`}>
-                Submit budget request
-              </Link>
-            </>
-          )}
-        </div>
       </div>
-
-      {actions.feedback && (
-        <div className={`program-banner ${actions.feedback.tone}`} role="status" aria-live="polite">{actions.feedback.text}</div>
-      )}
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <LoadState state={overview} loadingText="Loading project data…">
           {data && (
             <>
-              <Kpis kpis={data.kpis} funder={data.project?.funder} />
+              <Kpis kpis={data.kpis} funder={data.project?.funder} agency={data.project?.implementing_agency} />
 
               <div className="pl-row pl-row-main">
                 <section className="program-card">
@@ -133,20 +99,6 @@ export default function ProjectLeaderDashboard() {
           )}
         </LoadState>
       </LoadState>
-
-      {actions.dialog}
-
-      {recording && picker.projectId && (
-        <RecordExpenseDialog
-          projectId={picker.projectId}
-          onClose={() => setRecording(false)}
-          onDone={(text) => {
-            setRecording(false);
-            actions.setFeedback({ tone: 'ok', text });
-            retry();
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -162,7 +114,7 @@ function ProjectMeta({ project }) {
   );
 }
 
-function Kpis({ kpis, funder }) {
+function Kpis({ kpis, funder, agency }) {
   const utilization = Number(kpis.utilization_pct) || 0;
   const budget = Number(kpis.total_budget) || 0;
   const remaining = Number(kpis.remaining) || 0;
@@ -174,7 +126,7 @@ function Kpis({ kpis, funder }) {
         <div className="pl-kpi-head"><span className="pl-kpi-label">Total budget</span></div>
         <div className="pl-kpi-value"><AnimatedNumber value={budget} format={peso} /></div>
         <div className="pl-kpi-sub">
-          {funder || 'Funder'} {peso(kpis.funder_share)} + MSU–Main Campus counterpart {peso(kpis.counterpart)}
+          {funder || 'Funder'} {peso(kpis.funder_share)} + {agency || 'Implementing agency'} counterpart {peso(kpis.counterpart)}
         </div>
         <div className="pl-track pl-track-gold"><span style={{ width: `${clampPct(utilization)}%` }} /></div>
         <div className="pl-kpi-foot">{formatPct(utilization)} spent</div>
@@ -218,8 +170,7 @@ function AlertRow({ title, pill, children }) {
 }
 
 function BudgetAlerts({ alerts, projectQuery }) {
-  const burn = alerts.burn_rate;
-  const [tone, icon] = BURN_PILL[burn.tone] ?? BURN_PILL.neutral;
+  const spending = spendingAlert(alerts);
   const next = alerts.next_tranche;
   // With zero releases, "no next release" must not read as "all released".
   const noTranches = Number(alerts.tranche_count) === 0;
@@ -234,19 +185,26 @@ function BudgetAlerts({ alerts, projectQuery }) {
         </div>
       </div>
 
-      <AlertRow title="Spending against time" pill={<ProgramPill value={burn.status_label} tone={tone} icon={icon} />}>
-        <div className="pl-bar-line">
-          <span className="pl-bar-label">Spent</span>
-          <div className="pl-track"><span className={burn.spent_pct > burn.elapsed_pct ? 'is-warn' : ''} style={{ width: `${clampPct(burn.spent_pct)}%` }} /></div>
-          <b>{formatPct(burn.spent_pct)}</b>
-        </div>
-        <div className="pl-bar-line is-time">
-          <span className="pl-bar-label">Time</span>
-          <div className="pl-track"><span style={{ width: `${clampPct(burn.elapsed_pct)}%` }} /></div>
-          <b>{formatPct(burn.elapsed_pct)}</b>
-        </div>
-        <p className="ld-muted">{burn.message}</p>
-      </AlertRow>
+      {spending.setUp ? (
+        <AlertRow title="Spending against time" pill={<ProgramPill value={spending.label} tone={spending.tone} icon={spending.icon} />}>
+          <div className="pl-bar-line">
+            <span className="pl-bar-label">Spent</span>
+            <div className="pl-track"><span className={spending.spentPct > spending.elapsedPct ? 'is-warn' : ''} style={{ width: `${clampPct(spending.spentPct)}%` }} /></div>
+            <b>{formatPct(spending.spentPct)}</b>
+          </div>
+          <div className="pl-bar-line is-time">
+            <span className="pl-bar-label">Time</span>
+            <div className="pl-track"><span style={{ width: `${clampPct(spending.elapsedPct)}%` }} /></div>
+            <b>{formatPct(spending.elapsedPct)}</b>
+          </div>
+          <p className="ld-muted">{spending.message}</p>
+        </AlertRow>
+      ) : (
+        // No line items: no Under-spending / At-risk verdict, only who sets them up.
+        <AlertRow title="Spending against time" pill={<ProgramPill value="Not set" label="No line items yet" tone="neutral" icon="•" />}>
+          <p className="ld-muted">{spending.message}</p>
+        </AlertRow>
+      )}
 
       <AlertRow
         title="Next release"

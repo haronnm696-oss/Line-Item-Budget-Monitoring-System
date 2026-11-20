@@ -76,7 +76,8 @@ class ProjectSetupTest extends TestCase
         $this->assertSame(['project-leader'], $row['my_roles']);
         $this->getJson("/api/projects/{$id}/leader-overview")->assertOk()
             ->assertJsonPath('alerts.next_tranche', null)
-            ->assertJsonPath('alerts.tranche_count', 0); // "No tranches set yet", not "All released"
+            ->assertJsonPath('alerts.tranche_count', 0) // "No tranches set yet", not "All released"
+            ->assertJsonPath('alerts.line_item_count', 0); // "The Program Leader hasn't set up the line-item budget yet."
 
         // Validation: unique code, period order, leader must be a Project Leader account.
         $this->actingAs($this->programLeader);

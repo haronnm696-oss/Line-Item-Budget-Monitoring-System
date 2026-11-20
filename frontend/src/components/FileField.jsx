@@ -50,7 +50,7 @@ export default function FileField({ id, label, multiple = false, disabled = fals
   return (
     <>
       <label htmlFor={id}>{label} <span className="ld-muted">· {hint}{multiple ? ' each' : ''}</span></label>
-      <input id={id} type="file" accept={FILE_ACCEPT} multiple={multiple} onChange={choose} disabled={disabled} aria-describedby={`${id}-sizes`} />
+      <input id={id} className="program-input" type="file" accept={FILE_ACCEPT} multiple={multiple} onChange={choose} disabled={disabled} aria-describedby={`${id}-sizes`} />
       <div id={`${id}-sizes`} aria-live="polite">
         {preparing && <div className="ld-hint">Preparing… photos are resized before upload.</div>}
         {!preparing && items.map((item) => (

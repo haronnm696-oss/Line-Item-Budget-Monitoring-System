@@ -315,6 +315,11 @@ class FormBLineItemBudgetTest extends TestCase
         $this->assertSame('DOST', $overview->json('project.funder'));
         $this->assertSame([105600, 24000], [$overview->json('kpis.funder_share'), $overview->json('kpis.counterpart')]);
         $this->assertStringNotContainsString('MOST', $overview->getContent());
+        $this->assertSame(2, $overview->json('alerts.line_item_count'));
+        // The counterpart is named after the implementing agency: the Form B field, else IMPLEMENTING_AGENCY.
+        $this->assertSame(config('app.implementing_agency'), $overview->json('project.implementing_agency'));
+        $project->update(['implementing_agency_name' => ' MSU-Marawi ']);
+        $this->assertSame('MSU-Marawi', $this->getJson("/api/projects/{$project->id}/leader-overview")->json('project.implementing_agency'));
     }
 
     public function test_the_program_leader_edits_funder_names(): void

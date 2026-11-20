@@ -508,6 +508,17 @@ class ProjectFinancialService
         ];
     }
 
+    /**
+     * The project's implementing agency as people name it: the Form B
+     * "Implementing Agency" field, else the IMPLEMENTING_AGENCY setting.
+     */
+    public static function implementingAgencyName(Project $project): string
+    {
+        $name = trim((string) $project->implementing_agency_name);
+
+        return $name !== '' ? $name : self::sourceLabels($project)['implementing_agency'];
+    }
+
     public const COST_TYPE_LABELS = ['Direct' => 'Direct Cost', 'Indirect' => 'Indirect Cost'];
     public const CATEGORY_LABELS = ['PS' => 'Personal Services', 'MOOE' => 'Maintenance and Other Operating Expenses'];
 

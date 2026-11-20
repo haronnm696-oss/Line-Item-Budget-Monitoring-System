@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { documentsAfter, initialForm, pendingTrancheIds, requestFields, statusLabel } from './budgetRequestForm.js';
+import { NO_RELEASES_TEXT, documentsAfter, initialForm, pendingTrancheIds, releaseBlocksSend, releaseField, requestFields, statusLabel } from './budgetRequestForm.js';
 
 test('statuses read Returned / Withdrawn; a legacy rejected row reads Returned', () => {
   assert.equal(statusLabel('returned'), 'Returned');
@@ -55,4 +55,48 @@ test('documents left after removals and new files', () => {
   assert.equal(documentsAfter(docs, [1, 2], []), 0);
   assert.equal(documentsAfter(docs, [1], [{}]), 2);
   assert.equal(documentsAfter(null, [], [{}]), 1);
+});
+
+test('release field: no releases scheduled asks for the Program Leader and blocks fund release and liquidation', () => {
+  const field = releaseField([]);
+  assert.equal(field.state, 'none');
+  assert.equal(field.placeholder, NO_RELEASES_TEXT);
+  assert.equal(field.placeholder, 'No releases scheduled yet. Ask the Program Leader to add them.');
+  assert.equal(releaseBlocksSend('fund_release', field), true);
+  assert.equal(releaseBlocksSend('liquidation', field), true);
+  assert.equal(releaseBlocksSend('realignment', field), false);
+  // A missing list (payload not loaded) is "none" too, never "All released".
+  assert.equal(releaseField(undefined).state, 'none');
+});
+
+test('release field: some planned releases offer the unreleased ones', () => {
+  const field = releaseField([
+    { id: 1, name: 'Release 1', is_released: true },
+    { id: 2, name: 'Release 2', is_released: false },
+  ]);
+  assert.equal(field.state, 'some');
+  assert.equal(field.placeholder, 'Choose a release');
+  assert.deepEqual(field.unreleased.map((t) => t.id), [2]);
+  assert.equal(field.releases.length, 2);
+  assert.equal(releaseBlocksSend('fund_release', field), false);
+  assert.equal(releaseBlocksSend('liquidation', field), false);
+});
+
+test('release field: "All released" only when releases exist and every one is released', () => {
+  const field = releaseField([
+    { id: 1, is_released: true },
+    { id: 2, is_released: true },
+  ]);
+  assert.equal(field.state, 'all-released');
+  assert.equal(field.placeholder, 'All released');
+  assert.equal(field.unreleased.length, 0);
+  assert.equal(releaseBlocksSend('fund_release', field), false);
+  assert.equal(releaseBlocksSend('liquidation', field), false);
+});
+
+test('release field: loading and failed lists say so, never "All released" or "none"', () => {
+  assert.equal(releaseField([], { loading: true }).placeholder, 'Loading…');
+  const failed = releaseField([], { failed: true });
+  assert.equal(failed.state, 'error');
+  assert.equal(releaseBlocksSend('fund_release', failed), false);
 });

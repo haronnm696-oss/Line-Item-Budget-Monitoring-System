@@ -32,6 +32,8 @@ class ProjectSummaryService
                 'code' => $project->code,
                 'title' => $project->title,
                 'funder' => $project->fundingAgency ? ($project->fundingAgency->acronym ?: $project->fundingAgency->name) : null,
+                // The counterpart's owner (Form B field, else the IMPLEMENTING_AGENCY setting).
+                'implementing_agency' => ProjectFinancialService::implementingAgencyName($project),
                 'status' => ucfirst($this->financials->derivedStatus($project)),
                 'start_date' => $project->start_date?->toDateString(),
                 'end_date' => $project->end_date?->toDateString(),

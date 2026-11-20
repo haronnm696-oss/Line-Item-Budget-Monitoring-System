@@ -7,7 +7,6 @@ import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ReviewRow from '../../components/leader/ReviewRow';
 import RecordPanel from '../../components/leader/RecordPanel';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import { useReviewActions } from '../../components/leader/useReviewActions';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { useRoleBadges } from '../../layouts/roleBadges';
@@ -85,9 +84,6 @@ export default function Submissions() {
           <p className="program-sub">
             {picker.project ? `${picker.project.title} · ${picker.project.code}` : 'Expenses, payroll and purchase requests of your project'}
           </p>
-        </div>
-        <div className="pl-head-actions">
-          <ProjectSelect picker={picker} id="submissions-project" />
         </div>
       </div>
 

@@ -149,6 +149,8 @@
  *
  * Project Leader pages (project-leader of the project; 403 otherwise):
  *   GET /api/projects/:id/leader-overview   -> { project, kpis, review, alerts, monthly_expenses, category_summary, transactions, requests }
+ *                                           project.implementing_agency (Form B field, else IMPLEMENTING_AGENCY);
+ *                                           alerts.tranche_count / alerts.line_item_count (0 = not set up yet)
  *   GET /api/projects/:id/review-queue?tab=waiting|returned|approved&type=expense|payroll|purchase_request
  *                                           -> { counts: { waiting, returned, approved }, items }
  *   GET /api/projects/:id/review-queue/:type/:id -> { item } (any stage)

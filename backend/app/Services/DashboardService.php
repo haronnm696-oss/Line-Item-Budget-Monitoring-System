@@ -125,7 +125,7 @@ class DashboardService
                 'code' => $project->code,
                 'title' => $project->title,
                 'description' => $project->description,
-                'implementing_agency' => ProjectFinancialService::sourceLabels($project)['implementing_agency'],
+                'implementing_agency' => ProjectFinancialService::implementingAgencyName($project),
                 'funding_agency' => $this->fundingAgencyName($project),
                 // Why "Export Form B" is disabled (no funder / no line items), else null.
                 'form_b_blocker' => app(FormBReportService::class)->blocker($project),

@@ -67,7 +67,7 @@ export default function ResearcherDashboard() {
                 <section className="program-card pl-kpi pl-kpi-hero">
                   <div className="pl-kpi-head"><span className="pl-kpi-label">Total budget</span></div>
                   <div className="pl-kpi-value"><AnimatedNumber value={data.kpis.total_budget} format={peso} /></div>
-                  <div className="pl-kpi-sub">{data.project.funder ?? 'Funder'} {peso(data.kpis.funder_share)} · MSU–Main Campus {peso(data.kpis.counterpart)}</div>
+                  <div className="pl-kpi-sub">{data.project.funder ?? 'Funder'} {peso(data.kpis.funder_share)} · {data.project.implementing_agency || 'Implementing agency'} counterpart {peso(data.kpis.counterpart)}</div>
                   <div className="pl-track pl-track-gold"><span style={{ width: `${clampPct(data.kpis.utilization_pct)}%` }} /></div>
                   <div className="pl-kpi-foot">{formatPct(data.kpis.utilization_pct)} spent</div>
                 </section>

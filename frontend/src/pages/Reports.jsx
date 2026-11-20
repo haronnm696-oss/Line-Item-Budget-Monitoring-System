@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { csvPct, formatPct, peso } from '../components/money';
-import { REGISTER_PERIOD, registerCell, registerColumns, registerRows, registerTableHtml } from '../lib/payrollRegister';
+import { REGISTER_PERIOD, registerTableHtml } from '../lib/payrollRegister';
 import { printHtmlDocument, saveBlob } from '../lib/download';
 import { downloadPayrollRegisterCsv, downloadReportCsv, fetchFormB, fetchPayrollRegister } from '../api/reports';
 import { formBBlocker, formBHtml, formBTitle } from '../lib/formBPrint';
 import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
-import Chip, { statusTone } from '../components/Chip';
-import UtilBar from '../components/UtilBar';
+import { statusTone } from '../components/Chip';
 import StatCard from '../components/StatCard';
+import DownloadMenu from '../components/DownloadMenu';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
+import { reportDownloadOptions, reportsEyebrow } from '../lib/reportDownloads';
 import { myProjects, notAssignedText, projectRoleFor } from '../lib/myProjects';
 import FundingWarnings from '../components/program/FundingWarnings';
 
@@ -21,8 +22,6 @@ const REPORT_TYPES = [
     icon: '▤',
     title: 'R&D Form B (Project Line-Item Budget)',
     desc: "Official Form B layout for the project's funder: PS and MOOE, Direct and Indirect cost, counterpart and funder columns, and signatories.",
-    // The PDF button reads "Export Form B" for every project and funder.
-    pdfLabel: 'Export Form B',
   },
   {
     key: 'utilization',
@@ -111,14 +110,15 @@ function downloadCSV(content, filename) {
 
 export default function Reports({ programMode = false, initialCode = '' }) {
   const { user } = useAuth();
+  const roleCode = programMode ? 'PRG' : normalizeRole(user);
+  // The Project Leader works on the project from ?project= (no Project parameter).
+  const isLeader = roleCode === 'PL';
   // The one "my projects" rule for this role (the Program Leader: all projects).
-  const myRole = programMode ? null : projectRoleFor(normalizeRole(user));
+  const myRole = programMode ? null : projectRoleFor(roleCode);
   const [chosenCode, setChosenCode] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState(PERIODS[0]);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
   const [toast, setToast] = useState(null); // { msg, type }
-  const [printReport, setPrintReport] = useState(null); // { key, title }
-  const [csvReport, setCsvReport] = useState(null); // { key, title, content, filename }
 
   // ---------- Project list (real data only, never sample projects) ----------
   // Each result is tagged with the attempt it belongs to, so "loading" is
@@ -268,7 +268,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           spent: c.spent,
           remaining,
           util,
-          bar: <UtilBar key={c.name} pct={util} />,
         });
         gAlloc += c.allocated; gSpent += c.spent;
       });
@@ -276,7 +275,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       rows.push({
         group: title, item: `${title} Subtotal`, allocated: gAlloc, spent: gSpent,
         remaining: gAlloc - gSpent, util: gUtil, bold: true,
-        bar: <UtilBar key={title} pct={gUtil} />,
       });
       if (title.startsWith('I.')) { psAlloc = gAlloc; psSpent = gSpent; }
       else { mooeAlloc = gAlloc; mooeSpent = gSpent; }
@@ -290,7 +288,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     rows.push({
       group: 'Total', item: 'Grand Total (PS + MOOE)', allocated: totalAlloc, spent: totalSpent,
       remaining: totalAlloc - totalSpent, util: totalAlloc ? (totalSpent / totalAlloc) * 100 : 0, bold: true,
-      bar: <UtilBar key="total" pct={totalAlloc ? (totalSpent / totalAlloc) * 100 : 0} />,
     });
 
     return rows;
@@ -306,7 +303,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       status: e.status,
       recordedBy: e.recorded_by || '—',
       verifiedBy: e.verified_by || '—',
-      chip: <Chip key={e.id} tone={statusTone(e.status)}>{e.status}</Chip>,
     }));
   }
 
@@ -414,29 +410,19 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }
   }
 
-  function handleGenerate(type) {
+  // PDF: the print dialog opens straight away ("Save as PDF" there).
+  function downloadReportPdf(type) {
     if (!reportAvailable(type)) return;
     if (type === 'form-b') {
       exportFormBPdf();
       return;
     }
-    showToast(`Generating report preview for ${selectedProject.title}…`, 'info');
-
-    if (type === 'payroll-register') {
-      setPrintReport({ key: type, title: 'Payroll Register' });
-      setCsvReport({ key: type, title: 'Payroll Register', server: true });
-      return;
-    }
-    const csv = csvFor(type);
-    setPrintReport({ key: type, title: csv.title });
-    setCsvReport({ key: type, title: csv.title, content: toCSV(csv.rows, csv.headers), filename: csv.filename });
+    const title = type === 'payroll-register' ? 'Payroll Register' : csvFor(type).title;
+    printHtmlDocument(buildPrintHTML(type, title));
   }
 
   // ---------- Print-ready HTML ----------
-  function buildPrintHTML() {
-    const { key, title } = printReport || {};
-    if (!key) return '';
-
+  function buildPrintHTML(key, title) {
     let tableHtml = '';
     let subtitle = '';
 
@@ -538,7 +524,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <div class="org">
             <h1>Mindanao State University–Main Campus</h1>
             <p>Office of the Vice Chancellor for Research & Extension · LIB Monitoring System</p>
-            <p>Monitoring Agency: <b>${escapeHtml(selectedProject.funding_agency || 'External funder')}</b> · Implementing Agency: <b>MSU-Marawi</b></p>
+            <p>Monitoring Agency: <b>${escapeHtml(selectedProject.funding_agency || 'External funder')}</b> · Implementing Agency: <b>${escapeHtml(selectedProject.implementing_agency || 'MSU-Marawi')}</b></p>
           </div>
         </div>
 
@@ -564,141 +550,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     `;
   }
 
-  // Opens the print dialog for the previewed report ("Save as PDF" there).
-  function handlePrint() {
-    if (!printReport || !reportAvailable(printReport.key)) return;
-    printHtmlDocument(buildPrintHTML());
-  }
-
-  function handleCSV() {
-    if (!csvReport || !reportAvailable(csvReport.key)) return;
-    if (csvReport.server) {
-      downloadRegisterCsv();
-      return;
-    }
-    showToast(`Exporting ${csvReport.title} to CSV…`, 'info');
-    downloadCSV(csvReport.content, csvReport.filename);
-  }
-
-  // ---------- Render preview table ----------
-  function renderPreviewTable() {
-    const { key } = printReport || {};
-    if (!key) return null;
-
-    let rows, columns;
-
-    if (key === 'utilization') {
-      rows = buildUtilizationRows();
-      columns = [
-        { key: 'item', label: 'Line Item' },
-        { key: 'group', label: 'Category Type' },
-        { key: 'allocated', label: 'Allocated' },
-        { key: 'spent', label: 'Spent' },
-        { key: 'remaining', label: 'Remaining' },
-        { key: 'util', label: 'Utilization' },
-      ];
-    } else if (key === 'ledger') {
-      rows = buildLedgerRows();
-      columns = [
-        { key: 'date', label: 'Date' },
-        { key: 'ref', label: 'Reference' },
-        { key: 'description', label: 'Description' },
-        { key: 'category', label: 'Category' },
-        { key: 'amount', label: 'Amount' },
-        { key: 'status', label: 'Status' },
-      ];
-    } else if (key === 'payroll-register') {
-      // The register's own columns (computation, gross, net) and period totals.
-      rows = registerRows(register).map((row) => ({
-        bold: row.kind !== 'person',
-        cells: registerColumns(register).map((column) => {
-          const value = registerCell(row, column);
-          return { key: column.key, value: column.money ? formatMoney(value) : value, money: column.money };
-        }),
-      }));
-      columns = registerColumns(register).map((column) => ({ key: column.key, label: column.label, money: column.money }));
-    } else {
-      rows = buildMonthlySummaryRows();
-      columns = [
-        { key: 'month', label: 'Month' },
-        { key: 'ps', label: 'PS' },
-        { key: 'mooe', label: 'MOOE' },
-        { key: 'total', label: 'Total' },
-      ];
-    }
-
-    return (
-      <div className="panel" style={{ marginTop: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div className="panel-head">
-          <h3>Live Report Preview</h3>
-          <span className="hint">{printReport?.title} · {rows.length} row(s)</span>
-          <div className="actions" style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {detailStatus === 'error' ? (
-              <span className="rp-error" role="alert">
-                Could not load report data.
-                <button type="button" className="btn sm" onClick={retryDetail}>Try again</button>
-              </span>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="btn sm"
-                  onClick={handlePrint}
-                  disabled={!reportAvailable(printReport?.key)}
-                  aria-busy={detailStatus === 'loading'}
-                >
-                  {detailStatus === 'loading' && <span className="spin" aria-hidden="true" />}
-                  {detailStatus === 'loading' ? 'Loading data…' : 'Generate PDF'}
-                </button>
-                <button type="button" className="btn sm" onClick={handleCSV} disabled={!reportAvailable(printReport?.key)}>
-                  Export to CSV
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="wide-scroll" style={{ padding: '0 20px 20px', overflowX: 'auto' }}>
-          <table>
-            <thead>
-              <tr>
-                {columns.map((c) => (
-                  <th key={c.key} className={c.money || c.key === 'amount' || c.key === 'allocated' || c.key === 'spent' || c.key === 'remaining' || c.key === 'basic' || c.key === 'gross' || c.key === 'deductions' || c.key === 'net' || c.key === 'total' || c.key === 'util' ? 'r' : ''}>{c.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const isBold = r.bold;
-                const isTotalRow = r.item === 'Grand Total (PS + MOOE)' || r.item === 'PS Subtotal' || r.item === 'MOOE Subtotal';
-                if (r.cells) {
-                  return (
-                    <tr key={i} style={{ fontWeight: isBold ? 700 : 400 }}>
-                      {r.cells.map((cell) => <td key={cell.key} className={cell.money ? 'r' : ''}>{cell.value}</td>)}
-                    </tr>
-                  );
-                }
-                return (
-                  <tr key={i} style={{ fontWeight: isBold || isTotalRow ? 700 : 400, background: isTotalRow ? 'color-mix(in srgb, var(--gold) 8%, transparent)' : 'inherit' }}>
-                    {columns.map((c) => {
-                      if (c.key === 'bar') return <td key={c.key}>{r.bar}</td>;
-                      if (c.key === 'chip') return <td key={c.key}>{r.chip}</td>;
-                      let val = r[c.key];
-                      if (typeof val === 'number' && (c.key.includes('allocated') || c.key.includes('spent') || c.key.includes('remaining') || c.key.includes('basic') || c.key.includes('gross') || c.key.includes('deductions') || c.key.includes('net') || c.key.includes('total') || c.key === 'ps' || c.key === 'mooe')) {
-                        val = formatMoney(val);
-                      }
-                      if (c.key === 'util') val = formatPct(r.util);
-                      return <td key={c.key} className={(c.key === 'amount' || c.key === 'allocated' || c.key === 'spent' || c.key === 'remaining' || c.key === 'basic' || c.key === 'gross' || c.key === 'deductions' || c.key === 'net' || c.key === 'total' || c.key === 'ps' || c.key === 'mooe' || c.key === 'util') ? 'r' : ''}>{val}</td>;
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
   // ---------- Report summary cards (canonical backend figures) ----------
   const totalAlloc = Number(selectedProject.total_budget) || 0;
   const totalSpent = Number(selectedProject.total_spent) || 0;
@@ -721,7 +572,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     downloadCSV(toCSV(csv.rows, csv.headers), csv.filename);
   }
 
-  // Project / Period / Category selects, shared by both layouts.
+  // Project / Period / Category selects, shared by both layouts. The Project
+  // Leader has no Project select (the page follows ?project=).
   function renderParamFields(program) {
     const fieldProps = program ? { className: 'program-field' } : { className: 'field', style: { margin: 0 } };
     const selectClass = program ? 'program-select' : undefined;
@@ -732,7 +584,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }[projectsStatus];
     return (
       <>
-        <div {...fieldProps}>
+        {!isLeader && <div {...fieldProps}>
           <label htmlFor="report-param-project">Project</label>
           <div className="rp-project">
             <select
@@ -756,7 +608,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
               </button>
             )}
           </div>
-        </div>
+        </div>}
         <div {...fieldProps}>
           <label htmlFor="report-param-period">Period</label>
           <select id="report-param-period" className={selectClass} value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)}>
@@ -773,12 +625,27 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     );
   }
 
+  // One "Download" button per report: PDF or CSV (Form B: "Form B (PDF)").
+  function downloadMenu(r, buttonClassName, align) {
+    const actions = { pdf: () => downloadReportPdf(r.key), csv: () => exportReportCsv(r) };
+    return (
+      <DownloadMenu
+        label={r.title}
+        buttonClassName={buttonClassName}
+        align={align}
+        disabled={!reportAvailable(r.key)}
+        describedBy={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}
+        options={reportDownloadOptions(r.key).map((option) => ({ ...option, onSelect: actions[option.key] }))}
+      />
+    );
+  }
+
   // Values appear only once the selected project's real data has loaded.
   const shown = (value) => (project ? value : '—');
   const summaryCards = (
     <>
       <StatCard label={`Total ${project?.funding_agency || listRow?.agency || 'Funder'} funding`} value={shown(formatMoney(selectedProject.funding_budget || 0))} sub={`${project?.funding_agency || listRow?.agency || 'External funder'} grant`} />
-      <StatCard label="MSU–Main Campus counterpart" value={shown(formatMoney(selectedProject.counterpart_budget || 0))} sub="Implementing agency share" />
+      <StatCard label={`${project?.implementing_agency || 'Implementing agency'} counterpart`} value={shown(formatMoney(selectedProject.counterpart_budget || 0))} sub="Implementing agency share" />
       <StatCard label="Total spent" value={shown(formatMoney(totalSpent))} sub={project ? `${formatPct(utilization)} of total budget` : 'Waiting for project data'} />
       <StatCard label="Remaining Balance" value={shown(formatMoney(remaining))} sub={project ? `${formatPct(totalAlloc ? (remaining / totalAlloc) * 100 : 0)} unspent` : 'Waiting for project data'} />
     </>
@@ -819,17 +686,21 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     if (report.key === 'payroll-register' && registerStatus === 'loading') return;
     autoExport.current = true;
     if (!reportAvailable(report.key)) return;
-    if (format === 'pdf') handleGenerate(report.key);
+    if (format === 'pdf') downloadReportPdf(report.key);
     else exportReportCsv(report);
   });
 
   return (
     <>
       {!programMode && (
-        <div className="page-head">
+        <div className="pl-head">
           <div>
-            <h2>Reports</h2>
-            <p>Generated from verified expense records only · R&D Form B</p>
+            <div className="program-eyebrow">{reportsEyebrow(roleCode)}</div>
+            <h1 className="program-h1">Reports</h1>
+            <p className="program-sub">
+              {isLeader && listRow ? `${listRow.title} · ${listRow.code} · ` : ''}
+              Generated from verified expense records only · R&D Form B
+            </p>
           </div>
         </div>
       )}
@@ -873,20 +744,31 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                   {r.key === 'payroll-register' && reportsReady && payrollNote}
                   {r.key === 'form-b' && formBNote}
                 </div>
-                <div className="prr-actions">
-                  <button type="button" className={`program-btn${r.key === 'form-b' ? ' primary' : ''}`} onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
-                    {r.pdfLabel ?? 'Generate PDF'}
-                  </button>
-                  <button type="button" className="program-btn" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
-                    Export CSV
-                  </button>
-                </div>
+                <div className="prr-actions">{downloadMenu(r, `program-btn${r.key === 'form-b' ? ' primary' : ''}`, 'end')}</div>
               </li>
             ))}
           </ul>
         </div>
       ) : (
         <>
+          {/* Without the Project select, the Project Leader sees the project list's state here. */}
+          {isLeader && projectsStatus === 'error' && (
+            <div className="rp-error rp-error-block" role="alert">
+              <span>{projectsResult?.error || 'Could not load projects'}</span>
+              <button type="button" className="btn sm" onClick={retryProjects}>Try again</button>
+            </div>
+          )}
+          {isLeader && projectsStatus === 'empty' && <div className="banner" role="status">{notAssignedText(myRole)}</div>}
+
+          {/* Report parameters first: every report below uses them. */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-head"><h3>Report parameters</h3></div>
+            <div style={{ padding: 16 }} className={`grid ${isLeader ? 'c2' : 'c3'}`}>
+              {renderParamFields(false)}
+            </div>
+          </div>
+          {detailError}
+
           {/* Report cards */}
           <div className="report-opts" style={{ marginBottom: 20 }}>
             {REPORT_TYPES.map((r) => (
@@ -897,39 +779,28 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                   <p>{r.desc}</p>
                   {r.key === 'payroll-register' && reportsReady && payrollNote}
                   {r.key === 'form-b' && formBNote}
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                  <button className="btn sm" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
-                    {r.pdfLabel ?? 'Generate PDF'}
-                  </button>
-                  <button className="btn sm" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
-                    Export CSV
-                  </button>
+                  <div className="report-card-actions">{downloadMenu(r, 'btn', 'start')}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Report parameters */}
-          <div className="panel" style={{ marginBottom: 16 }}>
-            <div className="panel-head"><h3>Report parameters</h3></div>
-            <div style={{ padding: 16 }} className="grid c3">
-              {renderParamFields(false)}
+          {/* The Project Leader sees these figures on the Overview. */}
+          {!isLeader && (
+            <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
+              {summaryCards}
             </div>
-          </div>
-          {detailError}
-
-          {/* Summary widgets */}
-          <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
-            {summaryCards}
-          </div>
+          )}
         </>
       )}
 
-      {/* Typed project amounts not yet assigned to line items (Form B). */}
-      <FundingWarnings warnings={detail?.form_b?.warnings} className={programMode ? 'program-banner warn' : 'banner warn'} />
-      {/* Live preview */}
-      {renderPreviewTable()}
+      {/* Typed project amounts not yet assigned to line items (Form B). The
+          Project Leader cannot fix that, so they see who can instead. */}
+      {isLeader
+        ? (detail?.form_b?.warnings?.length > 0 && (
+          <div className="banner warn" role="status"><span aria-hidden="true">⚠ </span>The Program Leader hasn&apos;t finished the budget setup.</div>
+        ))
+        : <FundingWarnings warnings={detail?.form_b?.warnings} className={programMode ? 'program-banner warn' : 'banner warn'} />}
     </>
   );
 }

@@ -304,6 +304,8 @@ class ProjectLeaderService
                 'code' => $project->code,
                 'title' => $project->title,
                 'funder' => $project->fundingAgency ? ($project->fundingAgency->acronym ?: $project->fundingAgency->name) : null,
+                // The counterpart's owner (Form B field, else the IMPLEMENTING_AGENCY setting).
+                'implementing_agency' => ProjectFinancialService::implementingAgencyName($project),
                 'status' => ucfirst($this->financials->derivedStatus($project)),
                 'start_date' => $project->start_date?->toDateString(),
                 'end_date' => $project->end_date?->toDateString(),
@@ -325,6 +327,8 @@ class ProjectLeaderService
                 'next_tranche' => $this->nextTranche($tranches['items'], $requests),
                 // 0 = no tranches set yet (next_tranche null then does not mean "all released").
                 'tranche_count' => count($tranches['items']),
+                // 0 = the Program Leader has not set up the line-item budget yet.
+                'line_item_count' => $project->libCategories->count(),
                 'missing_receipts' => [
                     'count' => $compliance['missing_receipt'],
                     'items' => array_slice($compliance['missing_items'], 0, 3),
