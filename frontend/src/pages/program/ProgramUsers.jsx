@@ -350,9 +350,7 @@ export default function ProgramUsers() {
           <button type="button" className="program-btn" onClick={() => { setAddError(''); setAddOpen(true); }}>
             Add user
           </button>
-          <button type="button" className="program-btn primary" onClick={() => { setAssignError(''); setAssignDefaultUserId(''); setAssignOpen(true); }}>
-            Assign to project
-          </button>
+          {/* Assignment happens from Manage > Edit project assignments and the project page Team "Add member". */}
         </div>
       </div>
 
@@ -548,11 +546,6 @@ export default function ProgramUsers() {
                             onRole={() => openDialog('role', user)}
                             onStatus={() => openDialog('status', user)}
                             onAssignments={() => openDialog('assignments', user)}
-                            onAssign={() => {
-                              setAssignError('');
-                              setAssignDefaultUserId(String(user.id));
-                              setAssignOpen(true);
-                            }}
                           />
                         </td>
                       </tr>
@@ -613,10 +606,16 @@ export default function ProgramUsers() {
           onSave={(payload) => runDialog(() => updateProgramUserDetails(dialog.user.id, payload), 'Account details updated.')}
         />
       )}
-      {dialog?.kind === 'assignments' && (
+      {/* Hidden while its "Add to a project" step (the assign dialog) is open; it comes back after. */}
+      {dialog?.kind === 'assignments' && !assignOpen && (
         <AssignmentsDialog
           // The person's row from the latest list, so the dialog shows each change.
           user={users.find((user) => user.id === dialog.user.id) ?? dialog.user}
+          onAdd={() => {
+            setAssignError('');
+            setAssignDefaultUserId(String(dialog.user.id));
+            setAssignOpen(true);
+          }}
           onClose={() => setDialog(null)}
           onChanged={refresh}
           onFix={(projectId) => fixProjectAssignment(dialog.user.id, projectId)}

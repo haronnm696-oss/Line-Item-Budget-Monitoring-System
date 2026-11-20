@@ -332,7 +332,7 @@ class ProgramUserService
             ->where('is_active', true)
             ->whereDoesntHave('primaryRole', fn ($r) => $r->where('slug', 'program-leader'))
             ->orderBy('name')
-            ->with('primaryRole')
+            ->with(['primaryRole', 'projectUsers:id,user_id,project_id'])
             ->get(['id', 'name', 'email', 'is_active', 'role_id'])
             ->map(fn (User $user) => [
                 'id' => $user->id,
@@ -341,6 +341,43 @@ class ProgramUserService
                 'is_active' => true,
                 'role_slug' => $user->primaryRole?->slug,
                 'role_label' => self::ROLE_LABELS[$user->primaryRole?->slug] ?? $user->primaryRole?->name,
+                // Projects they are already on: the Assign dialog leaves these out.
+                'project_ids' => $user->projectUsers->pluck('project_id')->map(fn ($id) => (int) $id)->unique()->values()->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Projects for the Assign to project dialog, each with its current Project
+     * Leader (or null): a Project Leader cannot be added to a project that
+     * already has one (ensureNoOtherLeader), so the dialog greys it out.
+     * $only limits the list to one project (the project page's "Add member").
+     *
+     * @return array<int, array{id: int, title: string, code: ?string, status: string, leader: ?array{id: int, name: string}}>
+     */
+    public function assignableProjects(?Project $only = null): array
+    {
+        $leaders = ProjectUser::query()
+            ->whereHas('role', fn ($query) => $query->where('slug', 'project-leader'))
+            ->when($only, fn ($query) => $query->where('project_id', $only->id))
+            ->with('user:id,name')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (ProjectUser $row) => $row->user !== null)
+            ->groupBy('project_id')
+            ->map(fn ($rows) => ['id' => (int) $rows->first()->user->id, 'name' => $rows->first()->user->name]);
+
+        return Project::query()
+            ->when($only, fn ($query) => $query->whereKey($only->id))
+            ->orderBy('title')
+            ->get(['id', 'title', 'code', 'status'])
+            ->map(fn (Project $project) => [
+                'id' => $project->id,
+                'title' => $project->title,
+                'code' => $project->code,
+                'status' => ucfirst((string) $project->status),
+                'leader' => $leaders->get($project->id),
             ])
             ->values()
             ->all();

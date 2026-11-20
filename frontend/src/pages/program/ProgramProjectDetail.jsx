@@ -505,7 +505,8 @@ export default function ProgramProjectDetail() {
       {setup && dialog?.kind === 'assign' && (
         <ProgramAssignUserModal
           users={data.assignable_users ?? []}
-          projects={[{ id: project.id, title: project.title, code: project.code, status: project.status }]}
+          // assign_project carries the project's current Project Leader (greys it out for another leader).
+          projects={[data.assign_project ?? { id: project.id, title: project.title, code: project.code, status: project.status, leader: null }]}
           defaultProjectId={project.id}
           busy={assignBusy}
           error={assignError}

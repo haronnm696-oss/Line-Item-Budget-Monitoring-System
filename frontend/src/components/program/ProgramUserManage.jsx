@@ -15,7 +15,7 @@ const MSU_EMPLOYEE_ID = /^MSU-\d{5}$/i;
  * aria-expanded). Escape or a click outside closes it and focus returns to
  * the button. Arrow keys move between items.
  */
-export function ManageMenu({ user, onEdit, onRole, onAssign, onAssignments, onStatus }) {
+export function ManageMenu({ user, onEdit, onRole, onAssignments, onStatus }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
@@ -66,6 +66,11 @@ export function ManageMenu({ user, onEdit, onRole, onAssign, onAssignments, onSt
   const programWide = user.program_wide;
   const canAssign = user.is_active && !programWide;
   const hasAssignments = (user.assignments ?? []).length > 0;
+  // One entry for adding and removing projects: open when there is something to remove or the person can be added.
+  const canEditAssignments = hasAssignments || canAssign;
+  const assignmentsHint = canEditAssignments
+    ? undefined
+    : (programWide ? 'Program Leaders already oversee all projects' : 'Reactivate the account first');
 
   return (
     <div className="pu-menu-wrap">
@@ -93,19 +98,9 @@ export function ManageMenu({ user, onEdit, onRole, onAssign, onAssignments, onSt
             type="button"
             role="menuitem"
             className="pu-menu-item"
-            aria-disabled={!canAssign}
-            title={programWide ? 'Program Leaders already oversee all projects' : (!user.is_active ? 'Reactivate the account first' : undefined)}
-            onClick={() => canAssign && choose(onAssign)}
-          >
-            Assign to project
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="pu-menu-item"
-            aria-disabled={!hasAssignments}
-            title={hasAssignments ? undefined : 'No project assignments yet'}
-            onClick={() => hasAssignments && choose(onAssignments)}
+            aria-disabled={!canEditAssignments}
+            title={assignmentsHint}
+            onClick={() => canEditAssignments && choose(onAssignments)}
           >
             Edit project assignments
           </button>
@@ -502,9 +497,14 @@ function AssignmentRow({ user, assignment, programWide, onFix, onRemove, onDone 
   );
 }
 
-export function AssignmentsDialog({ user, onFix, onRemove, onChanged, onClose }) {
+/**
+ * "Edit project assignments": add a project (through the shared Assign to
+ * project dialog, `onAdd`) and fix or remove existing ones.
+ */
+export function AssignmentsDialog({ user, onAdd, onFix, onRemove, onChanged, onClose }) {
   const [notice, setNotice] = useState('');
   const assignments = user.assignments ?? [];
+  const canAdd = user.is_active && !user.program_wide;
 
   return (
     <Dialog title={`Edit project assignments · ${user.name}`} labelId="pu-asg-title" busy={false} onClose={onClose}>
@@ -537,8 +537,14 @@ export function AssignmentsDialog({ user, onFix, onRemove, onChanged, onClose })
             ))}
           </ul>
         )}
+        {!user.program_wide && !user.is_active && (
+          <p className="au-muted">Reactivate the account to add a project.</p>
+        )}
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose}>Close</button>
+          {canAdd && onAdd && (
+            <button type="button" className="program-btn primary" onClick={onAdd}>Add to a project</button>
+          )}
         </div>
       </div>
     </Dialog>

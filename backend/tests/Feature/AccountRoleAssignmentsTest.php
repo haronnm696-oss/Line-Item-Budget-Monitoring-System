@@ -76,6 +76,43 @@ class AccountRoleAssignmentsTest extends TestCase
         $this->assertSame('researcher', $pending->fresh()->roleOn($project));
     }
 
+    /** The Assign dialog leaves out a person's projects and greys out projects that already have a leader. */
+    public function test_assign_options_carry_each_persons_projects_and_each_projects_leader(): void
+    {
+        $assistant = $this->person('research-assistant', 'Papaw Dianalan');
+        $projectLeader = $this->person('project-leader', 'Norhaya Ali');
+        $led = $this->project('Enhancing Urban Mobility');
+        $free = $this->project('Halal Goat Value Chain');
+
+        foreach ([[$assistant, $led], [$projectLeader, $led]] as [$user, $project]) {
+            $this->actingAs($this->leader)
+                ->postJson('/api/program/assignments', ['user_id' => $user->id, 'project_id' => $project->id])
+                ->assertCreated();
+        }
+
+        $payload = $this->actingAs($this->leader)->getJson('/api/program/users')->assertOk();
+        $users = collect($payload->json('assignable_users'))->keyBy('id');
+        $this->assertSame([$led->id], $users[$assistant->id]['project_ids']);
+        $this->assertSame([$led->id], $users[$projectLeader->id]['project_ids']);
+
+        $projects = collect($payload->json('projects'))->keyBy('id');
+        $this->assertSame(['id' => $projectLeader->id, 'name' => 'Norhaya Ali'], $projects[$led->id]['leader']);
+        $this->assertNull($projects[$free->id]['leader']);
+
+        // The project page's Add member dialog gets the same row for its project.
+        $this->actingAs($this->leader)
+            ->getJson('/api/program/projects/' . $led->id)
+            ->assertOk()
+            ->assertJsonPath('assign_project.id', $led->id)
+            ->assertJsonPath('assign_project.leader.name', 'Norhaya Ali');
+
+        // What the greyed-out option says: the server refuses a second leader.
+        $second = $this->person('project-leader', 'Second Leader');
+        $this->actingAs($this->leader)
+            ->postJson('/api/program/assignments', ['user_id' => $second->id, 'project_id' => $led->id])
+            ->assertStatus(422);
+    }
+
     public function test_changing_the_account_role_updates_every_assignment_with_one_audit_entry(): void
     {
         $person = $this->person('researcher', 'Sittie Dimaporo');

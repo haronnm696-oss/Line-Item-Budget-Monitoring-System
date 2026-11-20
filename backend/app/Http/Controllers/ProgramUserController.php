@@ -80,19 +80,10 @@ class ProgramUserController extends Controller
         ]);
     }
 
+    /** Id, title, code, status and current Project Leader of every project. */
     protected function projectOptions(): array
     {
-        return Project::query()
-            ->orderBy('title')
-            ->get(['id', 'title', 'code', 'status'])
-            ->map(fn (Project $project) => [
-                'id' => $project->id,
-                'title' => $project->title,
-                'code' => $project->code,
-                'status' => ucfirst((string) $project->status),
-            ])
-            ->values()
-            ->all();
+        return $this->users->assignableProjects();
     }
 
     /**

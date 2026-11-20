@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import { assignFormReducer, assignRoleText, assignSubmission, canAssignTo, initialAssignForm } from '../../lib/assignForm';
+import { NO_PROJECTS_LEFT, assignFormReducer, assignRoleText, assignSubmission, initialAssignForm, projectChoices } from '../../lib/assignForm';
 
 /**
  * Assign to project: user and project only. The role on the project is the
@@ -12,13 +12,18 @@ export default function ProgramAssignUserModal({ users = [], projects = [], busy
 
   // Program Leaders are program-wide and never listed (the server leaves them out too).
   const activeUsers = users.filter((user) => user.is_active && user.role_slug !== 'program-leader');
-  const activeProjects = projects.filter(canAssignTo);
+  const selectedUser = activeUsers.find((user) => String(user.id) === form.userId) ?? null;
+  // Leaves out projects the person is already on; greys out, with the reason,
+  // projects that already have a leader when the person is a Project Leader.
+  const choices = projectChoices(projects, selectedUser);
+  const disabledChoices = choices.filter((project) => project.disabled);
+  const projectValue = choices.some((project) => !project.disabled && String(project.id) === form.projectId) ? form.projectId : '';
   const roleText = assignRoleText(form, activeUsers);
   const shownError = form.error || error;
 
   function handleSubmit(event) {
     event.preventDefault();
-    const result = assignSubmission(form, activeUsers);
+    const result = assignSubmission(form, activeUsers, projects);
     if (result.error) {
       dispatch({ type: 'invalid', error: result.error });
       return;
@@ -54,13 +59,37 @@ export default function ProgramAssignUserModal({ users = [], projects = [], busy
 
           <div className="program-field" style={{ marginTop: 14 }}>
             <label htmlFor="assign-project">Project</label>
-            <select id="assign-project" name="project_id" className="program-select" value={form.projectId} disabled={busy} onChange={change('projectId')}>
-              <option value="">Select a project</option>
-              {activeProjects.map((project) => (
-                <option key={project.id} value={String(project.id)}>{project.title} ({project.code})</option>
-              ))}
-            </select>
-            {activeProjects.length === 0 && <div className="program-muted">No active projects available.</div>}
+            {choices.length === 0 ? (
+              <p className="program-muted" id="assign-project-none" role="status">
+                {selectedUser ? NO_PROJECTS_LEFT : 'No active projects available.'}
+              </p>
+            ) : (
+              <>
+                <select
+                  id="assign-project"
+                  name="project_id"
+                  className="program-select"
+                  value={projectValue}
+                  disabled={busy}
+                  aria-describedby={disabledChoices.length ? 'assign-project-taken' : undefined}
+                  onChange={change('projectId')}
+                >
+                  <option value="">Select a project</option>
+                  {choices.map((project) => (
+                    <option key={project.id} value={String(project.id)} disabled={project.disabled}>
+                      {project.title} ({project.code}){project.disabled ? ` — led by ${project.leader.name}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {disabledChoices.length > 0 && (
+                  <ul className="program-muted" id="assign-project-taken">
+                    {disabledChoices.map((project) => (
+                      <li key={project.id}><span aria-hidden="true">⊘ </span>{project.code}: {project.reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
           </div>
 
           <div className="program-field" style={{ marginTop: 14 }}>
