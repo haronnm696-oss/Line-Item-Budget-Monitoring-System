@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchProgramOverview } from '../../api/program';
 import Reports from '../Reports';
@@ -7,8 +7,6 @@ export default function ProgramReports() {
   const [searchParams] = useSearchParams();
   const [funders, setFunders] = useState([]);
   const [funder, setFunder] = useState('');
-  const executiveRef = useRef(null);
-  const wantsExecutive = searchParams.get('report') === 'executive';
 
   // Funding-source options come from the Overview payload, so the values
   // match the Overview's filter exactly.
@@ -25,17 +23,9 @@ export default function ProgramReports() {
     return () => { alive = false; };
   }, []);
 
-  // ?report=executive (the Overview's "Executive report" button) opens the
-  // page on the Executive report card.
-  useEffect(() => {
-    if (!wantsExecutive || !executiveRef.current) return;
-    executiveRef.current.scrollIntoView({ block: 'start' });
-    executiveRef.current.focus({ preventScroll: true });
-  }, [wantsExecutive]);
-
-  const reportQuery = funder ? `?funder=${encodeURIComponent(funder)}` : '';
-  const previewUrl = `/program-reports/executive${reportQuery}`;
-  const printUrl = `/program-reports/executive${reportQuery ? `${reportQuery}&` : '?'}print=1`;
+  // The printable report opens with ?print=1, so the browser's
+  // "Save as PDF" dialog comes up once it has rendered.
+  const downloadUrl = `/program-reports/executive?${funder ? `funder=${encodeURIComponent(funder)}&` : ''}print=1`;
 
   return (
     <>
@@ -47,13 +37,7 @@ export default function ProgramReports() {
         </div>
       </div>
 
-      <section
-        className={`program-card${wantsExecutive ? ' is-selected' : ''}`}
-        id="executive-report"
-        ref={executiveRef}
-        tabIndex={-1}
-        aria-labelledby="executive-report-title"
-      >
+      <section className="program-card" id="executive-report" aria-labelledby="executive-report-title">
         <div className="program-card-head">
           <div>
             <div className="program-card-title" id="executive-report-title">Executive report</div>
@@ -79,8 +63,9 @@ export default function ProgramReports() {
             </select>
           </div>
           <span className="spacer" />
-          <Link className="program-btn" to={previewUrl}>Preview</Link>
-          <Link className="program-btn primary" to={printUrl}>Print / Save as PDF</Link>
+          <Link className="program-btn primary" to={downloadUrl}>
+            Download PDF<span className="pa-sr-only"> of the executive report</span>
+          </Link>
         </div>
       </section>
 

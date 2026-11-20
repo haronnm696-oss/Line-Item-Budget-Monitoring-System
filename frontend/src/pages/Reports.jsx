@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { csvPct, formatPct, peso } from '../components/money';
+import { csvPct, formatPct } from '../components/money';
 import { REGISTER_PERIOD, registerTableHtml } from '../lib/payrollRegister';
 import { printHtmlDocument, saveBlob } from '../lib/download';
 import { downloadPayrollRegisterCsv, downloadReportCsv, fetchFormB, fetchPayrollRegister } from '../api/reports';
@@ -8,7 +8,6 @@ import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import { statusTone } from '../components/Chip';
-import StatCard from '../components/StatCard';
 import DownloadMenu from '../components/DownloadMenu';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
@@ -57,10 +56,6 @@ const PERIODS = [
 ];
 
 const CATEGORIES = ['PS and MOOE', 'PS only', 'MOOE only'];
-
-function formatMoney(amount) {
-  return peso(amount);
-}
 
 function toCSV(rows, headers) {
   const headerRow = headers.join(',');
@@ -553,12 +548,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     `;
   }
 
-  // ---------- Report summary cards (canonical backend figures) ----------
-  const totalAlloc = Number(selectedProject.total_budget) || 0;
-  const totalSpent = Number(selectedProject.total_spent) || 0;
-  const remaining = Number(selectedProject.remaining ?? (totalAlloc - totalSpent)) || 0;
-  const utilization = Number(selectedProject.utilization_pct) || 0;
-
   // Direct CSV export for one report type (same rows as the preview).
   function exportReportCsv(r) {
     if (!reportAvailable(r.key)) return;
@@ -643,18 +632,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     );
   }
 
-  // Values appear only once the selected project's real data has loaded.
-  const shown = (value) => (project ? value : '—');
-  // The Program Leader's "at a glance" figures; the role pages show these on their Overview.
-  const summaryCards = (
-    <>
-      <StatCard label={`Total ${project?.funding_agency || listRow?.agency || 'Funder'} funding`} value={shown(formatMoney(selectedProject.funding_budget || 0))} sub={`${project?.funding_agency || listRow?.agency || 'External funder'} grant`} />
-      <StatCard label={`${project?.implementing_agency || 'Implementing agency'} counterpart`} value={shown(formatMoney(selectedProject.counterpart_budget || 0))} sub="Implementing agency share" />
-      <StatCard label="Total spent" value={shown(formatMoney(totalSpent))} sub={project ? `${formatPct(utilization)} of total budget` : 'Waiting for project data'} />
-      <StatCard label="Remaining Balance" value={shown(formatMoney(remaining))} sub={project ? `${formatPct(totalAlloc ? (remaining / totalAlloc) * 100 : 0)} unspent` : 'Waiting for project data'} />
-    </>
-  );
-
   // Shown under the parameters while the selected project's data failed.
   const detailError = detailStatus === 'error' && (
     <div className="rp-error rp-error-block" role="alert">
@@ -732,11 +709,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           </div>
           {detailError}
 
-          <div className="prr-label" id="prr-glance">Selected project at a glance</div>
-          <div className="prr-stats" role="group" aria-labelledby="prr-glance">
-            {summaryCards}
-          </div>
-
           <div className="prr-label" id="prr-reports">Reports for this project</div>
           <ul className="prr-list" aria-labelledby="prr-reports">
             {REPORT_TYPES.map((r) => (
@@ -800,7 +772,13 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         ? (detail?.form_b?.warnings?.length > 0 && (
           <div className="banner warn" role="status"><span aria-hidden="true">⚠ </span>The Program Leader hasn&apos;t finished the budget setup.</div>
         ))
-        : <FundingWarnings warnings={detail?.form_b?.warnings} className={programMode ? 'program-banner warn' : 'banner warn'} />}
+        : (
+          <FundingWarnings
+            warnings={detail?.form_b?.warnings}
+            className={programMode ? 'program-banner warn' : 'banner warn'}
+            fixTo={programMode && project?.id ? `/program-projects/${project.id}` : undefined}
+          />
+        )}
     </>
   );
 }

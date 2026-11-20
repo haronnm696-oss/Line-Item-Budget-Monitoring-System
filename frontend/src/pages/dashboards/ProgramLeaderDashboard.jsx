@@ -6,10 +6,10 @@ import { fetchProgramOverview } from '../../api/program';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import ApprovalPanel from '../../components/program/ApprovalPanel';
-import BudgetByProjectDonut from '../../components/program/BudgetByProjectDonut';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
 import { compactPeso, formatPct, peso } from '../../components/money';
+import { projectCardRows } from '../../lib/programOverview';
 
 function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -147,9 +147,7 @@ export default function ProgramLeaderDashboard() {
 
   const projectCount = data?.meta?.project_count ?? projects.length;
 
-  const projectRows = [...projects]
-    .sort((a, b) => (Number(b.budget) || 0) - (Number(a.budget) || 0))
-    .slice(0, 6);
+  const projectRows = projectCardRows(projects);
   const isEmpty = Boolean(data) && projects.length === 0;
 
   return (
@@ -184,13 +182,6 @@ export default function ProgramLeaderDashboard() {
               ))}
             </select>
           </div>
-          <Link className="program-btn primary" to="/program-approvals">
-            Review approvals
-            {pending > 0 && <span className="pl-count">{pending}</span>}
-          </Link>
-          <Link className="program-btn" to="/program-reports?report=executive">
-            Executive report
-          </Link>
           <span className="pl-updated" aria-live="polite">
             {refreshing ? 'Updating…' : ''}
           </span>
@@ -290,110 +281,6 @@ export default function ProgramLeaderDashboard() {
             </section>
           </div>
 
-          <div className="pl-row pl-row-main">
-            <section className="program-card">
-              <div className="program-card-head">
-                <div>
-                  <div className="program-card-title">Spending against time</div>
-                  <div className="program-card-sub">Spent versus elapsed time, largest projects first</div>
-                </div>
-                <Link className="program-card-link" to="/program-projects">View projects</Link>
-              </div>
-
-              <div className="pl-spend-list">
-                {projectRows.map((project) => (
-                  <div className="pl-spend-row" key={project.id}>
-                    <div className="pl-spend-main">
-                      <div className="pl-spend-title">
-                        <Link className="pl-project-link" to={`/program-projects/${project.id}`}><b>{project.title}</b></Link>
-                        <span>{project.code}</span>
-                      </div>
-                      <div className="pl-bar-line">
-                        <span className="pl-bar-label">Spent</span>
-                        <div className="pl-track">
-                          <span
-                            className={Number(project.spent_pct) > Number(project.time_pct) ? 'is-warn' : ''}
-                            style={{ width: `${clampPct(project.spent_pct)}%` }}
-                          />
-                        </div>
-                        <b>{formatPct(project.spent_pct)}</b>
-                      </div>
-                      <div className="pl-bar-line is-time">
-                        <span className="pl-bar-label">Time</span>
-                        <div className="pl-track">
-                          <span style={{ width: `${clampPct(project.time_pct)}%` }} />
-                        </div>
-                        <b>{formatPct(project.time_pct)}</b>
-                      </div>
-                    </div>
-                    <div className="pl-spend-side">
-                      <ProgramPill value={project.health} />
-                      <span>{compactPeso(project.budget)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-            <div className="pl-row-stack">
-              <section className="program-card pl-wallet pl-stretch">
-                <div className="program-card-head">
-                  <div>
-                    <div className="program-card-title">Funding sources</div>
-                    <div className="program-card-sub">{fundingSources.length} active funder{fundingSources.length === 1 ? '' : 's'}</div>
-                  </div>
-                </div>
-
-                <div className="pl-wallet-hero">
-                  <span>Not yet released</span>
-                  <b><AnimatedNumber value={notYetReleased} format={peso} /></b>
-                  <div
-                    className="pl-track pl-track-gold"
-                    role="progressbar"
-                    aria-label="Released of allocated"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(clampPct(releasedPct))}
-                  >
-                    <span style={{ width: `${clampPct(releasedPct)}%` }} />
-                  </div>
-                  <div className="pl-wallet-split">
-                    <div><span>Allocated</span><b><AnimatedNumber value={budget} format={peso} /></b></div>
-                    <div><span>Released</span><b><AnimatedNumber value={released} format={peso} /></b></div>
-                  </div>
-                </div>
-
-                <div className="pl-fund-list">
-                  {fundingSources.slice(0, 4).map((source) => (
-                    <div className="pl-fund-row" key={source.funder}>
-                      <div className="pl-fund-top">
-                        <b>{source.funder}</b>
-                        <span>{source.projects} project{source.projects === 1 ? '' : 's'}</span>
-                      </div>
-                      <div className="pl-track">
-                        <span style={{ width: `${clampPct(source.released_pct)}%` }} />
-                      </div>
-                      <div className="pl-fund-meta">
-                        <span>{formatPct(source.released_pct)} released</span>
-                        <b><AnimatedNumber value={source.allocated} format={compactPeso} /></b>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Link className="program-btn primary pl-wallet-cta" to="/program-projects">
-                  View all projects
-                </Link>
-              </section>
-            </div>
-          </div>
-
-          <div className="pl-row pl-row-trend">
-            <MonthlyExpenseTrend months={monthlyExpenses} />
-            <PsMooeCard summary={data.category_summary} />
-          </div>
-
-          <BudgetByProjectDonut projects={projects} />
-
           {pending > 0 && (
           <section className="program-card">
             <div className="program-card-head">
@@ -453,47 +340,114 @@ export default function ProgramLeaderDashboard() {
           </section>
           )}
 
-          <section className="program-card">
-            <div className="program-card-head">
-              <div>
-                <div className="program-card-title">Project health matrix</div>
-                <div className="program-card-sub">Spending, releases, receipts and overall health</div>
+          <div className="pl-row pl-row-main">
+            <section className="program-card" aria-labelledby="pl-projects-title">
+              <div className="program-card-head">
+                <div>
+                  <div className="program-card-title" id="pl-projects-title">Projects</div>
+                  <div className="program-card-sub">Spent versus elapsed time, health, releases and receipts, largest projects first</div>
+                </div>
+                <Link className="program-card-link" to="/program-projects">View projects</Link>
               </div>
-            </div>
 
-            <div className="program-scroll">
-              <table className="program-table pl-table">
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Releases</th>
-                    <th>Receipts</th>
-                    <th>Health</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projects.map((project) => (
-                    <tr key={project.id}>
-                      <td>
-                        <Link className="project-name pl-project-link" to={`/program-projects/${project.id}`}>{project.title}</Link>
-                        <div className="project-code">{project.code} · {project.funder}</div>
-                      </td>
-                      <td><ProgramPill value={project.tranche_status} /></td>
-                      <td className="num">
-                        {project.receipt_compliance_pct != null
-                          ? formatPct(project.receipt_compliance_pct)
-                          : '—'}
-                      </td>
-                      <td>
-                        <ProgramPill value={project.health} />
-                        <div className="pl-health-reason">{project.health_reason}</div>
-                      </td>
-                    </tr>
+              <ul className="pl-spend-list" aria-labelledby="pl-projects-title">
+                {projectRows.map((project) => (
+                  <li className="pl-spend-row" key={project.id}>
+                    <div className="pl-spend-main">
+                      <div className="pl-spend-title">
+                        <Link className="pl-project-link" to={`/program-projects/${project.id}`}><b>{project.title}</b></Link>
+                        <span>{project.code}{project.funder ? ` · ${project.funder}` : ''}</span>
+                      </div>
+                      <div className="pl-bar-line">
+                        <span className="pl-bar-label">Spent</span>
+                        <div className="pl-track">
+                          <span
+                            className={Number(project.spent_pct) > Number(project.time_pct) ? 'is-warn' : ''}
+                            style={{ width: `${clampPct(project.spent_pct)}%` }}
+                          />
+                        </div>
+                        <b>{formatPct(project.spent_pct)}</b>
+                      </div>
+                      <div className="pl-bar-line is-time">
+                        <span className="pl-bar-label">Time</span>
+                        <div className="pl-track">
+                          <span style={{ width: `${clampPct(project.time_pct)}%` }} />
+                        </div>
+                        <b>{formatPct(project.time_pct)}</b>
+                      </div>
+                      {project.health_reason && <div className="pl-health-reason">{project.health_reason}</div>}
+                    </div>
+                    <div className="pl-spend-side">
+                      <ProgramPill value={project.health} />
+                      {project.tranche_status && (
+                        <ProgramPill value={project.tranche_status} label={`Releases: ${project.tranche_status}`} />
+                      )}
+                      <span className="pl-spend-receipts">
+                        Receipts{' '}
+                        <b>{project.receipt_compliance_pct != null ? formatPct(project.receipt_compliance_pct) : '—'}</b>
+                      </span>
+                      <span>{compactPeso(project.budget)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <div className="pl-row-stack">
+              <section className="program-card pl-wallet pl-stretch">
+                <div className="program-card-head">
+                  <div>
+                    <div className="program-card-title">Funding sources</div>
+                    <div className="program-card-sub">{fundingSources.length} active funder{fundingSources.length === 1 ? '' : 's'}</div>
+                  </div>
+                </div>
+
+                <div className="pl-wallet-hero">
+                  <span>Not yet released</span>
+                  <b><AnimatedNumber value={notYetReleased} format={peso} /></b>
+                  <div
+                    className="pl-track pl-track-gold"
+                    role="progressbar"
+                    aria-label="Released of allocated"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(clampPct(releasedPct))}
+                  >
+                    <span style={{ width: `${clampPct(releasedPct)}%` }} />
+                  </div>
+                  <div className="pl-wallet-split">
+                    <div><span>Allocated</span><b><AnimatedNumber value={budget} format={peso} /></b></div>
+                    <div><span>Released</span><b><AnimatedNumber value={released} format={peso} /></b></div>
+                  </div>
+                </div>
+
+                <div className="pl-fund-list">
+                  {fundingSources.slice(0, 4).map((source) => (
+                    <div className="pl-fund-row" key={source.funder}>
+                      <div className="pl-fund-top">
+                        <b>{source.funder}</b>
+                        <span>{source.projects} project{source.projects === 1 ? '' : 's'}</span>
+                      </div>
+                      <div className="pl-track">
+                        <span style={{ width: `${clampPct(source.released_pct)}%` }} />
+                      </div>
+                      <div className="pl-fund-meta">
+                        <span>{formatPct(source.released_pct)} released</span>
+                        <b><AnimatedNumber value={source.allocated} format={compactPeso} /></b>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+              </section>
             </div>
-          </section>
+          </div>
+
+          <div className="pl-row pl-row-trend">
+            <MonthlyExpenseTrend months={monthlyExpenses} />
+            <PsMooeCard summary={data.category_summary} />
+          </div>
+
+
         </>
       )}
 
