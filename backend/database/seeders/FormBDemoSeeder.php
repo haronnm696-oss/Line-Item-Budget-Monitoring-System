@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\ProjectLeaderRule;
 use App\Models\FundingAgency;
 use App\Models\LibCategory;
 use App\Models\Project;
@@ -80,7 +81,11 @@ class FormBDemoSeeder extends Seeder
             'status' => 'ongoing',
         ]);
 
-        if ($leader) {
+        // One active project per Project Leader (the shared rule): skip with a warning.
+        $otherLed = $leader ? ProjectLeaderRule::blockingProject($leader, $project) : null;
+        if ($otherLed) {
+            $this->command?->warn(self::CODE . ': ' . ProjectLeaderRule::message($leader, $otherLed) . ' Leader not assigned.');
+        } elseif ($leader) {
             ProjectUser::firstOrCreate(
                 ['project_id' => $project->id, 'user_id' => $leader->id],
                 ['role_id' => $leader->role_id, 'assigned_at' => now()]

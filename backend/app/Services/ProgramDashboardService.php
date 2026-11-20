@@ -220,6 +220,8 @@ class ProgramDashboardService
             'funders' => $this->funderOptions(),
             'leaders' => $this->leaderOptions(),
             'years' => $this->yearOptions(),
+            // Project Leaders leading more than one active project (older data, never fixed automatically).
+            'leader_conflicts' => ProjectLeaderRule::conflicts(),
         ];
     }
 

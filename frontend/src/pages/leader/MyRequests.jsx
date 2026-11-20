@@ -9,7 +9,6 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProgramPill from '../../components/program/ProgramPill';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import BudgetRequestDialog from '../../components/leader/BudgetRequestDialog';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
@@ -84,7 +83,6 @@ export default function MyRequests() {
           </p>
         </div>
         <div className="pl-head-actions">
-          <ProjectSelect picker={picker} id="requests-project" />
           {picker.projectId && (
             <button type="button" className="program-btn primary" onClick={() => { setFeedback(null); setParams({ new: 'fund_release', tranche: '', edit: '' }); }}>
               Submit budget request

@@ -78,3 +78,27 @@ export function documentsAfter(existing, removeIds, newFiles) {
   const removed = new Set((removeIds ?? []).map(String));
   return (existing ?? []).filter((doc) => !removed.has(String(doc.id))).length + (newFiles?.length ?? 0);
 }
+
+export const NO_RELEASES_TEXT = 'No releases scheduled yet. Ask the Program Leader to add them.';
+
+/**
+ * The Release field of the request dialog, from the project's releases
+ * (GET /api/projects/:id/tranches `items`). `state`:
+ *   'loading' | 'error' | 'none' (no releases scheduled) |
+ *   'all-released' (releases exist, every one released) | 'some'.
+ * "All released" is said only when releases exist and all are released.
+ */
+export function releaseField(items, { loading = false, failed = false } = {}) {
+  const releases = Array.isArray(items) ? items : [];
+  const unreleased = releases.filter((release) => !release.is_released);
+  if (loading) return { state: 'loading', placeholder: 'Loading…', releases, unreleased };
+  if (failed) return { state: 'error', placeholder: 'Could not load the releases', releases, unreleased };
+  if (releases.length === 0) return { state: 'none', placeholder: NO_RELEASES_TEXT, releases, unreleased };
+  if (unreleased.length === 0) return { state: 'all-released', placeholder: 'All released', releases, unreleased };
+  return { state: 'some', placeholder: 'Choose a release', releases, unreleased };
+}
+
+/** With no releases scheduled, a fund release or a liquidation cannot be sent (a realignment can). */
+export function releaseBlocksSend(type, field) {
+  return field.state === 'none' && (type === 'fund_release' || type === 'liquidation');
+}

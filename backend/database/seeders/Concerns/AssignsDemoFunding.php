@@ -2,6 +2,7 @@
 
 namespace Database\Seeders\Concerns;
 
+use App\Services\ProjectLeaderRule;
 use App\Models\FundingAgency;
 use App\Models\Project;
 use App\Models\Role;
@@ -72,6 +73,15 @@ trait AssignsDemoFunding
         $leader = User::where('email', $assignment['leader'])->first();
         $role = Role::where('slug', 'project-leader')->first();
         if (! $leader || ! $role) {
+            return;
+        }
+
+        // One active project per Project Leader (the shared rule): a demo
+        // leader who already leads another active project is not added.
+        $otherLed = ProjectLeaderRule::blockingProject($leader, $project);
+        if ($otherLed) {
+            $this->command?->warn($project->code . ': ' . ProjectLeaderRule::message($leader, $otherLed) . ' Leader not assigned.');
+
             return;
         }
 

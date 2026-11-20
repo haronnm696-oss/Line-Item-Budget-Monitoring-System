@@ -7,6 +7,9 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
+import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
+import { useAuth } from '../../context/AuthContext';
+import { normalizeRole } from '../../lib/roles';
 import DocumentList from '../../components/leader/DocumentList';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
@@ -21,8 +24,12 @@ const FILTERS = ['from', 'to', 'line_item', 'category'];
  */
 export default function Transactions() {
   const picker = useAssignedProject();
+  // Only the Project Leader records here (no project picker for them either).
+  const isLeader = normalizeRole(useAuth().user) === 'PL';
   const [searchParams, setSearchParams] = useSearchParams();
   const [docsFor, setDocsFor] = useState(null);
+  const [recording, setRecording] = useState(false);
+  const [feedback, setFeedback] = useState(null); // { tone, text }
 
   const query = new URLSearchParams();
   FILTERS.forEach((key) => { const v = searchParams.get(key); if (v) query.set(key, v); });
@@ -63,9 +70,19 @@ export default function Transactions() {
           </p>
         </div>
         <div className="pl-head-actions">
-          <ProjectSelect picker={picker} id="transactions-project" />
+          {!isLeader && <ProjectSelect picker={picker} id="transactions-project" />}
+          {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
+          {isLeader && picker.projectId && (
+            <button type="button" className="program-btn primary" onClick={() => { setFeedback(null); setRecording(true); }}>
+              Record transaction
+            </button>
+          )}
         </div>
       </div>
+
+      {feedback && (
+        <div className={`program-banner ${feedback.tone}`} role="status" aria-live="polite">{feedback.text}</div>
+      )}
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
         <div className="program-filter-row ld-controls">
@@ -155,6 +172,18 @@ export default function Transactions() {
           </LoadState>
         )}
       </LoadState>
+
+      {isLeader && recording && picker.projectId && (
+        <RecordExpenseDialog
+          projectId={picker.projectId}
+          onClose={() => setRecording(false)}
+          onDone={(text) => {
+            setRecording(false);
+            setFeedback({ tone: 'ok', text });
+            result.retry();
+          }}
+        />
+      )}
 
       {docsFor && (
         <div className="ld-panel-overlay" role="presentation" onClick={() => setDocsFor(null)}>

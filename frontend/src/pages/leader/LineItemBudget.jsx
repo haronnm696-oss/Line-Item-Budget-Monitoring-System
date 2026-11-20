@@ -5,7 +5,6 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProgramPill from '../../components/program/ProgramPill';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import { formatPct, peso } from '../../components/money';
 
 const GROUPS = [
@@ -59,13 +58,10 @@ export default function LineItemBudget() {
             Available = allocated − spent − pending. Spent = verified expenses and verified payroll.
           </p>
         </div>
-        <div className="pl-head-actions">
-          <ProjectSelect picker={picker} id="budget-project" />
-        </div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
-        <LoadState state={balancing} loadingText="Loading line items…" emptyText="This project has no line items yet." isEmpty={rows.length === 0}>
+        <LoadState state={balancing} loadingText="Loading line items…" emptyText="This project has no line items yet. The Program Leader sets them up from the project's Form B." isEmpty={rows.length === 0}>
           <section className="program-card">
             <div className="program-scroll">
               <table className="program-table ld-table ld-budget-table">

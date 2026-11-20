@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 import { useApiData } from '../lib/useApiData';
-import { pickProject } from '../lib/useAssignedProject';
+import { pickProject } from '../lib/myProjects';
 import { apiGet } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
 import RoleShell from './RoleShell';

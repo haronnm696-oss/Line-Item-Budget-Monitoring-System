@@ -62,6 +62,8 @@ class ProjectSetupService
                 'start_date' => $data['start_date'],
                 'end_date' => $data['end_date'],
             ], $this->moaValues($data)));
+            // One active project per Project Leader (rolls the insert back when refused).
+            ProjectLeaderRule::ensureCanLead($leader, $project);
             $this->setLeader($project, $leader);
 
             AuditLogger::write('created', $project, [], $this->projectSnapshot($project->fresh()), $actor);
@@ -107,6 +109,8 @@ class ProjectSetupService
         return AuditLogger::transaction(function () use ($project, $data, $leader, $actor) {
             $locked = Project::whereKey($project->id)->lockForUpdate()->firstOrFail();
             $old = $this->projectSnapshot($locked);
+            $wasActive = ProjectLeaderRule::isActive($locked);
+            $currentLeaderIds = ProjectLeaderRule::leadersOf($locked)->pluck('id')->map(fn ($id) => (int) $id)->all();
 
             if (array_key_exists('total_approved_budget', $data)) {
                 $allocated = (float) $locked->libCategories()->sum('allocated_amount');
@@ -131,6 +135,15 @@ class ProjectSetupService
             $locked->update(array_intersect_key($data, array_flip([
                 'funding_agency_id', 'funder_reference', 'start_date', 'end_date', 'total_approved_budget',
             ])) + $print + $this->moaValues($data));
+            // One active project per Project Leader: a new leader is checked
+            // (keeping the same leader is not a new assignment), and so is the
+            // leader of a completed project that the new dates make active again.
+            $changesLeader = $leader && $currentLeaderIds !== [(int) $leader->id];
+            if ($changesLeader) {
+                ProjectLeaderRule::ensureCanLead($leader, $locked->fresh());
+            } else {
+                ProjectLeaderRule::ensureCanReactivate($locked->fresh(), $wasActive);
+            }
             if ($leader) {
                 $this->setLeader($locked, $leader);
             }
@@ -546,12 +559,18 @@ class ProjectSetupService
             'funders' => \App\Models\FundingAgency::query()->orderBy('name')->get()
                 ->map(fn ($agency) => ['id' => $agency->id, 'name' => $agency->name, 'acronym' => $agency->acronym])
                 ->values()->all(),
-            'leaders' => User::query()
-                ->where('is_active', true)
-                ->whereHas('primaryRole', fn ($role) => $role->where('slug', 'project-leader'))
-                ->orderBy('name')->get(['id', 'name'])
-                ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])
-                ->values()->all(),
+            // `leads`: the active projects each one leads (one at most is allowed);
+            // the form lists the free ones and greys the others with that project.
+            'leaders' => (function () {
+                $leads = ProjectLeaderRule::activeLeadershipsByUser();
+
+                return User::query()
+                    ->where('is_active', true)
+                    ->whereHas('primaryRole', fn ($role) => $role->where('slug', 'project-leader'))
+                    ->orderBy('name')->get(['id', 'name'])
+                    ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'leads' => $leads[$user->id] ?? []])
+                    ->values()->all();
+            })(),
         ];
     }
 

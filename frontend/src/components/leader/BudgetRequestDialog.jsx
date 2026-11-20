@@ -4,7 +4,7 @@ import { ENDPOINTS } from '../../api/endpoints';
 import { errorText, fetchDocuments, fieldErrors, resubmitBudgetRequest, submitBudgetRequest } from '../../api/leader';
 import { useAuth } from '../../context/AuthContext';
 import { useApiData } from '../../lib/useApiData';
-import { documentsAfter, initialForm, pendingTrancheIds, requestFields } from '../../lib/budgetRequestForm';
+import { documentsAfter, initialForm, pendingTrancheIds, releaseBlocksSend, releaseField, requestFields } from '../../lib/budgetRequestForm';
 import { peso } from '../money';
 import { formatDate } from '../../lib/datetime';
 import { requestFormWarning } from '../../lib/releasePlan';
@@ -55,7 +55,10 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
   }, [editing, request?.id]);
 
   const pendingTranches = pendingTrancheIds(requests, editing ? request.id : null);
-  const unreleased = (tranches.data?.items ?? []).filter((t) => !t.is_released);
+  const releases = releaseField(tranches.data?.items, { loading: tranches.status === 'loading', failed: tranches.status === 'error' });
+  const { unreleased } = releases;
+  // No releases scheduled: fund release and liquidation wait for the Program Leader.
+  const blockedByReleases = releaseBlocksSend(type, releases);
   // A reminder, not a block: an earlier released release has no approved liquidation.
   const liquidationWarning = requestFormWarning(type, tranches.data?.summary);
   const lineItems = balancing.data?.line_items ?? [];
@@ -175,8 +178,8 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
         {type === 'fund_release' && (
           <div className="program-field">
             <label htmlFor="ld-tranche">Release</label>
-            <select id="ld-tranche" className="program-select" value={trancheId} onChange={set('trancheId')} disabled={busy || loadingOptions}>
-              <option value="">{loadingOptions ? 'Loading…' : unreleased.length ? 'Choose a release' : 'All released'}</option>
+            <select id="ld-tranche" className="program-select" value={trancheId} onChange={set('trancheId')} disabled={busy || loadingOptions || releases.state === 'none'}>
+              <option value="">{loadingOptions ? 'Loading…' : releases.placeholder}</option>
               {unreleased.map((t) => (
                 <option key={t.id} value={t.id} disabled={pendingTranches.has(String(t.id))}>
                   {t.name} · {peso(t.amount)} · planned {formatDate(t.planned_release_date)}
@@ -274,9 +277,9 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
             </div>
             <div className="program-field">
               <label htmlFor="ld-liq-tranche">Release <span className="ld-muted">optional</span></label>
-              <select id="ld-liq-tranche" className="program-select" value={trancheId} onChange={set('trancheId')} disabled={busy || loadingOptions}>
-                <option value="">None</option>
-                {(tranches.data?.items ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <select id="ld-liq-tranche" className="program-select" value={trancheId} onChange={set('trancheId')} disabled={busy || loadingOptions || releases.state === 'none'}>
+                <option value="">{releases.state === 'none' ? releases.placeholder : 'None'}</option>
+                {releases.releases.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
           </div>
@@ -338,7 +341,6 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
               setErrors((current) => ({ ...current, files: problem ?? undefined }));
             }}
           />
-          {files.length > 0 && <div className="ld-hint">{files.length} file{files.length === 1 ? '' : 's'} chosen</div>}
           {err('files')}
         </div>
 
@@ -359,7 +361,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
 
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="program-btn primary" disabled={busy || preparing || overAvailable || (editing && documents === null)}>
+          <button type="submit" className="program-btn primary" disabled={busy || preparing || overAvailable || blockedByReleases || (editing && documents === null)}>
             {busy ? 'Sending…' : editing ? 'Resubmit to Program Leader' : 'Send to Program Leader'}
           </button>
         </div>

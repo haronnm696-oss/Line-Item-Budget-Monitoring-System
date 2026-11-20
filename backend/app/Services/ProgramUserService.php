@@ -311,6 +311,8 @@ class ProgramUserService
 
         return [
             'users' => $users->map(fn (User $user) => $this->directoryRow($user, $actor))->values()->all(),
+            // Project Leaders leading more than one active project (older data, never fixed automatically).
+            'leader_conflicts' => ProjectLeaderRule::conflicts(),
             'meta' => [
                 'total' => $total,
                 'page' => (int) (($offset + $limit) / self::PER_PAGE),
@@ -469,6 +471,8 @@ class ProgramUserService
 
         if ($role->slug === 'project-leader') {
             $this->ensureNoOtherLeader($project, $lockedUser);
+            // One active project per Project Leader (Assign to project and registration review).
+            ProjectLeaderRule::ensureCanLead($lockedUser, $project, null);
         }
 
         return ProjectUser::create([
@@ -563,6 +567,9 @@ class ProgramUserService
 
             if ($role->slug === 'project-leader') {
                 $this->ensureNoOtherLeader($project, $user);
+                if (! in_array('project-leader', $oldRoles, true)) {
+                    ProjectLeaderRule::ensureCanLead($lockedUser, $project, null);
+                }
             }
 
             $rows->slice(1)->each(fn (ProjectUser $extra) => $extra->delete());
@@ -760,6 +767,9 @@ class ProgramUserService
             abort(422, 'Remove ' . $lockedUser->name . "'s project assignments first. A Program Leader oversees every project and is not assigned to one.");
         }
 
+        // Becoming a Project Leader turns every row into a leader row: at most
+        // one of those projects (with any they already lead) may be active.
+        $leading = $role->slug === 'project-leader' ? ProjectLeaderRule::activeLed($lockedUser) : collect();
         foreach ($rows->groupBy('project_id') as $projectRows) {
             $project = $projectRows->first()->project;
             if (! $project) {
@@ -769,6 +779,13 @@ class ProgramUserService
 
             if ($role->slug === 'project-leader') {
                 $this->ensureNoOtherLeader($project, $lockedUser);
+                if (! $wasLeader && ProjectLeaderRule::isActive($project)) {
+                    $other = $leading->first(fn (Project $led) => (int) $led->id !== (int) $project->id);
+                    if ($other) {
+                        ProjectLeaderRule::refuse($lockedUser, $other, null);
+                    }
+                    $leading->push($project);
+                }
             } elseif ($wasLeader) {
                 $this->ensureNotOnlyProjectLeader($project, $lockedUser, true);
             }

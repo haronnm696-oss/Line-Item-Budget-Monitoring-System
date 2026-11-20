@@ -149,6 +149,8 @@
  *
  * Project Leader pages (project-leader of the project; 403 otherwise):
  *   GET /api/projects/:id/leader-overview   -> { project, kpis, review, alerts, monthly_expenses, category_summary, transactions, requests }
+ *                                           project.implementing_agency (Form B field, else IMPLEMENTING_AGENCY);
+ *                                           alerts.tranche_count / alerts.line_item_count (0 = not set up yet)
  *   GET /api/projects/:id/review-queue?tab=waiting|returned|approved&type=expense|payroll|purchase_request
  *                                           -> { counts: { waiting, returned, approved }, items }
  *   GET /api/projects/:id/review-queue/:type/:id -> { item } (any stage)
@@ -210,6 +212,9 @@ export const ENDPOINTS = {
   //   POST projects, PATCH projects/:id (funder, reference, period, total budget, project_leader_id)
   //   POST projects/:id/line-items, PATCH|DELETE line-items/:id
   //   POST projects/:id/tranches, PATCH|DELETE tranches/:id (unreleased only)
+  // { funders, leaders: [{ id, name, leads: [{ id, code, title }] }] }: `leads` = the active
+  // projects each leads (one active project per Project Leader; lib/leaderRule.js).
+  // GET /api/program/projects and /api/program/users also return `leader_conflicts`.
   programProjectOptions: '/api/program/project-options',
   // Funders: GET list, POST { name, acronym }, PATCH :id. The short name
   // (acronym) labels the funder column of every Line-Item Budget.

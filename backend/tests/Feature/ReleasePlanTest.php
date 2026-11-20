@@ -105,7 +105,7 @@ class ReleasePlanTest extends TestCase
         $id = $this->postJson('/api/program/projects', [
             'title' => 'Seaweed Value Chain', 'code' => 'RP-2026-020', 'funding_agency_id' => $this->project->funding_agency_id,
             'start_date' => '2026-01-01', 'end_date' => '2026-12-31', 'total_approved_budget' => 2500000,
-            'funding_agency_amount' => 2000000, 'project_leader_id' => $this->projectLeader->id,
+            'funding_agency_amount' => 2000000, 'project_leader_id' => $this->freeLeader()->id,
         ])->assertCreated()->json('project.id');
         $this->getJson("/api/program/projects/{$id}")->assertJsonPath('setup.funder_total', 2000000);
     }

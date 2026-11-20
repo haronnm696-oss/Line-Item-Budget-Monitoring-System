@@ -69,14 +69,15 @@ class ProjectSetupTest extends TestCase
         $this->assertSame($audit + 1, AuditTrail::count());
         $entry = AuditTrail::latest('id')->first();
         $this->assertSame(['created', 'Project', $id], [$entry->action, $entry->model_type, (int) $entry->model_id]);
-        $this->assertSame($this->projectLeader->id, $entry->new_values['project_leader_id']);
+        $this->assertSame($this->freeLeader()->id, $entry->new_values['project_leader_id']);
 
         // The leader has the project at once, on the pages of their role.
-        $row = collect($this->actingAs($this->projectLeader)->getJson('/api/projects')->json())->firstWhere('id', $id);
+        $row = collect($this->actingAs($this->freeLeader())->getJson('/api/projects')->json())->firstWhere('id', $id);
         $this->assertSame(['project-leader'], $row['my_roles']);
         $this->getJson("/api/projects/{$id}/leader-overview")->assertOk()
             ->assertJsonPath('alerts.next_tranche', null)
-            ->assertJsonPath('alerts.tranche_count', 0); // "No tranches set yet", not "All released"
+            ->assertJsonPath('alerts.tranche_count', 0) // "No tranches set yet", not "All released"
+            ->assertJsonPath('alerts.line_item_count', 0); // "The Program Leader hasn't set up the line-item budget yet."
 
         // Validation: unique code, period order, leader must be a Project Leader account.
         $this->actingAs($this->programLeader);
@@ -252,7 +253,7 @@ class ProjectSetupTest extends TestCase
             'title' => 'Seaweed Value Chain', 'code' => 'RP-2026-010',
             'funding_agency_id' => $this->project->funding_agency_id, 'funder_reference' => 'MOST-2026-77',
             'start_date' => '2026-01-01', 'end_date' => '2026-12-31', 'total_approved_budget' => 750000,
-            'project_leader_id' => $this->projectLeader->id,
+            'project_leader_id' => $this->freeLeader()->id,
         ], $overrides);
     }
 

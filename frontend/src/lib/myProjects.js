@@ -5,6 +5,7 @@
 // never disagree about which projects are "mine".
 
 import { ROLE_MAP } from './roles.js';
+import { pickLeaderProject } from './leaderRule.js';
 
 /** Project role slug for a frontend role code; null for the Program Leader (all projects). */
 export function projectRoleFor(code) {
@@ -36,4 +37,18 @@ const ROLE_WORDS = {
 export function notAssignedText(role) {
   const word = ROLE_WORDS[role] ?? 'a member';
   return `You are not assigned as ${word} of a project yet. Ask the Program Leader to assign you.`;
+}
+
+/**
+ * The same choice without the hook (used by the sidebar badges so they
+ * follow the page's project): the ?project= one, else the first. A Project
+ * Leader leads one active project at a time (lib/leaderRule.js): their
+ * screens show that one (with older data, the ?project= one among their
+ * active projects, else the most recently started); completed ones are `past`.
+ */
+export function pickProject(data, requested, role) {
+  const mine = myProjects(data, role);
+  if (role === 'project-leader') return pickLeaderProject(mine, requested);
+  const project = mine.find((item) => String(item.id) === String(requested)) ?? mine[0] ?? null;
+  return { projects: mine, project, others: [], past: [] };
 }
