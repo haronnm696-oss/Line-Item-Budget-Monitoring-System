@@ -9,6 +9,7 @@ use App\Http\Controllers\BalancingController;
 use App\Http\Controllers\BudgetRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\ProjectDocumentController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
@@ -147,6 +148,9 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     // Read-only budget summary for any project member (Researcher, Finance/Admin).
     Route::get('/projects/{project}/budget-summary', [FinanceController::class, 'summary']);
 
+    // Project documents (MOA, Forms A/B/C): any member views; uploads below (Program Leader).
+    Route::get('/projects/{project}/project-documents', [ProjectDocumentController::class, 'index']);
+
     // Every document of the project's records (project members).
     Route::get('/projects/{project}/documents', [ResearchAssistantController::class, 'documents']);
 
@@ -201,6 +205,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::delete('/program/personnel/{personnel}', [PersonnelController::class, 'destroy']);
         Route::post('/program/personnel/{personnel}/special-order', [PersonnelController::class, 'uploadSpecialOrder']);
         Route::delete('/program/personnel/{personnel}/special-order', [PersonnelController::class, 'removeSpecialOrder']);
+        Route::post('/program/projects/{project}/documents', [ProjectDocumentController::class, 'store']);
+        Route::delete('/program/project-documents/{document}', [ProjectDocumentController::class, 'destroy']);
         Route::get('/program/approvals', [ProgramApprovalController::class, 'index']);
         // Read-only: entries are never edited or deleted through the API.
         Route::get('/program/audit', [ProgramAuditController::class, 'index']);

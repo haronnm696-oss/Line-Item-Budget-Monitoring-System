@@ -286,6 +286,11 @@ export const ENDPOINTS = {
   mySubmissions: (projectId) => `/api/projects/${projectId}/my-submissions`,
   mySubmission: (projectId, type, id) => `/api/projects/${projectId}/my-submissions/${type}/${id}`,
   projectDocuments: (projectId) => `/api/projects/${projectId}/documents`,
+  // Project documents (MOA, Forms A/B/C, other): any member lists them; the
+  // Program Leader uploads and removes (program routes).
+  projectSetupDocuments: (projectId) => `/api/projects/${projectId}/project-documents`,
+  programProjectDocuments: (projectId) => `/api/program/projects/${projectId}/documents`,
+  programProjectDocument: (id) => `/api/program/project-documents/${id}`,
   // Finance/Admin pages (read-only; verify / reject use the workflow routes).
   financeOverview: (projectId) => `/api/projects/${projectId}/finance-overview`,
   financeBadges: (projectId) => `/api/projects/${projectId}/finance-badges`,

@@ -78,8 +78,10 @@ export async function saveFunder({ state, dispatch, write, describe }) {
     dispatch({ type: 'saved', message: data?.message ?? (adding ? 'Funder added.' : 'Funder saved.') });
     return true;
   } catch (failure) {
-    const { error, serverErrors } = describe(failure);
-    dispatch({ type: 'failed', error: error || 'Could not save. Please try again.', serverErrors });
+    // Even if describing the failure fails, the dialog must leave "busy".
+    let described = {};
+    try { described = describe(failure) ?? {}; } catch { described = {}; }
+    dispatch({ type: 'failed', error: described.error || 'Could not save. Please try again.', serverErrors: described.serverErrors ?? {} });
     return false;
   }
 }

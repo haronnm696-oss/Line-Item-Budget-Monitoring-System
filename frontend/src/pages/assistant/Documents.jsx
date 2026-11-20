@@ -10,6 +10,7 @@ import { RECORD_PAGE } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import ProjectSelect from '../../components/leader/ProjectSelect';
+import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
 
 const DOCUMENT_TYPES = [
   ['', 'All document types'],
@@ -155,6 +156,8 @@ export default function Documents() {
             </section>
           </div>
         </LoadState>
+        {/* MOA and Forms A/B/C: preview and download (the Program Leader uploads). */}
+        {picker.projectId && <div style={{ marginTop: 14 }}><ProjectDocumentsSection key={picker.projectId} projectId={picker.projectId} /></div>}
       </LoadState>
     </div>
   );

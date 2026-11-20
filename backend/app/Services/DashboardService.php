@@ -140,6 +140,8 @@ class DashboardService
                 'counterpart_budget' => $funding['implementing_agency'],
                 'funding_budget' => $funding['funder'],
                 'funder_label' => ProjectFinancialService::sourceLabels($project)['funder'],
+                // From the Memorandum of Agreement (optional), with the period in words.
+                'agreement' => $project->agreement(),
             ],
             'kpis' => [
                 'total_budget' => $budget,

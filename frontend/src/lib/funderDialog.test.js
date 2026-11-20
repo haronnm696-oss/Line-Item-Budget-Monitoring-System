@@ -108,6 +108,22 @@ test('a failed save with no message falls back to the generic text', async () =>
   assert.equal(s.state.busy, false);
 });
 
+test('a failure that cannot be described still re-enables the buttons', async () => {
+  const s = store();
+  s.dispatch({ type: 'start', funder: MOST });
+  const saved = await saveFunder({
+    state: s.state,
+    dispatch: s.dispatch,
+    write: async () => { throw undefined; },
+    describe: (failure) => ({ error: failure.message }), // throws on undefined
+  });
+  assert.equal(saved, false);
+  assert.equal(s.state.busy, false);
+  assert.equal(canClose(s.state), true);
+  assert.equal(s.state.error, 'Could not save. Please try again.');
+  assert.equal(s.state.editing, 7); // the edit row stays open with the error
+});
+
 test('an invalid form is not sent and never becomes busy', async () => {
   const s = store();
   s.dispatch({ type: 'start', funder: null });
