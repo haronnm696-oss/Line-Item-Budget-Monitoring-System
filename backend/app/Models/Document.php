@@ -45,6 +45,10 @@ class Document extends Model
         if (! $class || ! class_exists($class)) {
             return null;
         }
+        // A project document is attached to the project itself.
+        if (is_a($class, Project::class, true)) {
+            return (int) $this->documentable_id;
+        }
 
         $query = $class::query();
         if (in_array(SoftDeletes::class, class_uses_recursive($class), true)) {

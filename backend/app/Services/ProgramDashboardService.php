@@ -368,6 +368,7 @@ class ProgramDashboardService
             'project' => $row + [
                 'description' => $project->description,
                 'funder_name' => $project->fundingAgency?->name,
+                'agreement' => $project->agreement(),
             ],
             'line_items' => $this->lineItemGroups($project),
             // The same line items laid out like R&D Form B (PS/MOOE, Direct/

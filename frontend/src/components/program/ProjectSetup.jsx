@@ -7,6 +7,7 @@ import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
 import { RATE_PERIODS, computedAmount, describeComputation, hasComputation } from '../../lib/lineItemComputation';
 import { sourceLabels } from '../../lib/fundingSource';
+import { durationInWords, periodErrors } from '../../lib/projectAgreement';
 
 /*
  * Program Leader project set-up dialogs (New project, Edit details, line
@@ -120,7 +121,8 @@ export function useSave(onSaved) {
 
 /**
  * New project (mode "create") or Edit details (mode "edit": funder, funder
- * reference, period, total budget, Project Leader).
+ * reference, period, total budget, Project Leader). Both carry the optional
+ * fields from the Memorandum of Agreement (MOA_FIELDS).
  */
 /**
  * Printed on R&D Form B, editable per project (all optional): the Monitoring
@@ -133,6 +135,8 @@ const FORM_B_SIGNATORIES = [
   ['recommending_approval', 'Recommending Approval'],
   ['approved_by', 'Approved'],
 ];
+const MOA_FIELDS = ['moa_number', 'moa_date', 'rd_committee_approved_date', 'fund_source'];
+const MOA_LIMITS = { moa_number: 100, fund_source: 255 };
 const FORM_B_FIELDS = ['monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
 
 export function ProjectFormDialog({ mode, projectId = null, setup = null, onClose, onSaved }) {
@@ -149,11 +153,13 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     end_date: setup?.end_date ?? '',
     total_approved_budget: setup?.total_budget ? String(setup.total_budget) : '',
     project_leader_id: setup?.project_leader_id ? String(setup.project_leader_id) : '',
+    ...Object.fromEntries(MOA_FIELDS.map((key) => [key, setup?.agreement?.[key] ?? ''])),
     ...Object.fromEntries(FORM_B_FIELDS.map((key) => [key, setup?.form_b?.[key] ?? ''])),
   });
   const [local, setLocal] = useState({});
   const { busy, error, serverErrors, save } = useSave(onSaved);
   const errors = { ...serverErrors, ...local };
+  const duration = durationInWords(form.start_date, form.end_date);
   const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
 
   function submit(event) {
@@ -162,9 +168,10 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     if (creating && !form.title.trim()) next.title = 'Enter the project title.';
     if (creating && !form.code.trim()) next.code = 'Enter the project code.';
     if (!form.funding_agency_id) next.funding_agency_id = 'Choose the funder.';
-    if (!form.start_date) next.start_date = 'Enter the start date.';
-    if (!form.end_date) next.end_date = 'Enter the end date.';
-    else if (form.start_date && form.end_date < form.start_date) next.end_date = 'The end date must be on or after the start date.';
+    Object.assign(next, periodErrors(form.start_date, form.end_date));
+    for (const [key, limit] of Object.entries(MOA_LIMITS)) {
+      if (String(form[key] ?? '').trim().length > limit) next[key] = `Use ${limit} characters or fewer.`;
+    }
     const budgetError = moneyError(form.total_approved_budget, { positive: true });
     if (budgetError) next.total_approved_budget = budgetError;
     else if (setup && Number(form.total_approved_budget) < Number(setup.allocated)) {
@@ -184,6 +191,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
       end_date: form.end_date,
       total_approved_budget: Number(form.total_approved_budget),
       project_leader_id: Number(form.project_leader_id),
+      ...Object.fromEntries(MOA_FIELDS.map((key) => [key, String(form[key] ?? '').trim() || null])),
     };
     if (creating) {
       save('post', ENDPOINTS.programProjects, { ...body, title: form.title.trim(), code: form.code.trim() }, 'Project created.');
@@ -217,7 +225,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
           </Field>
           {text('funder_reference', 'Funder reference', 'text', { hint: 'Optional' })}
           {text('start_date', 'Start date', 'date')}
-          {text('end_date', 'End date', 'date')}
+          {text('end_date', 'End date', 'date', { hint: duration ? `Duration: ${duration}` : 'After the start date' })}
           {text('total_approved_budget', 'Total budget (₱)')}
           <Field id="ps-project_leader_id" label="Project Leader" error={errors.project_leader_id}>
             {(a11y) => (
@@ -228,6 +236,15 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
             )}
           </Field>
         </div>
+        <fieldset className="ps-formb">
+          <legend>Memorandum of Agreement <span className="pu-hint">(optional)</span></legend>
+          <div className="program-form-grid">
+            {text('moa_number', 'MOA number')}
+            {text('moa_date', 'MOA date', 'date')}
+            {text('rd_committee_approved_date', "Approved by the funder's R&D committee", 'date')}
+            {text('fund_source', 'Fund source', 'text', { full: true, hint: 'For example MOST-BARMM GAAB 2024 Program Funds. Printed on Form B as "Chargeable against …".' })}
+          </div>
+        </fieldset>
         {!creating && (
           <fieldset className="ps-formb">
             <legend>Printed on Form B <span className="pu-hint">(optional)</span></legend>

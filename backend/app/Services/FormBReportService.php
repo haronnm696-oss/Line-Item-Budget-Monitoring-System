@@ -19,7 +19,7 @@ use Carbon\CarbonInterface;
  *   I. PERSONNEL SERVICES (PS) ... Sub-total for PS
  *   II. MAINTENANCE AND OTHER OPERATING EXPENSES (MOOE) ... Sub-Total for MOOE
  *   GRAND TOTAL
- *   (To be filled-up by <short>)  Implementing | <short> | TOTAL   * Chargeable against the CY <year>
+ *   (To be filled-up by <short>)  Implementing | <short> | TOTAL   * Chargeable against <fund source> (else the CY <year>)
  *   Reviewed by / Certified Funds Available / Recommending Approval / Approved
  */
 class FormBReportService
@@ -106,7 +106,10 @@ class FormBReportService
                 'columns' => ['Implementing', $short, 'TOTAL'],
                 // Pre-filled, as on the official form.
                 'values' => [$grand['implementing_agency'], $grand['funder'], $grand['total']],
-                'note' => "* Chargeable against the CY {$year}",
+                // The MOA's fund source when set, else the calendar year.
+                'note' => ($source = $this->text($project->fund_source)) !== null
+                    ? "* Chargeable against {$source}"
+                    : "* Chargeable against the CY {$year}",
             ],
             'signatories' => $signatories,
             'paper' => count($rows) <= self::A4_MAX_ROWS ? 'A4' : 'Legal',

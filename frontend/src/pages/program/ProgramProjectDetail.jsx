@@ -9,6 +9,8 @@ import { formatDate, formatDateTime } from '../../lib/datetime';
 import { sourceLabels } from '../../lib/fundingSource';
 import FundingWarnings from '../../components/program/FundingWarnings';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
+import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
+import { agreementLines } from '../../lib/projectAgreement';
 
 
 function actionLabel(action) {
@@ -103,6 +105,11 @@ export default function ProgramProjectDetail() {
             {' · '}Project Leader: {project.project_leader || '—'}
             {' · '}{formatDate(project.start_date)} – {formatDate(project.end_date)}
           </p>
+          {agreementLines(project.agreement, formatDate).length > 0 && (
+            <ul className="pd-agreement" aria-label="Memorandum of Agreement">
+              {agreementLines(project.agreement, formatDate).map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          )}
           <div className="pd-pills">
             <ProgramPill value={project.status} />
             <ProgramPill value={project.health} />
@@ -284,6 +291,7 @@ export default function ProgramProjectDetail() {
       </section>
 
       <PersonnelSection projectId={project.id} />
+      <ProjectDocumentsSection projectId={project.id} />
 
       <section className="program-card">
         <div className="program-card-head">

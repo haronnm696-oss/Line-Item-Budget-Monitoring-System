@@ -39,9 +39,9 @@ class ProgramProjectSetupController extends Controller
             'funder_reference' => ['nullable', 'string', 'max:100'],
             'total_approved_budget' => array_merge(['required', 'gt:0'], self::MONEY),
             'start_date' => ['required', 'date'],
-            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'end_date' => ['required', 'date', 'after:start_date'],
             'project_leader_id' => ['required', 'integer'],
-        ], $this->messages());
+        ] + $this->moaRules(), $this->messages());
 
         $project = $this->setup->createProject($data, $request->user());
 
@@ -56,13 +56,24 @@ class ProgramProjectSetupController extends Controller
             'funder_reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'total_approved_budget' => array_merge(['sometimes', 'required', 'gt:0'], self::MONEY),
             'start_date' => ['sometimes', 'required', 'date'],
-            'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:' . ($request->input('start_date') ?? $project->start_date?->toDateString())],
+            'end_date' => ['sometimes', 'required', 'date', 'after:' . ($request->input('start_date') ?? $project->start_date?->toDateString())],
             'project_leader_id' => ['sometimes', 'required', 'integer'],
-        ] + $this->formBPrintRules(), $this->messages());
+        ] + $this->moaRules() + $this->formBPrintRules(), $this->messages());
 
         $this->setup->updateProject($project, $data, $request->user());
 
         return response()->json(['message' => 'Project details saved.']);
+    }
+
+    /** Optional fields from the Memorandum of Agreement. */
+    private function moaRules(): array
+    {
+        return [
+            'moa_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'moa_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'rd_committee_approved_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'fund_source' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ];
     }
 
     /** Optional printed Form B fields: Monitoring Agency and signatory names and positions. */
@@ -168,7 +179,9 @@ class ProgramProjectSetupController extends Controller
     {
         return [
             'code.unique' => 'Another project already uses this code.',
-            'end_date.after_or_equal' => 'The end date must be on or after the start date.',
+            'end_date.after' => 'The end date must be after the start date.',
+            'moa_date.date_format' => 'Enter the MOA date as a date.',
+            'rd_committee_approved_date.date_format' => 'Enter the approval date as a date.',
             '*.regex' => 'Use at most two decimals.',
             'allocated_amount.min' => 'The allocated amount cannot be negative.',
             'funder_amount.min' => 'The amount cannot be negative.',

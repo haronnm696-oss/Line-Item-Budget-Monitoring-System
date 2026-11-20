@@ -2593,6 +2593,7 @@ select.signin-input:disabled{
 .pd-head{min-width:0}
 .pd-pills{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}
 .pd-reason{font-size:13px;color:var(--pg2-muted)}
+.pd-agreement{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--pg2-muted, var(--muted))}
 .program-shell .pd-kpi-value{font-size:24px}
 .pd-table{min-width:640px}
 .pd-table .num{text-align:right}

@@ -51,7 +51,7 @@ class ProjectSetupService
                 'total_approved_budget' => $data['total_approved_budget'],
                 'start_date' => $data['start_date'],
                 'end_date' => $data['end_date'],
-            ]);
+            ] + $this->moaValues($data));
             $this->setLeader($project, $leader);
 
             AuditLogger::write('created', $project, [], $this->projectSnapshot($project->fresh()), $actor);
@@ -60,7 +60,16 @@ class ProjectSetupService
         });
     }
 
-    /** Funder, funder reference, period, total budget, Project Leader and the printed Form B fields. */
+    /** The MOA fields present in $data; blank text is stored as null. */
+    private function moaValues(array $data): array
+    {
+        return array_map(
+            fn ($value) => ($value = trim((string) $value)) === '' ? null : $value,
+            array_intersect_key($data, array_flip(Project::MOA_FIELDS))
+        );
+    }
+
+    /** Funder, funder reference, period, total budget, Project Leader, the MOA fields and the printed Form B fields. */
     public function updateProject(Project $project, array $data, User $actor): Project
     {
         $leader = array_key_exists('project_leader_id', $data) ? $this->leaderOrFail($data['project_leader_id']) : null;
@@ -84,7 +93,7 @@ class ProjectSetupService
             );
             $locked->update(array_intersect_key($data, array_flip([
                 'funding_agency_id', 'funder_reference', 'start_date', 'end_date', 'total_approved_budget',
-            ])) + $print);
+            ])) + $print + $this->moaValues($data));
             if ($leader) {
                 $this->setLeader($locked, $leader);
             }
@@ -354,6 +363,8 @@ class ProjectSetupService
             'start_date' => $project->start_date?->toDateString(),
             'end_date' => $project->end_date?->toDateString(),
             'project_leader_id' => $leader !== null ? (int) $leader : null,
+            // From the Memorandum of Agreement (optional), with the period in words.
+            'agreement' => $project->agreement(),
             // Printed on R&D Form B (optional; blank Monitoring Agency = the funder's name).
             'form_b' => $project->only(Project::formBPrintFields()),
             'total_budget' => round((float) $project->total_approved_budget, 2),
@@ -515,6 +526,10 @@ class ProjectSetupService
             'end_date' => $project->end_date?->toDateString(),
             'project_leader_id' => $leader ? (int) $leader->user_id : null,
             'project_leader' => $leader?->user?->name,
+            'moa_number' => $project->moa_number,
+            'moa_date' => $project->moa_date?->toDateString(),
+            'rd_committee_approved_date' => $project->rd_committee_approved_date?->toDateString(),
+            'fund_source' => $project->fund_source,
         ] + $project->only(Project::formBPrintFields());
     }
 

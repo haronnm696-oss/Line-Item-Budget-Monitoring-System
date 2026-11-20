@@ -252,7 +252,7 @@ class DocumentController extends Controller
     private static function auditValues(Document $document, $record): array
     {
         return [
-            'project_id' => $record?->project_id,
+            'project_id' => $record instanceof Model ? AuditLogger::projectIdOf($record) : null,
             'record' => class_basename($document->documentable_type),
             'record_id' => $document->documentable_id,
             'document_type' => $document->document_type,

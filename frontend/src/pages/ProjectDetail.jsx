@@ -8,6 +8,9 @@ import { useAuth } from '../context/AuthContext';
 import { canOpen } from '../routes/access';
 import { useApiData } from '../lib/useApiData';
 import PersonnelSection from '../components/personnel/PersonnelSection';
+import ProjectDocumentsSection from '../components/projects/ProjectDocumentsSection';
+import { agreementLines } from '../lib/projectAgreement';
+import { formatDate } from '../lib/datetime';
 
 function sum(rows, key) { return rows.reduce((t, r) => t + (Number(r[key]) || 0), 0); }
 function pct(part, whole) { return formatPct(whole > 0 ? (part / whole) * 100 : 0); }
@@ -42,6 +45,11 @@ function ProjectView({ data }) {
         <div>
           <h2>{project.title}</h2>
           <p><span className="num">{project.code}</span> · {project.agency} · {project.period} · <Chip tone={statusTone(project.status)}>{project.status}</Chip></p>
+          {agreementLines(project.agreement, formatDate).length > 0 && (
+            <ul className="pd-agreement" aria-label="Memorandum of Agreement">
+              {agreementLines(project.agreement, formatDate).map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -95,6 +103,7 @@ function ProjectView({ data }) {
       {/* Read-only for the Project Leader (Finance/Admin see it on Payroll).
           Researchers never get it (the API answers 403 as well). */}
       {user?.role === 'PL' && <div style={{ marginTop: 14 }}><PersonnelSection projectId={project.id} /></div>}
+      <div style={{ marginTop: 14 }}><ProjectDocumentsSection projectId={project.id} /></div>
     </>
   );
 }
