@@ -137,7 +137,7 @@ const FORM_B_SIGNATORIES = [
 ];
 const MOA_FIELDS = ['moa_number', 'moa_date', 'rd_committee_approved_date', 'fund_source'];
 const MOA_LIMITS = { moa_number: 100, fund_source: 255 };
-const FORM_B_FIELDS = ['monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
+const FORM_B_FIELDS = ['implementing_agency_name', 'monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
 
 export function ProjectFormDialog({ mode, projectId = null, setup = null, onClose, onSaved }) {
   const creating = mode === 'create';
@@ -249,6 +249,10 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
           <fieldset className="ps-formb">
             <legend>Printed on Form B <span className="pu-hint">(optional)</span></legend>
             <div className="program-form-grid">
+              {text('implementing_agency_name', 'Implementing Agency', 'text', {
+                full: true,
+                hint: `For example MSU-Marawi. Leave blank to print ${setup?.labels?.implementing_agency || 'the default implementing agency'}.`,
+              })}
               {text('monitoring_agency', 'Monitoring agency', 'text', { full: true, hint: "Leave blank to print the funder's name." })}
               {FORM_B_SIGNATORIES.map(([prefix, label]) => (
                 <Fragment key={prefix}>

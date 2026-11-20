@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Project;
 use App\Support\LineItemComputation;
 use Carbon\CarbonInterface;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 /**
  * The printable R&D Form B (Project Line-Item Budget), laid out like the
@@ -26,6 +27,10 @@ class FormBReportService
 {
     /** Body rows that still fit one portrait A4 page; longer forms use Legal. */
     public const A4_MAX_ROWS = 30;
+
+    public const NO_FUNDER = "Set the project's funder in Edit project details first.";
+
+    public const NO_LINE_ITEMS = 'Add line items to this project first.';
 
     private const SECTIONS = [
         'PS' => ['I. PERSONNEL SERVICES (PS)', 'Sub-total for PS'],
@@ -51,6 +56,10 @@ class FormBReportService
     public function build(Project $project): array
     {
         $project->loadMissing('fundingAgency');
+        if (($blocker = $this->blocker($project)) !== null) {
+            // 422: never print a placeholder ("Funder") as a name, or an empty form.
+            throw new HttpResponseException(response()->json(['message' => $blocker, 'errors' => ['form_b' => [$blocker]]], 422));
+        }
         $formB = $this->financials->formB($project);
         $labels = $formB['labels'];
         $short = $labels['funder'];
@@ -85,6 +94,8 @@ class FormBReportService
         $year = $project->start_date?->year ?? now()->year;
 
         return [
+            // For the print title "Form B - <code>" (the saved PDF's file name).
+            'project_code' => (string) $project->code,
             'funder' => ['short_name' => $short, 'name' => $fullName],
             'header' => [
                 'form' => "{$short} R&D Form B",
@@ -94,7 +105,7 @@ class FormBReportService
             ],
             'details' => [
                 ['label' => 'Project Title', 'value' => (string) $project->title],
-                ['label' => 'Implementing Agency', 'value' => $labels['implementing_agency']],
+                ['label' => 'Implementing Agency', 'value' => $this->text($project->implementing_agency_name) ?? $labels['implementing_agency']],
                 ['label' => 'Total Duration', 'value' => $this->duration($project->start_date, $project->end_date)],
                 ['label' => 'Project Leader', 'value' => $project->usersWithRole('project-leader')->first()?->name ?? ''],
                 ['label' => 'Monitoring Agency', 'value' => $this->text($project->monitoring_agency) ?? $fullName],
@@ -114,6 +125,22 @@ class FormBReportService
             'signatories' => $signatories,
             'paper' => count($rows) <= self::A4_MAX_ROWS ? 'A4' : 'Legal',
         ];
+    }
+
+    /**
+     * Why Form B cannot be exported yet (the message the UI shows next to the
+     * disabled button and the API returns as 422), or null when it can.
+     */
+    public function blocker(Project $project): ?string
+    {
+        if (! $project->fundingAgency) {
+            return self::NO_FUNDER;
+        }
+        if (! $project->libCategories()->exists()) {
+            return self::NO_LINE_ITEMS;
+        }
+
+        return null;
     }
 
     /** The same document as CSV rows: plain numbers, zero as "0.00". */

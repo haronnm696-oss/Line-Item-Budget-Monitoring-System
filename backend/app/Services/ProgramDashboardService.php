@@ -369,6 +369,8 @@ class ProgramDashboardService
                 'description' => $project->description,
                 'funder_name' => $project->fundingAgency?->name,
                 'agreement' => $project->agreement(),
+                // Why "Export Form B" is disabled (no funder / no line items), else null.
+                'form_b_blocker' => app(FormBReportService::class)->blocker($project),
             ],
             'line_items' => $this->lineItemGroups($project),
             // The same line items laid out like R&D Form B (PS/MOOE, Direct/

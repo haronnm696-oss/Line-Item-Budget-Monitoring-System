@@ -11,6 +11,7 @@ import FundingWarnings from '../../components/program/FundingWarnings';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
 import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
 import { agreementLines } from '../../lib/projectAgreement';
+import { formBBlocker } from '../../lib/formBPrint';
 
 
 function actionLabel(action) {
@@ -90,6 +91,7 @@ export default function ProgramProjectDetail() {
   const activity = data.activity ?? [];
   const setup = data.setup ?? null;
   const left = setup ? setup.total_budget - setup.allocated : 0;
+  const formBReason = formBBlocker(project);
 
   return (
     <>
@@ -121,9 +123,16 @@ export default function ProgramProjectDetail() {
             <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'details' }); }}>Edit details</button>
           )}
           <Link className="program-btn" to={`/program-approvals?project=${project.id}`}>View approvals</Link>
-          <Link className="program-btn primary" to={`/program-reports?project=${encodeURIComponent(project.code)}&report=form-b&format=pdf`}>
-            Export Form B
-          </Link>
+          {formBReason ? (
+            <button type="button" className="program-btn primary" disabled aria-describedby="pd-form-b-blocked">Export Form B</button>
+          ) : (
+            <Link className="program-btn primary" to={`/program-reports?project=${encodeURIComponent(project.code)}&report=form-b&format=pdf`}>
+              Export Form B
+            </Link>
+          )}
+          {formBReason && (
+            <p className="pu-hint pd-form-b-blocked" id="pd-form-b-blocked" role="status"><span aria-hidden="true">⚠ </span>{formBReason}</p>
+          )}
         </div>
       </div>
 

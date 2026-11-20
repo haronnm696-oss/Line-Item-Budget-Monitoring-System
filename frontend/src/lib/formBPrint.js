@@ -25,6 +25,24 @@ export function formBPaper(doc) {
   return doc?.paper === 'Legal' ? 'legal' : 'A4';
 }
 
+/**
+ * Why "Export Form B" (PDF and CSV) is disabled for this project, from the
+ * server (project.form_b_blocker: no funder / no line items), else null.
+ */
+export function formBBlocker(project) {
+  const reason = project?.form_b_blocker;
+  return typeof reason === 'string' && reason.trim() !== '' ? reason : null;
+}
+
+/** "Form B - RP-2026-001": the print title, so a saved PDF gets that file name. */
+export function formBTitle(doc) {
+  const code = String(doc?.project_code ?? '').trim();
+  return code ? `Form B - ${code}` : 'Form B';
+}
+
+/** The form's own margins; the page margin is 0 so the browser prints no headers/footers. */
+export const FORM_B_MARGIN = { top: '1.2cm', side: '1.4cm' };
+
 /** The whole print document (HTML string) for the browser's "Save as PDF". */
 export function formBHtml(doc, escapeHtml = defaultEscape) {
   const e = escapeHtml;
@@ -51,11 +69,18 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
 <html>
 <head>
 <meta charset="utf-8" />
-<title>${e(doc.header?.form)} - ${e(doc.details?.[0]?.value)}</title>
+<title>${e(formBTitle(doc))}</title>
 <style>
-  @page { size: ${legal ? 'legal' : 'A4'} portrait; margin: 1.2cm 1.4cm; }
+  /* Margin 0: Chrome and Edge then have no room for their date/title/URL/page
+     headers and footers. The form keeps its own margins: side padding on the
+     body, and top/bottom spacer rows that repeat on every printed page. */
+  @page { size: ${legal ? 'legal' : 'A4'} portrait; margin: 0; }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: ${legal ? '9.5pt' : '9pt'}; color: #000; background: #fff; margin: 0; line-height: 1.25; }
+  html, body { margin: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: ${legal ? '9.5pt' : '9pt'}; color: #000; background: #fff; padding: 0 ${FORM_B_MARGIN.side}; line-height: 1.25; }
+  .page { width: 100%; border-collapse: collapse; }
+  .page > thead > tr > td, .page > tfoot > tr > td { height: ${FORM_B_MARGIN.top}; padding: 0; border: 0; }
+  .page > tbody > tr > td { padding: 0; border: 0; }
   .form-id { font-size: 8.5pt; font-style: italic; margin-bottom: 4px; }
   .head { text-align: center; margin-bottom: 10px; }
   .head div { font-weight: bold; }
@@ -90,6 +115,10 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
 </style>
 </head>
 <body>
+<table class="page" role="presentation">
+<thead><tr><td></td></tr></thead>
+<tfoot><tr><td></td></tr></tfoot>
+<tbody><tr><td>
   <div class="form-id">${e(doc.header?.form)}</div>
   <div class="head">
     <div class="agency">${e(doc.header?.agency)}</div>
@@ -111,6 +140,8 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
     ${footer.note ? `<div class="fill-note">${e(footer.note)}</div>` : ''}
   </div>
   <div class="sigs">${signatories}</div>
+</td></tr></tbody>
+</table>
 </body>
 </html>`;
 }

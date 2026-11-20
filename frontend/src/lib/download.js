@@ -15,20 +15,25 @@ export function saveBlob(blob, filename) {
 
 // Opens the browser print dialog (where "Save as PDF" is available) for a
 // standalone HTML document, using a hidden iframe so no pop-up is needed.
-export function printHtmlDocument(html) {
+export function printHtmlDocument(html, { title } = {}) {
   const frame = document.createElement('iframe');
+  // Browsers name a saved PDF after the page title: use the document's own
+  // title while the print dialog is open, then restore it.
+  const pageTitle = document.title;
+  const restoreTitle = () => { document.title = pageTitle; };
   frame.setAttribute('aria-hidden', 'true');
   frame.tabIndex = -1;
   Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
   frame.onload = () => {
     const view = frame.contentWindow;
     if (!view) return;
-    const cleanup = () => window.setTimeout(() => frame.remove(), 0);
+    const cleanup = () => { restoreTitle(); window.setTimeout(() => frame.remove(), 0); };
     view.addEventListener('afterprint', cleanup, { once: true });
+    if (title) document.title = title;
     view.focus();
     view.print();
     // Fallback for browsers that do not fire afterprint.
-    window.setTimeout(() => { if (frame.isConnected) frame.remove(); }, 60000);
+    window.setTimeout(() => { restoreTitle(); if (frame.isConnected) frame.remove(); }, 60000);
   };
   frame.srcdoc = html;
   document.body.appendChild(frame);

@@ -17,7 +17,7 @@ class Project extends Model implements HasDocuments
         'code', 'title', 'description', 'funding_agency_id', 'funder_reference',
         'total_approved_budget', 'implementing_agency_counterpart',
         'funding_agency_amount', 'start_date', 'end_date', 'status',
-        'monitoring_agency',
+        'monitoring_agency', 'implementing_agency_name',
         'reviewed_by_name', 'reviewed_by_position',
         'funds_certified_by_name', 'funds_certified_by_position',
         'recommending_approval_name', 'recommending_approval_position',
@@ -42,10 +42,13 @@ class Project extends Model implements HasDocuments
         'approved_by' => 'Approved:',
     ];
 
-    /** The optional printed Form B fields (Monitoring Agency and signatories). */
+    /**
+     * The optional printed Form B fields: Implementing Agency (blank = the
+     * IMPLEMENTING_AGENCY setting), Monitoring Agency and the signatories.
+     */
     public static function formBPrintFields(): array
     {
-        $fields = ['monitoring_agency'];
+        $fields = ['implementing_agency_name', 'monitoring_agency'];
         foreach (array_keys(self::FORM_B_SIGNATORIES) as $prefix) {
             $fields[] = "{$prefix}_name";
             $fields[] = "{$prefix}_position";
