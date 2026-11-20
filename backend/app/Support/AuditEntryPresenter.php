@@ -160,6 +160,7 @@ class AuditEntryPresenter
         'pay_year' => 'Year',
         'funder_reference' => 'Funder reference',
         'monitoring_agency' => 'Monitoring agency (Form B)',
+        'implementing_agency_name' => 'Implementing agency (Form B)',
         'reviewed_by_name' => 'Reviewed by (Form B)',
         'reviewed_by_position' => 'Reviewed by position (Form B)',
         'funds_certified_by_name' => 'Certified funds available (Form B)',

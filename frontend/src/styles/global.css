@@ -1617,6 +1617,7 @@ select.signin-input:disabled{
 .program-h1{font-size:26px;font-weight:700;line-height:1.2;color:var(--pg-ink)}
 .program-sub{font-size:13px;color:var(--pg-muted);margin-top:4px}
 .program-head-actions{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.program-head-actions .pd-form-b-blocked{flex-basis:100%;margin:0}
 .program-field{display:flex;flex-direction:column;gap:6px}
 .program-field > label,.program-label{font-size:12px;font-weight:600;color:var(--pg-muted)}
 .program-input,.program-select{

@@ -3,7 +3,7 @@ import { csvPct, formatPct, peso } from '../components/money';
 import { REGISTER_PERIOD, registerCell, registerColumns, registerRows, registerTableHtml } from '../lib/payrollRegister';
 import { printHtmlDocument, saveBlob } from '../lib/download';
 import { downloadPayrollRegisterCsv, downloadReportCsv, fetchFormB, fetchPayrollRegister } from '../api/reports';
-import { formBHtml } from '../lib/formBPrint';
+import { formBBlocker, formBHtml, formBTitle } from '../lib/formBPrint';
 import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
@@ -205,9 +205,17 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     setDetailAttempt((value) => value + 1);
   }
 
+  // No funder or no line items: Form B is not exported (the server refuses too).
+  const formBReason = reportsReady ? formBBlocker(project) : null;
+
   function reportAvailable(key) {
+    if (key === 'form-b' && formBReason) return false;
     return reportsReady && (key !== 'payroll-register' || register !== null);
   }
+
+  const formBNote = formBReason
+    ? <p className="pu-hint" id="form-b-blocked" role="status"><span aria-hidden="true">⚠ </span>{formBReason}</p>
+    : null;
 
   // ---------- Filtering ----------
   function filterExpenses() {
@@ -389,7 +397,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   async function exportFormBPdf() {
     showToast('Preparing Form B…', 'info');
     try {
-      printHtmlDocument(formBHtml(await fetchFormB(listRow.id), escapeHtml));
+      const doc = await fetchFormB(listRow.id);
+      printHtmlDocument(formBHtml(doc, escapeHtml), { title: formBTitle(doc) });
     } catch {
       showToast('Could not load Form B. Please try again.', 'error');
     }
@@ -862,12 +871,13 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                   <b>{r.title}</b>
                   <p>{r.desc}</p>
                   {r.key === 'payroll-register' && reportsReady && payrollNote}
+                  {r.key === 'form-b' && formBNote}
                 </div>
                 <div className="prr-actions">
-                  <button type="button" className={`program-btn${r.key === 'form-b' ? ' primary' : ''}`} onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
+                  <button type="button" className={`program-btn${r.key === 'form-b' ? ' primary' : ''}`} onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
                     {r.pdfLabel ?? 'Generate PDF'}
                   </button>
-                  <button type="button" className="program-btn" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)}>
+                  <button type="button" className="program-btn" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
                     Export CSV
                   </button>
                 </div>
@@ -886,12 +896,13 @@ export default function Reports({ programMode = false, initialCode = '' }) {
                   <b>{r.title}</b>
                   <p>{r.desc}</p>
                   {r.key === 'payroll-register' && reportsReady && payrollNote}
+                  {r.key === 'form-b' && formBNote}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                  <button className="btn sm" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)}>
+                  <button className="btn sm" onClick={() => handleGenerate(r.key)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
                     {r.pdfLabel ?? 'Generate PDF'}
                   </button>
-                  <button className="btn sm" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)}>
+                  <button className="btn sm" onClick={() => exportReportCsv(r)} disabled={!reportAvailable(r.key)} aria-describedby={r.key === 'form-b' && formBReason ? 'form-b-blocked' : undefined}>
                     Export CSV
                   </button>
                 </div>

@@ -184,6 +184,53 @@ class FormBExportTest extends TestCase
         $this->assertStringNotContainsString('MOST', $csv);
     }
 
+    public function test_export_is_refused_without_a_funder(): void
+    {
+        $project = $this->demo();
+        $project->update(['funding_agency_id' => null]);
+        $this->actingAs($this->programLeader);
+
+        $message = "Set the project's funder in Edit project details first.";
+        $this->getJson("/api/projects/{$project->id}/form-b")->assertStatus(422)->assertJsonPath('message', $message);
+        $this->getJson("/api/projects/{$project->id}/reports/form-b")->assertStatus(422)->assertJsonPath('message', $message);
+        // The screens get the same reason to disable the button.
+        $this->assertSame($message, $this->getJson("/api/projects/{$project->id}")->json('project.form_b_blocker'));
+        $this->assertSame($message, $this->getJson("/api/program/projects/{$project->id}")->json('project.form_b_blocker'));
+    }
+
+    public function test_export_is_refused_without_line_items(): void
+    {
+        $project = AuditLogger::muted(fn () => Project::create([
+            'code' => 'RP-2025-031', 'title' => 'No line items yet', 'funding_agency_id' => FundingAgency::first()->id,
+            'total_approved_budget' => 100000, 'start_date' => '2026-01-01', 'end_date' => '2026-12-31', 'status' => 'ongoing',
+        ]));
+        $this->actingAs($this->programLeader);
+
+        $message = 'Add line items to this project first.';
+        $this->getJson("/api/projects/{$project->id}/form-b")->assertStatus(422)->assertJsonPath('message', $message);
+        $this->getJson("/api/projects/{$project->id}/reports/form-b")->assertStatus(422)->assertJsonPath('message', $message);
+        $this->assertSame($message, $this->getJson("/api/projects/{$project->id}")->json('project.form_b_blocker'));
+        $this->assertNull($this->getJson("/api/projects/{$this->demo()->id}")->json('project.form_b_blocker'));
+    }
+
+    public function test_the_implementing_agency_override_is_printed(): void
+    {
+        $project = $this->demo();
+        $this->actingAs($this->programLeader);
+
+        $this->patchJson("/api/program/projects/{$project->id}", ['implementing_agency_name' => ' MSU-Marawi '])->assertOk();
+        $this->assertSame('MSU-Marawi', $this->getJson("/api/program/projects/{$project->id}")->json('setup.form_b.implementing_agency_name'));
+        $doc = $this->getJson("/api/projects/{$project->id}/form-b")->assertOk()->json();
+        $this->assertSame('MSU-Marawi', collect($doc['details'])->firstWhere('label', 'Implementing Agency')['value']);
+        $this->assertSame(FormBDemoSeeder::CODE, $doc['project_code']);
+        $this->assertStringContainsString('Implementing Agency:,MSU-Marawi', $this->get("/api/projects/{$project->id}/reports/form-b")->getContent());
+
+        // Blank falls back to the IMPLEMENTING_AGENCY setting.
+        $this->patchJson("/api/program/projects/{$project->id}", ['implementing_agency_name' => ''])->assertOk();
+        $doc = $this->getJson("/api/projects/{$project->id}/form-b")->json();
+        $this->assertSame('MSU', collect($doc['details'])->firstWhere('label', 'Implementing Agency')['value']);
+    }
+
     public function test_duration_words(): void
     {
         $service = app(FormBReportService::class);

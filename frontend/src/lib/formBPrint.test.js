@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formBAmount, formBHtml, formBPaper } from './formBPrint.js';
+import { formBAmount, formBBlocker, formBHtml, formBPaper, formBTitle } from './formBPrint.js';
 
 // A Form B document as the backend returns it (FormBReportService), for any funder.
 function doc(short, name, signatories = []) {
@@ -80,4 +80,35 @@ test('Legal paper when the backend says the form needs it', () => {
   assert.equal(formBPaper({ paper: 'Legal' }), 'legal');
   assert.equal(formBPaper({ paper: 'A4' }), 'A4');
   assert.ok(formBHtml({ ...doc('DOST', 'Department of Science and Technology'), paper: 'Legal' }).includes('size: legal portrait'));
+});
+
+test('print CSS: page margin 0 (no browser headers/footers) with the form own margins', () => {
+  const html = formBHtml({ ...doc('DOST', 'Department of Science and Technology'), project_code: 'RP-2025-031' });
+  assert.match(html, /@page \{ size: A4 portrait; margin: 0; \}/);
+  assert.match(html, /body \{[^}]*padding: 0 1\.4cm;/);
+  assert.match(html, /<thead><tr><td><\/td><\/tr><\/thead>/);
+  assert.match(html, /height: 1\.2cm/);
+  assert.match(html, /<title>Form B - RP-2025-031<\/title>/);
+  const legal = formBHtml({ ...doc('DOST', 'Department of Science and Technology'), paper: 'Legal' });
+  assert.match(legal, /@page \{ size: legal portrait; margin: 0; \}/);
+});
+
+test('print title names the project code', () => {
+  assert.equal(formBTitle({ project_code: 'RP-2025-031' }), 'Form B - RP-2025-031');
+  assert.equal(formBTitle({}), 'Form B');
+});
+
+test('the Implementing Agency override is printed', () => {
+  const d = doc('MOST-BARMM', 'Ministry of Science and Technology - BARMM');
+  d.details[1] = { label: 'Implementing Agency', value: 'MSU-Marawi' };
+  assert.match(formBHtml(d), /<th scope="row">Implementing Agency:<\/th><td>MSU-Marawi<\/td>/);
+});
+
+test('export is disabled without a funder or without line items', () => {
+  const noFunder = "Set the project's funder in Edit project details first.";
+  const noItems = 'Add line items to this project first.';
+  assert.equal(formBBlocker({ form_b_blocker: noFunder }), noFunder);
+  assert.equal(formBBlocker({ form_b_blocker: noItems }), noItems);
+  assert.equal(formBBlocker({ form_b_blocker: null }), null);
+  assert.equal(formBBlocker(null), null);
 });
