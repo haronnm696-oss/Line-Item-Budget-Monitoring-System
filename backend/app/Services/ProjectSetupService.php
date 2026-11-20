@@ -44,15 +44,21 @@ class ProjectSetupService
         $this->requireGrantWithinBudget($data, (float) $data['total_approved_budget']);
 
         return AuditLogger::transaction(function () use ($data, $leader, $actor) {
-            $project = Project::create([
+            // Every NOT NULL column is set here, so the insert never relies on a
+            // database default (production MySQL runs in strict mode). The
+            // counterpart comes from the line items, and a new project has none
+            // yet: 0. The grant is 0 (not entered) unless the MOA section sent one.
+            $project = Project::create(array_merge([
                 'title' => $data['title'],
                 'code' => $data['code'],
                 'funding_agency_id' => $data['funding_agency_id'],
                 'funder_reference' => $data['funder_reference'] ?? null,
                 'total_approved_budget' => $data['total_approved_budget'],
+                'implementing_agency_counterpart' => 0,
+                'funding_agency_amount' => 0,
                 'start_date' => $data['start_date'],
                 'end_date' => $data['end_date'],
-            ] + $this->moaValues($data));
+            ], $this->moaValues($data)));
             $this->setLeader($project, $leader);
 
             AuditLogger::write('created', $project, [], $this->projectSnapshot($project->fresh()), $actor);

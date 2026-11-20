@@ -49,6 +49,7 @@ Local mail testing: set `MAIL_MAILER=log` in `backend/.env`; reset links land in
 - `ApprovalRequest` (types: disbursement, budget_realignment, payroll, liquidation) implements maker-checker: a user cannot approve a request they created. New requests must have a `justification` (enforced in the model's `creating` hook); legacy rows may have NULL justification and must still display.
 - Audit logging goes through `AuditTrail::log()` / `AuditTrail::record()`.
 - Migrations must be additive — never drop/rename columns or delete data (production data on Aiven). Money columns are `decimal(15,2)`.
+- Production MySQL runs in strict mode: an insert that leaves out a NOT NULL column without a default fails ("1364 Field ... doesn't have a default value"), while SQLite tests can pass. Every new NOT NULL column must have a default or be set explicitly on every insert. A raw `ALTER TABLE ... MODIFY` replaces the whole column definition, so repeat its `DEFAULT` (and `NULL`/`NOT NULL`) or it is silently dropped. `tests/Feature/FormInsertsTest.php` saves each form with only the fields it sends; run it against a scratch MySQL database when changing columns.
 
 ### Frontend data layer
 - `src/api/endpoints.js` documents the API contract and marks routes that are not built yet. `src/api/http.js` provides `apiGet`/`apiWrite` (via `src/lib/apiResult.js`): any failed request rejects with a clear error ("Could not load…" / "Could not save. Please try again."). There is no sample-data fallback; pages show loading, error ("Try again") or empty states (`useApiData`, `LoadState`).

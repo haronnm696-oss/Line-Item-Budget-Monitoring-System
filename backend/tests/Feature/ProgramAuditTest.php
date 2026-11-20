@@ -238,10 +238,11 @@ class ProgramAuditTest extends TestCase
         $this->assertFalse($addedChanges->has('Project'), 'project_id repeats the Project column');
 
         // allocated_amount alone changes the funder share (allocated = counterpart + funder).
+        // Fixed line-item order (AuditEntryPresenter::FIELD_ORDER): funder share, then allocated.
         $this->assertSame([
-            ['label' => 'Allocated', 'old' => '₱50,000.00', 'new' => '₱60,000.00'],
             ['label' => 'Funder share', 'old' => '₱50,000.00', 'new' => '₱60,000.00'],
-        ], $rows->first(fn ($r) => $r['action']['label'] === 'Line item edited')['changes']);
+            ['label' => 'Allocated', 'old' => '₱50,000.00', 'new' => '₱60,000.00'],
+        ],$rows->first(fn ($r) => $r['action']['label'] === 'Line item edited')['changes']);
 
         $deleted = $rows->first(fn ($r) => $r['action']['label'] === 'Expense deleted');
         $this->assertSame('danger', $deleted['action']['tone']);
@@ -405,7 +406,12 @@ class ProgramAuditTest extends TestCase
                 }
             }
             $updated = AuditTrail::where('model_type', $type)->where('action', 'updated')->first();
-            $this->assertSame(array_keys($edits[$type]), array_keys($updated->new_values), "{$type}: only changed fields");
+            // Which fields were stored, not their order: MySQL's JSON type re-sorts keys.
+            $stored = array_keys($updated->new_values);
+            $expected = array_keys($edits[$type]);
+            sort($stored);
+            sort($expected);
+            $this->assertSame($expected, $stored, "{$type}: only changed fields");
         }
     }
 

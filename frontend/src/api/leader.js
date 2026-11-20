@@ -1,7 +1,7 @@
 import { ENDPOINTS } from './endpoints';
 import client from './client';
 import { apiGet, apiWrite } from './http';
-import { performWrite } from '../lib/apiResult';
+import { failureMessage, performWrite } from '../lib/apiResult';
 
 /** The workflow route that approves / returns each queue record type. */
 const STEP_URL = {
@@ -81,9 +81,8 @@ function errorData(error) {
 
 /** First server message for a failed request (validation or other), else the fallback. */
 export function errorText(error, fallback) {
-  const data = errorData(error);
-  const first = data?.errors ? Object.values(data.errors).flat()[0] : null;
-  return first || data?.message || fallback;
+  const status = error?.response?.status ?? error?.cause?.response?.status ?? 0;
+  return failureMessage(errorData(error), status, fallback);
 }
 
 /** Field -> first message, from a 422 response. */

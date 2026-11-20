@@ -53,3 +53,15 @@ export async function performRead(send) {
   if (!isSuccess(response)) throw new ApiError(LOAD_ERROR, { status: response?.status ?? null });
   return response.data;
 }
+
+/**
+ * The message to show for a failed request. A validation (4xx) response
+ * gives its first field message or its message; a server error (5xx: a
+ * crash, a database error) never shows the server's text ("Server Error",
+ * or SQL when debug is on), only `fallback`. No response at all: `fallback`.
+ */
+export function failureMessage(data, status, fallback) {
+  if (status >= 500) return fallback;
+  const first = data?.errors ? Object.values(data.errors).flat()[0] : null;
+  return first || data?.message || fallback;
+}

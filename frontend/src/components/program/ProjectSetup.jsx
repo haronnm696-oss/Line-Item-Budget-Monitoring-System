@@ -82,8 +82,12 @@ export function Field({ id, label, error, hint, full = false, children }) {
   );
 }
 
-/** Runs a write: busy state, server field errors, or a general message. */
-export function useSave(onSaved) {
+/**
+ * Runs a write: busy state, server field errors, or a general message
+ * (`failText`; a server error never shows the server's own text). On a
+ * failure the dialog stays open, so what was typed is kept.
+ */
+export function useSave(onSaved, { failText = 'Could not save. Please try again.' } = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [serverErrors, setServerErrors] = useState({});
@@ -97,7 +101,7 @@ export function useSave(onSaved) {
       data = await apiWrite(method, url, body);
     } catch (failure) {
       setServerErrors(fieldErrors(failure));
-      setError(errorText(failure, 'Could not save. Please try again.'));
+      setError(errorText(failure, failText));
       setBusy(false);
       return;
     }
@@ -132,6 +136,8 @@ const MOA_FIELDS = ['moa_number', 'moa_date', 'rd_committee_approved_date', 'fun
 const MOA_LIMITS = { moa_number: 100, fund_source: 255 };
 const FORM_B_FIELDS = ['implementing_agency_name', 'monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
 
+const PROJECT_SAVE_ERROR = 'The project could not be saved. Please try again; if it keeps failing, tell the system administrator.';
+
 export function ProjectFormDialog({ mode, projectId = null, setup = null, onClose, onSaved }) {
   const creating = mode === 'create';
   const options = useApiData(ENDPOINTS.programProjectOptions);
@@ -152,7 +158,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     ...Object.fromEntries(FORM_B_FIELDS.map((key) => [key, setup?.form_b?.[key] ?? ''])),
   });
   const [local, setLocal] = useState({});
-  const { busy, error, serverErrors, save } = useSave(onSaved);
+  const { busy, error, serverErrors, save } = useSave(onSaved, { failText: PROJECT_SAVE_ERROR });
   const errors = { ...serverErrors, ...local };
   const duration = durationInWords(form.start_date, form.end_date);
   const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
