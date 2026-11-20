@@ -123,15 +123,29 @@ class ProgramProjectSetupController extends Controller
         return response()->json(['message' => 'Release added.', 'tranche' => $this->tranche($tranche)], 201);
     }
 
-    /** POST /api/program/projects/{project}/tranches/split: Release 1 (70%) and Release 2 (30%). */
+    /** POST /api/program/projects/{project}/tranches/split: the first two releases, 70% and 30%. */
     public function splitTranches(Request $request, Project $project)
     {
         $tranches = $this->setup->splitTranches($project, $request->user());
 
         return response()->json([
-            'message' => 'Release 1 (70%) and Release 2 (30%) added.',
+            'message' => 'The 70% and 30% releases were added.',
             'tranches' => array_map(fn (ProjectTranche $t) => $this->tranche($t), $tranches),
         ], 201);
+    }
+
+    /**
+     * POST /api/program/projects/{project}/tranches/renumber: one click,
+     * only while every release is scheduled and was never requested.
+     */
+    public function renumberTranches(Request $request, Project $project)
+    {
+        $tranches = $this->setup->renumberTranches($project, $request->user());
+
+        return response()->json([
+            'message' => 'Planned releases renumbered by planned date.',
+            'tranches' => array_map(fn (ProjectTranche $t) => $this->tranche($t), $tranches),
+        ]);
     }
 
     /** PATCH /api/program/tranches/{projectTranche} */

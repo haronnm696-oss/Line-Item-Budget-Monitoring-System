@@ -37,6 +37,8 @@ export default function ProgramProjectDetail() {
   const [reloadKey, setReloadKey] = useState(0);
   const [splitBusy, setSplitBusy] = useState(false);
   const [splitError, setSplitError] = useState('');
+  const [renumberBusy, setRenumberBusy] = useState(false);
+  const [renumberError, setRenumberError] = useState('');
 
   function saved(message) {
     setDialog(null);
@@ -109,11 +111,26 @@ export default function ProgramProjectDetail() {
     setSplitBusy(true);
     try {
       const result = await apiWrite('post', ENDPOINTS.programTranchesSplit(project.id));
-      saved(result?.message ?? 'Release 1 (70%) and Release 2 (30%) added.');
+      saved(result?.message ?? 'The 70% and 30% releases were added.');
     } catch (failure) {
       setSplitError(errorText(failure, 'Could not save. Please try again.'));
     } finally {
       setSplitBusy(false);
+    }
+  }
+
+  async function renumberReleases() {
+    if (renumberBusy) return;
+    setNotice('');
+    setRenumberError('');
+    setRenumberBusy(true);
+    try {
+      const result = await apiWrite('post', ENDPOINTS.programTranchesRenumber(project.id));
+      saved(result?.message ?? 'Planned releases renumbered by planned date.');
+    } catch (failure) {
+      setRenumberError(errorText(failure, 'Could not renumber the releases. Please try again.'));
+    } finally {
+      setRenumberBusy(false);
     }
   }
 
@@ -254,10 +271,21 @@ export default function ProgramProjectDetail() {
           <div>
             <div className="program-card-title">Releases</div>
             <div className="program-card-sub">Portions of the funder&apos;s grant released to the project, as set in the MOA. Purchases go through purchase requests.</div>
-            <div className="program-card-sub">Listed by planned date, with their liquidation. A release keeps its number for good. Releasing the funds goes through the fund release approval.</div>
+            <div className="program-card-sub">Listed by planned date, with their liquidation. A release keeps its number once it is requested or released. Releasing the funds goes through the fund release approval.</div>
           </div>
           {setup && (
             <div className="program-head-actions">
+              {setup.can_renumber_releases && (
+                <button
+                  type="button"
+                  className="program-btn"
+                  disabled={renumberBusy}
+                  onClick={renumberReleases}
+                  aria-describedby="pd-renumber-hint"
+                >
+                  {renumberBusy ? 'Renumbering…' : 'Renumber planned releases'}
+                </button>
+              )}
               {tranches.length === 0 && funderTotal > 0 && (
                 <button type="button" className="program-btn" disabled={splitBusy} onClick={splitReleases} aria-describedby="pd-split-hint">
                   {splitBusy ? 'Adding…' : 'Split 70% / 30%'}
@@ -268,6 +296,7 @@ export default function ProgramProjectDetail() {
           )}
         </div>
         {splitError && <div className="program-banner error" role="alert">{splitError}</div>}
+        {renumberError && <div className="program-banner error" role="alert">{renumberError}</div>}
         {setup && funderTotal > 0 && (
           <p className={`ld-hint${releasePlan.unscheduled < 0 ? ' is-risk' : ''}`} role="status">
             Planned {peso(releasePlan.planned)} of {peso(releasePlan.funderTotal)} funder total ({formatShare(releasePlan.percent)})
@@ -284,7 +313,12 @@ export default function ProgramProjectDetail() {
         )}
         {setup && tranches.length === 0 && funderTotal > 0 && (
           <p className="pu-hint" id="pd-split-hint">
-            Split 70% / 30% adds Release 1 ({peso(splitPreview[0])}, on the project start date) and Release 2 ({peso(splitPreview[1])}, halfway through the period). You can edit both afterwards.
+            Split 70% / 30% adds the first two releases ({peso(splitPreview[0])} and {peso(splitPreview[1])}) on the project start date and halfway through the period, with the project&apos;s next release numbers. You can edit both afterwards.
+          </p>
+        )}
+        {setup?.can_renumber_releases && (
+          <p className="pu-hint" id="pd-renumber-hint">
+            Every release is still scheduled and none was ever requested. Renumber them 1, 2, … by planned date and update milestones that name an old number.
           </p>
         )}
         {tranches.length === 0 ? (

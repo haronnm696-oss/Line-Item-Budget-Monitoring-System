@@ -199,6 +199,7 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::delete('/program/line-items/{libCategory}', [ProgramProjectSetupController::class, 'destroyLineItem']);
         Route::post('/program/projects/{project}/tranches', [ProgramProjectSetupController::class, 'storeTranche']);
         Route::post('/program/projects/{project}/tranches/split', [ProgramProjectSetupController::class, 'splitTranches']);
+        Route::post('/program/projects/{project}/tranches/renumber', [ProgramProjectSetupController::class, 'renumberTranches']);
         Route::patch('/program/tranches/{projectTranche}', [ProgramProjectSetupController::class, 'updateTranche']);
         Route::delete('/program/tranches/{projectTranche}', [ProgramProjectSetupController::class, 'destroyTranche']);
         Route::post('/program/projects/{project}/personnel', [PersonnelController::class, 'store']);

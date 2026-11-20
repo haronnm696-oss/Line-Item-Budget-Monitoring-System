@@ -4,12 +4,15 @@ namespace App\Services;
 
 use App\Models\ApprovalRequest;
 use App\Models\LibCategory;
+use App\Models\Liquidation;
 use App\Models\Project;
 use App\Models\ProjectTranche;
 use App\Models\ProjectUser;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\LineItemComputation;
+use App\Support\ReleaseWording;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -358,14 +361,20 @@ class ProjectSetupService
             $start = $locked->start_date?->copy() ?? now()->startOfDay();
             $end = $locked->end_date && $locked->end_date->gt($start) ? $locked->end_date : null;
             $dates = [$start, $end ? $start->copy()->addDays(intdiv($start->diffInDays($end), 2)) : $start->copy()->addMonths(6)];
-            $milestones = ['Upon signing of the MOA', 'Upon liquidation of Release 1'];
 
             $created = [];
             foreach (self::splitAmounts($total, $percents) as $i => $amount) {
+                // The second milestone names the actual number of the first
+                // release, which can be above 1 on legacy data.
+                $name = match ($i) {
+                    0 => 'Upon signing of the MOA',
+                    1 => 'Upon liquidation of ' . $created[0]->releaseLabel(),
+                    default => '',
+                };
                 $tranche = ProjectTranche::create([
                     'project_id' => $locked->id,
                     'sequence' => $i + 1,
-                    'name' => $milestones[$i] ?? '',
+                    'name' => $name,
                     'amount' => $amount,
                     'planned_release_date' => ($dates[$i] ?? end($dates))->toDateString(),
                     'status' => 'upcoming',
@@ -406,14 +415,74 @@ class ProjectSetupService
     public function removeTranche(ProjectTranche $tranche, User $actor): void
     {
         AuditLogger::transaction(function () use ($tranche, $actor) {
+            $project = Project::whereKey($tranche->project_id)->lockForUpdate()->firstOrFail();
             $locked = ProjectTranche::whereKey($tranche->id)->lockForUpdate()->firstOrFail();
             $this->requireOpenTranche($locked, 'removed');
-            if ($locked->approvalRequests()->exists()) {
-                throw ValidationException::withMessages(['tranche' => ['This release has fund release requests on record, so it cannot be removed.']]);
+            if ($locked->isNumberPermanent()) {
+                throw ValidationException::withMessages(['tranche' => ["This release's number is permanent because it was requested or released, so it cannot be removed."]]);
             }
             $old = $this->trancheSnapshot($locked);
             $locked->delete();
+            // Its number was never requested or released: hand it back.
+            ProjectTranche::recomputeLastReleaseNumber((int) $project->id);
             AuditLogger::write('deleted', $locked, $old, [], $actor);
+        });
+    }
+
+    /**
+     * Renumber every planned release 1, 2, … in planned-date order. Allowed
+     * only while every release is still scheduled and none was ever named in
+     * a fund release or liquidation request (and none was released); such a
+     * release keeps its number. Milestones that name an old number are
+     * updated to the new one. One audit entry for the whole change.
+     *
+     * @return array<int, ProjectTranche>
+     */
+    public function renumberTranches(Project $project, User $actor): array
+    {
+        return AuditLogger::transaction(function () use ($project, $actor) {
+            $locked = Project::whereKey($project->id)->lockForUpdate()->firstOrFail();
+            $ordered = ProjectTranche::sortByPlannedDate(
+                ProjectTranche::query()->where('project_id', $locked->id)->get()
+            );
+            if ($ordered->isEmpty()) {
+                throw ValidationException::withMessages(['tranche' => ['This project has no releases to renumber.']]);
+            }
+            if (! $this->canRenumberReleases($locked)) {
+                throw ValidationException::withMessages(['tranche' => ['Only releases that are still scheduled and were never requested can be renumbered.']]);
+            }
+
+            $numbers = [];
+            foreach ($ordered as $index => $tranche) {
+                $old = (int) ($tranche->release_number ?? $tranche->sequence);
+                if ($old > 0) {
+                    $numbers[$old] = $index + 1;
+                }
+            }
+            $before = $ordered->map(fn (ProjectTranche $t) => (int) ($t->release_number ?? $t->sequence))->implode(', ');
+            $after = implode(', ', array_values($numbers));
+
+            foreach ($ordered as $index => $tranche) {
+                $name = ReleaseWording::renumber($tranche->name, $numbers);
+                $tranche->update([
+                    'release_number' => $index + 1,
+                    'name' => $name ?? '',
+                ]);
+            }
+            DB::table('projects')->where('id', $locked->id)->update(['last_release_number' => $ordered->count()]);
+
+            AuditLogger::write(
+                'renumbered',
+                $locked,
+                ['release_numbers' => $before],
+                ['release_numbers' => $after],
+                $actor,
+                'Planned releases renumbered by planned date.'
+            );
+
+            return ProjectTranche::sortByPlannedDate(
+                ProjectTranche::query()->where('project_id', $locked->id)->get()
+            )->all();
         });
     }
 
@@ -462,6 +531,9 @@ class ProjectSetupService
             'used_line_items' => $usedIds,
             'editable_tranches' => $project->tranches()->where('status', '!=', 'released')->pluck('id')
                 ->map(fn ($id) => (int) $id)->reject(fn ($id) => in_array($id, $pendingTranches, true))->values()->all(),
+            // One-click renumbering is offered only while every release is
+            // still scheduled and none was ever requested or released.
+            'can_renumber_releases' => $this->canRenumberReleases($project),
         ];
     }
 
@@ -600,6 +672,29 @@ class ProjectSetupService
         if ($pending) {
             throw ValidationException::withMessages(['tranche' => ["A fund release request for this release is pending, so it cannot be {$verb}."]]);
         }
+    }
+
+    /** Every release is still scheduled and has never been requested or released. */
+    private function canRenumberReleases(Project $project): bool
+    {
+        $tranches = $project->tranches()->get(['id', 'release_number', 'status', 'released_at']);
+        if ($tranches->isEmpty()) {
+            return false;
+        }
+        if ($tranches->contains(fn (ProjectTranche $t) => $t->isReleased() || $t->released_at !== null)) {
+            return false;
+        }
+
+        $ids = $tranches->pluck('id')->all();
+
+        return ! ApprovalRequest::query()
+            ->where('project_id', $project->id)
+            ->whereIn('project_tranche_id', $ids)
+            ->exists()
+            && ! Liquidation::query()
+                ->where('project_id', $project->id)
+                ->whereIn('project_tranche_id', $ids)
+                ->exists();
     }
 
     /** Any expense (any status, deleted drafts included), payroll row or purchase request. */

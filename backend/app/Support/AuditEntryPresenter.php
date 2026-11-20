@@ -66,6 +66,7 @@ class AuditEntryPresenter
         'fulfilled' => 'Fulfilled',
         'cancelled' => 'Cancelled',
         'reopened' => 'Reopened',
+        'renumbered' => 'Planned releases renumbered',
         'pay_rate_changed' => 'Pay rate changed',
         'requested' => 'Submitted',
         'resubmitted' => 'Resubmitted',
