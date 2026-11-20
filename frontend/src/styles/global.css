@@ -3889,3 +3889,15 @@ select.signin-input:disabled{
 .fb-form-grid .program-field.third{grid-column:span 1}
 .fb-computed{margin:4px 0 0;font-size:13px;color:var(--pg2-muted)}
 .fb-warnings p{margin:0}.fb-warnings p + p{margin-top:6px}
+
+/* Project Leader Overview: other active projects (older data) and past projects. */
+.pl-other-projects{margin:6px 0 0 22px;padding:0}
+.pl-other-projects a{display:inline-flex;align-items:center;min-height:44px;font-weight:600;color:var(--pg-brand);text-decoration:underline;text-underline-offset:2px}
+.pl-past{margin-top:16px}
+.pl-past .ld-mini-list a{color:var(--pg-ink);text-decoration:underline;text-underline-offset:2px}
+
+/* Program Leader: Project Leaders who lead more than one active project. */
+.leader-conflicts ul{margin:6px 0 0 22px;padding:0}
+.leader-conflicts li{margin:2px 0;line-height:1.6}
+.leader-conflicts a{font-weight:600;color:inherit;text-decoration:underline;text-underline-offset:2px}
+.pu-conflict{margin-top:4px;font-size:12.5px;font-weight:650;color:var(--pg-watch)}

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\ProjectLeaderRule;
 use App\Services\AuditLogger;
 use App\Models\AuditTrail;
 use App\Models\FundingAgency;
@@ -231,6 +232,14 @@ class DemoProjectAssignmentsSeeder extends Seeder
 
         if ($leader && $current->contains('user_id', $leader->id)) {
             return $changes; // Already the leader.
+        }
+
+        // One active project per Project Leader: skip (with a warning) rather than break the rule.
+        $otherLed = $leader ? ProjectLeaderRule::blockingProject($leader, $project) : null;
+        if ($otherLed) {
+            $this->say('warn', $project->code . ': ' . ProjectLeaderRule::message($leader, $otherLed) . ' Leader not changed.');
+
+            return $changes;
         }
 
         $changes++;

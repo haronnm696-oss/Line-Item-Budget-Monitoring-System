@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\ProjectLeaderRule;
 use App\Services\AuditLogger;
 use App\Support\LegacyAttachmentImporter;
 use App\Models\ApprovalRequest;
@@ -66,6 +67,12 @@ class DashboardDemoSeeder extends Seeder
             $role = Role::where('slug', $slug)->first();
 
             if (! $user || ! $role) {
+                continue;
+            }
+            // One active project per Project Leader (the shared rule): skip with a warning.
+            $otherLed = $slug === ProjectLeaderRule::SLUG ? ProjectLeaderRule::blockingProject($user, $project) : null;
+            if ($otherLed) {
+                $this->command?->warn($project->code . ': ' . ProjectLeaderRule::message($user, $otherLed) . ' Leader not assigned.');
                 continue;
             }
 

@@ -71,6 +71,18 @@ trait BuildsExpenseWorkflow
         ]);
     }
 
+    private ?User $freeLeaderUser = null;
+
+    /**
+     * A Project Leader account that leads no project yet ($projectLeader
+     * already leads the active WF-001, and a Project Leader leads one active
+     * project at a time). The same account on every call in a test.
+     */
+    protected function freeLeader(): User
+    {
+        return $this->freeLeaderUser ??= AuditLogger::muted(fn () => $this->makePerson('project-leader'));
+    }
+
     protected function member(string $slug): User
     {
         $user = $this->makePerson($slug);

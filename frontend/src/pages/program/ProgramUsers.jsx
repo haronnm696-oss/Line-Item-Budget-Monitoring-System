@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import LeaderConflicts from '../../components/program/LeaderConflicts';
+import { conflictFor } from '../../lib/leaderRule';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   assignToProject,
@@ -96,6 +98,8 @@ export default function ProgramUsers() {
   const [result, setResult] = useState(null); // { key, users, meta }
   const [failure, setFailure] = useState(null); // { key, message }
   const [options, setOptions] = useState({ roles: [], projects: [], assignable_users: [] });
+  // Project Leaders leading more than one active project (flagged, never changed automatically).
+  const [leaderConflicts, setLeaderConflicts] = useState([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [moreBusy, setMoreBusy] = useState(false);
   const controllerRef = useRef(null);
@@ -149,6 +153,7 @@ export default function ProgramUsers() {
       const data = await fetchProgramUsers({ ...params, page: 1 }, { signal: controller.signal });
       if (controllerRef.current !== controller) return;
       setResult({ key: requestKey, users: data.users ?? [], meta: data.meta ?? {} });
+      setLeaderConflicts(Array.isArray(data.leader_conflicts) ? data.leader_conflicts : []);
       setOptions({
         roles: data.roles ?? [],
         projects: data.projects ?? [],
@@ -351,6 +356,8 @@ export default function ProgramUsers() {
         </div>
       </div>
 
+      <LeaderConflicts conflicts={leaderConflicts} />
+
       <div aria-live="polite">
         {toast && <div className="program-banner ok">{toast.msg}</div>}
         {pendingError && (
@@ -525,6 +532,9 @@ export default function ProgramUsers() {
                             {user.is_self && <span className="pu-you">You</span>}
                           </div>
                           <div className="au-sub">{user.position || '—'}</div>
+                          {conflictFor(leaderConflicts, user.id) && (
+                            <div className="pu-conflict"><span aria-hidden="true">⚠ </span>{conflictFor(leaderConflicts, user.id).message}</div>
+                          )}
                         </td>
                         <td className="num">{user.employee_id || '—'}</td>
                         <td><RoleLabel slug={user.role_slug} label={user.role_label} /></td>

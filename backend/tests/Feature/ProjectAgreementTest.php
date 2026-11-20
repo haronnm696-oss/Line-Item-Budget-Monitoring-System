@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AuditTrail;
 use App\Models\Document;
 use App\Models\Project;
+use App\Services\AuditLogger;
 use App\Services\FormBReportService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -42,7 +43,7 @@ class ProjectAgreementTest extends TestCase
             'title' => 'Seaweed Value Chain', 'code' => 'RP-2026-010',
             'funding_agency_id' => $this->project->funding_agency_id,
             'start_date' => '2026-01-01', 'end_date' => '2026-12-31', 'total_approved_budget' => 750000,
-            'project_leader_id' => $this->projectLeader->id,
+            'project_leader_id' => $this->freeLeader()->id,
         ], $overrides);
     }
 
@@ -67,7 +68,7 @@ class ProjectAgreementTest extends TestCase
         }
 
         // All optional: a project without them is fine.
-        $this->postJson('/api/program/projects', $this->newProject(['code' => 'RP-2026-011']))->assertCreated();
+        $this->postJson('/api/program/projects', $this->newProject(['code' => 'RP-2026-011', 'project_leader_id' => AuditLogger::muted(fn () => $this->makePerson('project-leader'))->id]))->assertCreated();
         $this->assertNull(Project::where('code', 'RP-2026-011')->value('fund_source'));
     }
 

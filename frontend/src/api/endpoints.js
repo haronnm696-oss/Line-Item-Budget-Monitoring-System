@@ -212,6 +212,9 @@ export const ENDPOINTS = {
   //   POST projects, PATCH projects/:id (funder, reference, period, total budget, project_leader_id)
   //   POST projects/:id/line-items, PATCH|DELETE line-items/:id
   //   POST projects/:id/tranches, PATCH|DELETE tranches/:id (unreleased only)
+  // { funders, leaders: [{ id, name, leads: [{ id, code, title }] }] }: `leads` = the active
+  // projects each leads (one active project per Project Leader; lib/leaderRule.js).
+  // GET /api/program/projects and /api/program/users also return `leader_conflicts`.
   programProjectOptions: '/api/program/project-options',
   // Funders: GET list, POST { name, acronym }, PATCH :id. The short name
   // (acronym) labels the funder column of every Line-Item Budget.

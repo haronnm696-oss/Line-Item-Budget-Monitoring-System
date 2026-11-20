@@ -40,7 +40,7 @@ class FormInsertsTest extends TestCase
             'title' => 'Seaweed Value Chain', 'code' => 'RP-2026-030',
             'funding_agency_id' => $this->project->funding_agency_id, 'funder_reference' => null,
             'start_date' => '2026-01-01', 'end_date' => '2026-12-31',
-            'total_approved_budget' => '3,178,376.00', 'project_leader_id' => $this->projectLeader->id,
+            'total_approved_budget' => '3,178,376.00', 'project_leader_id' => $this->freeLeader()->id,
             'moa_number' => null, 'moa_date' => null, 'rd_committee_approved_date' => null, 'fund_source' => null,
             'funding_agency_amount' => null,
         ])->assertCreated()->json('project.id');

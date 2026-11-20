@@ -13,6 +13,8 @@ import { itemName, withUnitDescription } from '../../lib/lineItemNames';
 import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
 import { DATE_BOUNDS, dateRangeError } from '../../lib/dateRange';
 import MoneyInput from '../MoneyInput';
+import { endDateActive, leaderChoices } from '../../lib/leaderRule';
+import { todayInManila } from '../../lib/datetime';
 
 /*
  * Program Leader project set-up dialogs (New project, Edit details, line
@@ -243,11 +245,18 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
           {text('start_date', 'Start date', 'date')}
           {text('end_date', 'End date', 'date', { hint: duration ? `Duration: ${duration}` : 'After the start date' })}
           {text('total_approved_budget', 'Total budget (₱)', 'money', { hint: 'For example 3,178,376.00' })}
-          <Field id="ps-project_leader_id" label="Project Leader" error={errors.project_leader_id}>
+          <Field id="ps-project_leader_id" label="Project Leader" error={errors.project_leader_id} hint="A Project Leader leads one active project at a time; people who already lead one are greyed.">
             {(a11y) => (
               <select {...a11y} className="program-select" value={form.project_leader_id} disabled={busy || options.status !== 'ready'} onChange={set('project_leader_id')}>
                 <option value="">{options.status === 'loading' ? 'Loading…' : 'Choose a Project Leader'}</option>
-                {leaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.name}</option>)}
+                {/* One active project per Project Leader: people leading another active project are greyed, with it. */}
+                {leaderChoices(leaders, {
+                  projectId,
+                  selectedId: form.project_leader_id,
+                  projectActive: endDateActive(form.end_date, todayInManila()),
+                }).map((leader) => (
+                  <option key={leader.id} value={leader.id} disabled={leader.disabled}>{leader.label}</option>
+                ))}
               </select>
             )}
           </Field>

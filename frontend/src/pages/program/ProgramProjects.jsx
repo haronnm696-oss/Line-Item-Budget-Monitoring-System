@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import LeaderConflicts from '../../components/program/LeaderConflicts';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { downloadProgramProjectsCsv, fetchProgramProjects } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
@@ -271,6 +272,7 @@ export default function ProgramProjects() {
   const years = Array.isArray(data?.years) ? data.years : [];
   const summary = data?.summary ?? null;
   const atRiskCount = data?.at_risk_count ?? 0;
+  const leaderConflicts = Array.isArray(data?.leader_conflicts) ? data.leader_conflicts : [];
 
   function ariaSort(key) {
     if (sortKey !== key) return 'none';
@@ -396,6 +398,8 @@ export default function ProgramProjects() {
           </button>
         </div>
       </div>
+
+      <LeaderConflicts conflicts={leaderConflicts} />
 
       {managingFunders && <FundersDialog onClose={() => setManagingFunders(false)} />}
 

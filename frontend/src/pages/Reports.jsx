@@ -13,7 +13,8 @@ import DownloadMenu from '../components/DownloadMenu';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 import { reportDownloadOptions, reportsEyebrow } from '../lib/reportDownloads';
-import { myProjects, notAssignedText, projectRoleFor } from '../lib/myProjects';
+import { NO_ACTIVE_PROJECT_TEXT } from '../lib/leaderRule';
+import { myProjects, notAssignedText, pickProject, projectRoleFor } from '../lib/myProjects';
 import FundingWarnings from '../components/program/FundingWarnings';
 
 const REPORT_TYPES = [
@@ -141,10 +142,12 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const projectsStatus = projectsResult?.attempt !== projectsAttempt
     ? 'loading'
     : projectsResult.error ? 'error' : projectsResult.list.length ? 'ready' : 'empty';
-  const projectList = projectsStatus === 'ready' ? projectsResult.list : [];
   // ?project=<id> (links from the role Overviews) picks the project too.
   const requestedId = new URLSearchParams(window.location.search).get('project');
-  const listRow = projectList.find((p) => p.code === chosenCode)
+  // The Project Leader: their one active project (lib/leaderRule.js).
+  const leaderPick = isLeader && projectsStatus === 'ready' ? pickProject(projectsResult.list, requestedId, myRole) : null;
+  const projectList = leaderPick ? leaderPick.projects : projectsStatus === 'ready' ? projectsResult.list : [];
+  const listRow = leaderPick ? leaderPick.project : projectList.find((p) => p.code === chosenCode)
     ?? projectList.find((p) => p.code === initialCode)
     ?? projectList.find((p) => requestedId && String(p.id) === requestedId)
     ?? projectList[0]
@@ -642,6 +645,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
   // Values appear only once the selected project's real data has loaded.
   const shown = (value) => (project ? value : '—');
+  // The Program Leader's "at a glance" figures; the role pages show these on their Overview.
   const summaryCards = (
     <>
       <StatCard label={`Total ${project?.funding_agency || listRow?.agency || 'Funder'} funding`} value={shown(formatMoney(selectedProject.funding_budget || 0))} sub={`${project?.funding_agency || listRow?.agency || 'External funder'} grant`} />
@@ -759,6 +763,9 @@ export default function Reports({ programMode = false, initialCode = '' }) {
             </div>
           )}
           {isLeader && projectsStatus === 'empty' && <div className="banner" role="status">{notAssignedText(myRole)}</div>}
+          {leaderPick && !leaderPick.project && (
+            <div className="banner" role="status">{leaderPick.past.length ? NO_ACTIVE_PROJECT_TEXT : notAssignedText(myRole)}</div>
+          )}
 
           {/* Report parameters first: every report below uses them. */}
           <div className="panel" style={{ marginBottom: 16 }}>
@@ -784,13 +791,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
               </div>
             ))}
           </div>
-
-          {/* The Project Leader sees these figures on the Overview. */}
-          {!isLeader && (
-            <div className="grid c4" style={{ marginBottom: 16, gap: 14 }}>
-              {summaryCards}
-            </div>
-          )}
         </>
       )}
 

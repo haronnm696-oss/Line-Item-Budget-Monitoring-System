@@ -14,6 +14,7 @@ import ReviewRow from '../../components/leader/ReviewRow';
 import { formatPct, peso } from '../../components/money';
 import { REQUEST_STATUS } from '../../lib/budgetRequestForm';
 import { spendingAlert } from '../../lib/leaderOverview';
+import { NO_ACTIVE_PROJECT_TEXT, conflictWarning } from '../../lib/leaderRule';
 
 function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -47,7 +48,23 @@ export default function ProjectLeaderDashboard() {
         </div>
       </div>
 
-      <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
+      {/* Older data: more than one active project led. Nothing changes until the Program Leader reassigns. */}
+      {picker.others?.length > 0 && (
+        <div className="program-banner warn" role="status">
+          <p><span aria-hidden="true">⚠ </span>{conflictWarning(picker.others)}</p>
+          <ul className="pl-other-projects">
+            {picker.others.map((other) => (
+              <li key={other.id}><Link to={`/dashboard/project-leader?project=${other.id}`}>{other.title} ({other.code})</Link></li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <LoadState
+        state={picker.state}
+        emptyText={picker.past?.length ? NO_ACTIVE_PROJECT_TEXT : notAssignedText(picker.role)}
+        isEmpty={picker.state.status === 'ready' && !picker.project}
+      >
         <LoadState state={overview} loadingText="Loading project data…">
           {data && (
             <>
@@ -99,7 +116,34 @@ export default function ProjectLeaderDashboard() {
           )}
         </LoadState>
       </LoadState>
+
+      {picker.past?.length > 0 && <PastProjects projects={picker.past} />}
     </div>
+  );
+}
+
+/** Completed projects the leader led: read-only, each opens the project page. */
+function PastProjects({ projects }) {
+  return (
+    <section className="program-card pl-past" aria-labelledby="pl-past-title">
+      <div className="program-card-head">
+        <div>
+          <div className="program-card-title" id="pl-past-title">Past projects</div>
+          <div className="program-card-sub">Completed projects you led · view only</div>
+        </div>
+      </div>
+      <ul className="ld-mini-list">
+        {projects.map((project) => (
+          <li key={project.id}>
+            <div>
+              <Link to={`/projects/${project.id}`}><b>{project.title}</b></Link>
+              <span>{[project.code, project.agency, project.period].filter(Boolean).join(' · ')}</span>
+            </div>
+            <div className="ld-mini-side"><ProgramPill value="Completed" label="Completed" tone="neutral" icon="✓" /></div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

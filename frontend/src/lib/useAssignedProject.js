@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ENDPOINTS } from '../api/endpoints';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from './roles';
-import { myProjects, projectRoleFor } from './myProjects';
+import { pickProject, projectRoleFor } from './myProjects';
 import { useApiData } from './useApiData';
 
 /**
@@ -19,7 +19,7 @@ export function useAssignedProject({ role } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const state = useApiData(ENDPOINTS.projects);
   const effectiveRole = role === undefined ? projectRoleFor(normalizeRole(user)) : role;
-  const { projects, project } = pickProject(state.data, searchParams.get('project'), effectiveRole);
+  const { projects, project, others, past } = pickProject(state.data, searchParams.get('project'), effectiveRole);
 
   function choose(id) {
     const next = new URLSearchParams(window.location.search);
@@ -27,15 +27,6 @@ export function useAssignedProject({ role } = {}) {
     setSearchParams(next, { replace: true });
   }
 
-  return { state, projects, project, projectId: project?.id ?? null, role: effectiveRole, choose };
-}
-
-/**
- * The same choice without the hook (used by the sidebar badges so they
- * follow the page's project): the ?project= one, else the first.
- */
-export function pickProject(data, requested, role) {
-  const projects = myProjects(data, role);
-  const project = projects.find((item) => String(item.id) === String(requested)) ?? projects[0] ?? null;
-  return { projects, project };
+  // others / past: the Project Leader's other active projects (older data) and completed ones.
+  return { state, projects, project, projectId: project?.id ?? null, role: effectiveRole, choose, others, past };
 }

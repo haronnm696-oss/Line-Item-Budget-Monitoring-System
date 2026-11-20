@@ -30,6 +30,10 @@ class DemoProjectAssignmentsSeederTest extends TestCase
 
         $this->seed(DemoUsersSeeder::class);
         $this->seed(DemoDatasetSeeder::class);
+        // A Project Leader leads one active project at a time: the dataset's
+        // goat and nutrition projects (same demo leaders) are completed here,
+        // so the dashboard projects can take their leaders.
+        Project::whereIn('code', ['MOST-RD-2026-002', 'MOST-RD-2026-003'])->update(['end_date' => '2026-06-30']);
         $this->seed(ProgramDashboardSeeder::class);
 
         $this->scramble();
@@ -108,6 +112,19 @@ class DemoProjectAssignmentsSeederTest extends TestCase
         // Second run: nothing changes at all, not even the audit trail.
         $this->seed(DemoProjectAssignmentsSeeder::class);
         $this->assertEquals($after, $this->snapshot());
+    }
+
+    public function test_a_demo_leader_who_already_leads_another_active_project_is_not_assigned(): void
+    {
+        // project.leader2 also leads an active dataset project again.
+        Project::where('code', 'MOST-RD-2026-002')->update(['end_date' => '2027-06-30']);
+        $goat = Project::where('code', 'RP-2026-009')->value('id');
+        $before = $this->leaderEmails($goat);
+
+        $this->seed(DemoProjectAssignmentsSeeder::class);
+
+        $this->assertSame($before, $this->leaderEmails($goat), 'leader unchanged: the rule refused it');
+        $this->assertNotContains('project.leader2@gmail.com', $this->leaderEmails($goat));
     }
 
     public function test_missing_project_is_skipped_not_created(): void
