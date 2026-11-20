@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useReducer, useRef, useState } from 'react';
+import { funderDialogReducer, funderSummary, initialFunderDialog, saveFunder } from '../../lib/funderDialog';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiWrite } from '../../api/http';
 import { errorText, fieldErrors } from '../../api/leader';
@@ -26,17 +27,40 @@ export function moneyError(text, { positive = false } = {}) {
   return null;
 }
 
+// Open dialogs, innermost last: Escape closes only the top one.
+const openDialogs = [];
+
 export function Dialog({ title, labelId, busy, onClose, children }) {
   const panelRef = useRef(null);
+  const latest = useRef({ busy, onClose });
+  useEffect(() => { latest.current = { busy, onClose }; });
+
   useEffect(() => {
     panelRef.current?.querySelector('input, select, textarea, button:not(.program-icon-btn)')?.focus();
+  }, []);
+
+  // Escape is handled on the document, not the overlay: after a save the
+  // focused form can unmount, leaving focus on <body> outside the dialog.
+  useEffect(() => {
+    const token = {};
+    openDialogs.push(token);
+    function onKeyDown(event) {
+      if (event.key !== 'Escape' || openDialogs[openDialogs.length - 1] !== token) return;
+      if (latest.current.busy) return;
+      event.preventDefault();
+      latest.current.onClose();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      openDialogs.splice(openDialogs.indexOf(token), 1);
+    };
   }, []);
 
   return (
     <div
       className="program-modal-overlay"
       onClick={busy ? undefined : onClose}
-      onKeyDown={(event) => { if (event.key === 'Escape' && !busy) onClose(); }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelId}
@@ -74,15 +98,19 @@ export function useSave(onSaved) {
     setBusy(true);
     setError('');
     setServerErrors({});
+    let data;
     try {
-      const data = await apiWrite(method, url, body);
-      onSaved(data?.message ?? okText, data);
+      data = await apiWrite(method, url, body);
     } catch (failure) {
-      const fields = fieldErrors(failure);
-      setServerErrors(fields);
+      setServerErrors(fieldErrors(failure));
       setError(errorText(failure, 'Could not save. Please try again.'));
       setBusy(false);
+      return;
     }
+    // Clear busy on success too: a dialog that stays open after saving must
+    // not be left with its buttons disabled.
+    setBusy(false);
+    onSaved(data?.message ?? okText, data);
   }
 
   return { busy, error, serverErrors, save };
@@ -541,37 +569,25 @@ export function RemoveDialog({ title, text, url, onClose, onSaved }) {
 export function FundersDialog({ onClose }) {
   const list = useApiData(ENDPOINTS.programFunders);
   const funders = list.data?.funders ?? [];
-  const [editing, setEditing] = useState(null); // funder id, 'new' or null
-  const [form, setForm] = useState({ name: '', acronym: '' });
-  const [local, setLocal] = useState({});
-  const [notice, setNotice] = useState('');
-  const { busy, error, serverErrors, save } = useSave((message) => {
-    setEditing(null);
-    setNotice(message);
-    list.retry();
-  });
+  const [state, dispatch] = useReducer(funderDialogReducer, initialFunderDialog);
+  const { editing, form, local, notice, busy, error, serverErrors } = state;
   const errors = { ...serverErrors, ...local };
 
-  function start(funder) {
-    setNotice('');
-    setLocal({});
-    setEditing(funder ? funder.id : 'new');
-    setForm({ name: funder?.name ?? '', acronym: funder?.short_name ?? funder?.acronym ?? '' });
-  }
+  const start = (funder) => dispatch({ type: 'start', funder });
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
-    const next = {};
-    if (!form.name.trim()) next.name = "Enter the funder's full name.";
-    if (!form.acronym.trim()) next.acronym = 'Enter the short name shown on screens.';
-    setLocal(next);
-    if (Object.keys(next).length) return;
-    const body = { name: form.name.trim(), acronym: form.acronym.trim() };
-    if (editing === 'new') save('post', ENDPOINTS.programFunders, body, 'Funder added.');
-    else save('patch', ENDPOINTS.programFunder(editing), body, 'Funder saved.');
+    if (busy) return;
+    const saved = await saveFunder({
+      state,
+      dispatch,
+      write: (method, which, body) => apiWrite(method, which === 'new' ? ENDPOINTS.programFunders : ENDPOINTS.programFunder(which), body),
+      describe: (failure) => ({ error: errorText(failure, 'Could not save. Please try again.'), serverErrors: fieldErrors(failure) }),
+    });
+    if (saved) list.retry();
   }
 
-  const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
+  const set = (key) => (event) => dispatch({ type: 'field', key, value: event.target.value });
   const fields = (
     <form className="pu-form" onSubmit={submit} noValidate>
       {error && <div className="program-banner error" role="alert">{error}</div>}
@@ -584,7 +600,7 @@ export function FundersDialog({ onClose }) {
         </Field>
       </div>
       <div className="program-modal-actions">
-        <button type="button" className="program-btn" onClick={() => setEditing(null)} disabled={busy}>Cancel</button>
+        <button type="button" className="program-btn" onClick={() => dispatch({ type: 'cancel' })} disabled={busy}>Cancel</button>
         <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : editing === 'new' ? 'Add funder' : 'Save funder'}</button>
       </div>
     </form>
@@ -602,13 +618,15 @@ export function FundersDialog({ onClose }) {
       {list.status === 'ready' && funders.length === 0 && <p className="pu-hint">No funders yet. Add the first one.</p>}
       {funders.length > 0 && (
         <ul className="pd-list">
-          {funders.map((funder) => (
+          {funders.map((funder) => {
+            const summary = funderSummary(funder);
+            return (
             <li key={funder.id}>
               {editing === funder.id ? fields : (
                 <div className="pd-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', textAlign: 'left' }}>
                   <span>
-                    <b>{funder.short_name || funder.name}</b>
-                    <span>{funder.name} · {funder.project_count} {funder.project_count === 1 ? 'project' : 'projects'}</span>
+                    <b>{summary.short}</b>
+                    <span> · {summary.detail}</span>
                   </span>
                   <button type="button" className="program-btn sm" onClick={() => start(funder)} disabled={busy}>
                     Edit<span className="pa-sr-only"> {funder.name}</span>
@@ -616,7 +634,8 @@ export function FundersDialog({ onClose }) {
                 </div>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
       {editing === 'new' ? fields : (
