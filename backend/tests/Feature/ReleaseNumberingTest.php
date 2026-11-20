@@ -25,6 +25,8 @@ class ReleaseNumberingTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
+        // The MOA grant is the whole budget, so releases are capped at 1,000,000 (not the 500,000 line item).
+        AuditLogger::muted(fn () => $this->project->update(['funding_agency_amount' => 1000000]));
     }
 
     public function test_adding_a_release_with_an_earlier_date_does_not_renumber_existing_ones(): void

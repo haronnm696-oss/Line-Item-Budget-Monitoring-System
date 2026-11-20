@@ -73,6 +73,8 @@ class ProgramProjectSetupController extends Controller
             'moa_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'rd_committee_approved_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'fund_source' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // "Grant amount from the funder (per MOA)"; blank = not entered.
+            'funding_agency_amount' => array_merge(['sometimes', 'nullable'], self::MONEY),
         ];
     }
 
@@ -117,6 +119,17 @@ class ProgramProjectSetupController extends Controller
         $tranche = $this->setup->addTranche($project, $data, $request->user());
 
         return response()->json(['message' => 'Release added.', 'tranche' => $this->tranche($tranche)], 201);
+    }
+
+    /** POST /api/program/projects/{project}/tranches/split: Release 1 (70%) and Release 2 (30%). */
+    public function splitTranches(Request $request, Project $project)
+    {
+        $tranches = $this->setup->splitTranches($project, $request->user());
+
+        return response()->json([
+            'message' => 'Release 1 (70%) and Release 2 (30%) added.',
+            'tranches' => array_map(fn (ProjectTranche $t) => $this->tranche($t), $tranches),
+        ], 201);
     }
 
     /** PATCH /api/program/tranches/{projectTranche} */

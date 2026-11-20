@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Tests\Feature\Concerns\GeneratesEmployeeIds;
 use Tests\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use Tests\TestCase;
  */
 class AcademicUnitsTest extends TestCase
 {
+    use GeneratesEmployeeIds;
     use RefreshDatabase;
 
     private function person(string $slug, array $extra = []): User
@@ -25,7 +27,7 @@ class AcademicUnitsTest extends TestCase
         return User::create(array_merge([
             'name' => ucfirst($slug) . ' ' . uniqid(),
             'email' => $slug . '.' . uniqid() . '@msumain.edu.ph',
-            'employee_id' => 'MSU-' . random_int(10000, 99999),
+            'employee_id' => $this->nextEmployeeId(),
             'password' => Hash::make('password123'),
             'role_id' => Role::where('slug', $slug)->value('id'),
             'is_active' => true,
@@ -39,7 +41,7 @@ class AcademicUnitsTest extends TestCase
 
         return $this->postJson('/api/register', array_merge([
             'first_name' => 'Ana', 'last_name' => 'Cruz', 'email' => 'ana.' . uniqid() . '@s.msumain.edu.ph',
-            'password' => 'Str0ng!Pass2026', 'employee_id' => 'MSU-' . random_int(10000, 99999),
+            'password' => 'Str0ng!Pass2026', 'employee_id' => $this->nextEmployeeId(),
             'contact_number' => '09171234567', 'position' => 'Instructor',
         ], $unit));
     }
@@ -48,7 +50,7 @@ class AcademicUnitsTest extends TestCase
     {
         return $this->postJson('/api/program/users', array_merge([
             'first_name' => 'New', 'last_name' => 'Person', 'email' => 'new.' . uniqid() . '@msumain.edu.ph',
-            'employee_id' => 'MSU-' . random_int(10000, 99999), 'position' => 'Staff', 'role' => 'researcher',
+            'employee_id' => $this->nextEmployeeId(), 'position' => 'Staff', 'role' => 'researcher',
         ], $unit));
     }
 

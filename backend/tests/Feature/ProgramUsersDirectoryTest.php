@@ -13,10 +13,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Tests\Feature\Concerns\GeneratesEmployeeIds;
 use Tests\TestCase;
 
 class ProgramUsersDirectoryTest extends TestCase
 {
+    use GeneratesEmployeeIds;
     use RefreshDatabase;
 
     private User $leader;
@@ -137,7 +139,7 @@ class ProgramUsersDirectoryTest extends TestCase
         $count = function (int $people) {
             AuditLogger::muted(function () use ($people) {
                 foreach (range(1, $people) as $i) {
-                    $person = $this->person('researcher', 'Bulk ' . uniqid(), 'MSU-' . random_int(30000, 99999));
+                    $person = $this->person('researcher', 'Bulk ' . uniqid(), $this->nextEmployeeId());
                     $this->assign($person, $this->urban, 'researcher');
                 }
             });
@@ -280,7 +282,7 @@ class ProgramUsersDirectoryTest extends TestCase
         $person = AuditLogger::muted(fn () => $this->person('researcher', 'Target Person', 'MSU-88888'));
 
         foreach (['project-leader', 'researcher', 'research-assistant', 'finance-admin'] as $slug) {
-            $actor = AuditLogger::muted(fn () => $this->person($slug, 'Actor ' . $slug, 'MSU-' . random_int(30000, 99999)));
+            $actor = AuditLogger::muted(fn () => $this->person($slug, 'Actor ' . $slug, $this->nextEmployeeId()));
             $this->actingAs($actor);
 
             $this->getJson('/api/program/users')->assertForbidden();

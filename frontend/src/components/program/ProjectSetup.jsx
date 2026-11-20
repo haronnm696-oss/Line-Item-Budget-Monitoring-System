@@ -8,6 +8,7 @@ import { peso } from '../money';
 import { RATE_PERIODS, computedAmount, hasComputation, periodsLabel, previewComputation } from '../../lib/lineItemComputation';
 import { sourceLabels } from '../../lib/fundingSource';
 import { durationInWords, periodErrors } from '../../lib/projectAgreement';
+import { amountFromPercent, percentError, percentFromAmount } from '../../lib/releasePlan';
 
 /*
  * Program Leader project set-up dialogs (New project, Edit details, line
@@ -154,6 +155,8 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     total_approved_budget: setup?.total_budget ? String(setup.total_budget) : '',
     project_leader_id: setup?.project_leader_id ? String(setup.project_leader_id) : '',
     ...Object.fromEntries(MOA_FIELDS.map((key) => [key, setup?.agreement?.[key] ?? ''])),
+    // The funder's grant per the MOA (projects.funding_agency_amount); blank = not entered.
+    funding_agency_amount: setup?.funder_grant ? String(setup.funder_grant) : '',
     ...Object.fromEntries(FORM_B_FIELDS.map((key) => [key, setup?.form_b?.[key] ?? ''])),
   });
   const [local, setLocal] = useState({});
@@ -177,6 +180,13 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     else if (setup && Number(form.total_approved_budget) < Number(setup.allocated)) {
       next.total_approved_budget = `The total budget cannot be less than the line items already allocated (${peso(setup.allocated)}).`;
     }
+    if (String(form.funding_agency_amount).trim() !== '') {
+      const grantError = moneyError(form.funding_agency_amount);
+      if (grantError) next.funding_agency_amount = grantError;
+      else if (!budgetError && Number(form.funding_agency_amount) > Number(form.total_approved_budget) + 0.001) {
+        next.funding_agency_amount = `The grant amount cannot be more than the total budget (${peso(form.total_approved_budget)}).`;
+      }
+    }
     if (!form.project_leader_id) next.project_leader_id = 'Choose the Project Leader.';
     for (const key of FORM_B_FIELDS) {
       if (String(form[key] ?? '').trim().length > 255) next[key] = 'Use 255 characters or fewer.';
@@ -192,6 +202,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
       total_approved_budget: Number(form.total_approved_budget),
       project_leader_id: Number(form.project_leader_id),
       ...Object.fromEntries(MOA_FIELDS.map((key) => [key, String(form[key] ?? '').trim() || null])),
+      funding_agency_amount: String(form.funding_agency_amount).trim() === '' ? null : Number(form.funding_agency_amount),
     };
     if (creating) {
       save('post', ENDPOINTS.programProjects, { ...body, title: form.title.trim(), code: form.code.trim() }, 'Project created.');
@@ -203,7 +214,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
 
   const text = (key, label, type = 'text', extra = {}) => (
     <Field id={`ps-${key}`} label={label} error={errors[key]} {...extra}>
-      {(a11y) => <input {...a11y} className="program-input" type={type} value={form[key]} disabled={busy} onChange={set(key)} inputMode={key === 'total_approved_budget' ? 'decimal' : undefined} />}
+      {(a11y) => <input {...a11y} className="program-input" type={type} value={form[key]} disabled={busy} onChange={set(key)} inputMode={key === 'total_approved_budget' || key === 'funding_agency_amount' ? 'decimal' : undefined} />}
     </Field>
   );
 
@@ -242,6 +253,9 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
             {text('moa_number', 'MOA number')}
             {text('moa_date', 'MOA date', 'date')}
             {text('rd_committee_approved_date', "Approved by the funder's R&D committee", 'date')}
+            {text('funding_agency_amount', 'Grant amount from the funder (per MOA) (₱)', 'text', {
+              hint: 'For example 2000000.00. Releases are planned as parts of this amount.',
+            })}
             {text('fund_source', 'Fund source', 'text', { full: true, hint: 'For example MOST-BARMM GAAB 2024 Program Funds. Printed on Form B as "Chargeable against …".' })}
           </div>
         </fieldset>
@@ -515,24 +529,43 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
  */
 export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSaved }) {
   const editing = Boolean(tranche);
-  const [form, setForm] = useState({
-    milestone: tranche?.milestone ?? '',
-    amount: tranche ? String(tranche.amount) : '',
-    planned_release_date: tranche?.planned_release_date ?? '',
+  const funderTotal = Number(setup.funder_total ?? setup.total_budget) || 0;
+  const [form, setForm] = useState(() => {
+    const amount = tranche ? Number(tranche.amount).toFixed(2) : '';
+    return {
+      milestone: tranche?.milestone ?? '',
+      amount,
+      percent: percentFromAmount(amount, funderTotal),
+      planned_release_date: tranche?.planned_release_date ?? '',
+    };
   });
   const [local, setLocal] = useState({});
   const { busy, error, serverErrors, save } = useSave(onSaved);
   const errors = { ...serverErrors, ...local };
   const others = Number(setup.tranches_total) - (editing ? Number(tranche.amount) : 0);
+  const unscheduled = Math.round((funderTotal - others) * 100) / 100;
   const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
+  // Amount or percent: typing one computes the other.
+  const setAmount = (event) => {
+    const amount = event.target.value;
+    setForm({ ...form, amount, percent: percentFromAmount(amount, funderTotal) });
+    setLocal({ ...local, amount: undefined, percent: undefined });
+  };
+  const setPercent = (event) => {
+    const percent = event.target.value;
+    setForm({ ...form, percent, amount: amountFromPercent(percent, funderTotal) || (percent.trim() === '' ? '' : form.amount) });
+    setLocal({ ...local, amount: undefined, percent: undefined });
+  };
 
   function submit(event) {
     event.preventDefault();
     const next = {};
+    const shareError = percentError(form.percent);
+    if (shareError) next.percent = shareError;
     const amountError = moneyError(form.amount, { positive: true });
     if (amountError) next.amount = amountError;
-    else if (Number(setup.total_budget) > 0 && others + Number(form.amount) > Number(setup.total_budget) + 0.001) {
-      next.amount = `Releases would total ${peso(others + Number(form.amount))}, more than the total budget of ${peso(setup.total_budget)}.`;
+    else if (funderTotal > 0 && others + Number(form.amount) > funderTotal + 0.001) {
+      next.amount = `Releases would total ${peso(others + Number(form.amount))}, more than the funder total of ${peso(funderTotal)}.`;
     }
     if (!form.planned_release_date) next.planned_release_date = 'Enter the planned release date.';
     setLocal(next);
@@ -549,15 +582,30 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
         {error && <div className="program-banner error" role="alert">{error}</div>}
         <div className="program-form-grid">
           <Field id="ps-tranche-amount" label="Amount (₱)" error={errors.amount}>
-            {(a11y) => <input {...a11y} className="program-input" inputMode="decimal" value={form.amount} disabled={busy} onChange={set('amount')} />}
+            {(a11y) => <input {...a11y} className="program-input" inputMode="decimal" value={form.amount} disabled={busy} onChange={setAmount} />}
+          </Field>
+          <Field
+            id="ps-tranche-percent"
+            label="Percent of the funder total (%)"
+            error={errors.percent}
+            hint={funderTotal > 0 ? `Of ${peso(funderTotal)}; type either one` : "Set the project's total budget first (Edit details)."}
+          >
+            {(a11y) => <input {...a11y} className="program-input" inputMode="decimal" value={form.percent} disabled={busy || !(funderTotal > 0)} onChange={setPercent} />}
           </Field>
           <Field id="ps-tranche-date" label="Planned release date" error={errors.planned_release_date}>
             {(a11y) => <input {...a11y} className="program-input" type="date" value={form.planned_release_date} disabled={busy} onChange={set('planned_release_date')} />}
           </Field>
-          <Field id="ps-tranche-name" label="Milestone" full error={errors.name} hint="Optional; for example Mobilization">
+          <Field id="ps-tranche-name" label="Milestone (optional)" full error={errors.name} hint="e.g. Upon signing of the MOA, Upon liquidation of Release 1">
             {(a11y) => <input {...a11y} className="program-input" value={form.milestone} disabled={busy} onChange={set('milestone')} />}
           </Field>
         </div>
+        {funderTotal > 0 && (
+          <p className="ld-hint" role="status">
+            {unscheduled >= 0
+              ? `${peso(unscheduled)} of the ${peso(funderTotal)} funder total is not yet scheduled${editing ? ' (besides this release)' : ''}.`
+              : `⚠ The other releases are ${peso(-unscheduled)} over the ${peso(funderTotal)} funder total.`}
+          </p>
+        )}
         <p className="pu-hint">A new release gets the next number; changing a date never renumbers. Releasing the funds stays in the fund release approval.</p>
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>

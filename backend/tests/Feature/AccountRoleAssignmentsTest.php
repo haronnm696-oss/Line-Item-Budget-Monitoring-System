@@ -12,11 +12,13 @@ use App\Services\AuditLogger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Tests\Feature\Concerns\GeneratesEmployeeIds;
 use Tests\TestCase;
 
 /** A person's role on a project is always their account role. */
 class AccountRoleAssignmentsTest extends TestCase
 {
+    use GeneratesEmployeeIds;
     use RefreshDatabase;
 
     private User $leader;
@@ -53,7 +55,7 @@ class AccountRoleAssignmentsTest extends TestCase
         Notification::fake();
         $pending = User::create([
             'name' => 'Papaw Dianalan', 'first_name' => 'Papaw', 'last_name' => 'Dianalan',
-            'email' => 'papaw.' . uniqid() . '@s.msumain.edu.ph', 'employee_id' => 'MSU-' . random_int(10000, 99999),
+            'email' => 'papaw.' . uniqid() . '@s.msumain.edu.ph', 'employee_id' => $this->nextEmployeeId(),
             'password' => Hash::make('password123'), 'position' => 'Instructor',
             'role_id' => null, 'is_active' => false, 'email_verified_at' => now(),
         ]);
@@ -175,7 +177,7 @@ class AccountRoleAssignmentsTest extends TestCase
             'first_name' => $name,
             'last_name' => 'Test',
             'email' => $slug . '.' . uniqid() . '@msumain.edu.ph',
-            'employee_id' => 'MSU-' . random_int(10000, 99999),
+            'employee_id' => $this->nextEmployeeId(),
             'password' => Hash::make('password123'),
             'position' => 'Staff',
             'role_id' => Role::where('slug', $slug)->value('id'),

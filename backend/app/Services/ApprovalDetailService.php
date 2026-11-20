@@ -11,6 +11,7 @@ use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\ProjectTranche;
 use App\Models\User;
+use App\Support\ReleaseLiquidation;
 use Illuminate\Support\Carbon;
 
 /**
@@ -163,6 +164,8 @@ class ApprovalDetailService
                 'total' => round((float) $released->sum('amount'), 2),
                 'tranches' => $released->map(fn (ProjectTranche $t) => $this->trancheRow($t))->values()->all(),
             ],
+            // Earlier released releases with no approved liquidation (a warning beside Approve).
+            'liquidation_warning' => ReleaseLiquidation::warning($project, $approval->project_tranche_id ? (int) $approval->project_tranche_id : null),
             'budget' => [
                 'budget' => $metrics['budget'],
                 'spent' => $metrics['spent'],

@@ -463,6 +463,35 @@ class ProjectFinancialService
     }
 
     /**
+     * The funder's grant, which the MOA releases in parts. Planned releases
+     * may not exceed it, and each release's percent is its share. In order:
+     * the grant amount typed from the MOA (projects.funding_agency_amount,
+     * 0 = not entered); else the funder line items when above zero; else
+     * the total budget less the counterpart in the line items.
+     *
+     * @return array{amount: float, source: 'moa'|'line_items'|'budget'}
+     */
+    public function funderTotalBasis(Project $project): array
+    {
+        $grant = round((float) $project->funding_agency_amount, 2);
+        if ($grant > 0) {
+            return ['amount' => $grant, 'source' => 'moa'];
+        }
+        $lineItems = round((float) $project->libCategories()->sum('funder_amount'), 2);
+        if ($lineItems > 0) {
+            return ['amount' => $lineItems, 'source' => 'line_items'];
+        }
+        $counterpart = (float) $project->libCategories()->sum('implementing_agency_amount');
+
+        return ['amount' => round(max(0, (float) $project->total_approved_budget - $counterpart), 2), 'source' => 'budget'];
+    }
+
+    public function funderTotal(Project $project): float
+    {
+        return $this->funderTotalBasis($project)['amount'];
+    }
+
+    /**
      * Column labels: the project's funder short name (acronym, else its full
      * name) and the implementing agency. Never a hard-coded funder.
      *

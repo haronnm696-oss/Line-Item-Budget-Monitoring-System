@@ -7,6 +7,7 @@ import { useApiData } from '../../lib/useApiData';
 import { documentsAfter, initialForm, pendingTrancheIds, requestFields } from '../../lib/budgetRequestForm';
 import { peso } from '../money';
 import { formatDate } from '../../lib/datetime';
+import { requestFormWarning } from '../../lib/releasePlan';
 import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
 
 const TYPES = [
@@ -53,6 +54,8 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
 
   const pendingTranches = pendingTrancheIds(requests, editing ? request.id : null);
   const unreleased = (tranches.data?.items ?? []).filter((t) => !t.is_released);
+  // A reminder, not a block: an earlier released release has no approved liquidation.
+  const liquidationWarning = requestFormWarning(type, tranches.data?.summary);
   const lineItems = balancing.data?.line_items ?? [];
   const source = lineItems.find((item) => String(item.id) === fromId);
   const labels = balancing.data?.labels;
@@ -178,6 +181,9 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
               ))}
             </select>
             {err('project_tranche_id')}
+            {liquidationWarning && (
+              <p className="ld-waiting" role="status"><span aria-hidden="true">⚠</span> {liquidationWarning}</p>
+            )}
           </div>
         )}
 
