@@ -616,7 +616,7 @@ export function TrancheDialog({ projectId, tranche = null, setup, onClose, onSav
               : `⚠ The other releases are ${peso(-unscheduled)} over the ${peso(funderTotal)} funder total.`}
           </p>
         )}
-        <p className="pu-hint">A new release gets the next number; changing a date never renumbers. Releasing the funds stays in the fund release approval.</p>
+        <p className="pu-hint">A new release gets the next number. Changing a date never renumbers; removing a scheduled release that was never requested frees its number. Releasing the funds stays in the fund release approval.</p>
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save release' : 'Add release'}</button>

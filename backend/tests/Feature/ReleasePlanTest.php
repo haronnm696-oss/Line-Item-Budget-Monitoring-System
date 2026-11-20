@@ -8,6 +8,7 @@ use App\Models\ProjectTranche;
 use App\Services\AuditLogger;
 use App\Services\ProjectSetupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Feature\Concerns\BuildsExpenseWorkflow;
 use Tests\TestCase;
 
@@ -129,6 +130,24 @@ class ReleasePlanTest extends TestCase
 
         // Program Leader only.
         $this->actingAs($this->projectLeader)->postJson("/api/program/projects/{$this->otherProject->id}/tranches/split")->assertForbidden();
+    }
+
+    public function test_split_names_the_second_milestone_after_the_first_releases_actual_number(): void
+    {
+        // Legacy data with the first two scheduled releases already removed:
+        // the counter is at 2, so the new pair is Release 3 and Release 4.
+        AuditLogger::muted(fn () => DB::table('projects')->where('id', $this->project->id)
+            ->update(['last_release_number' => 2]));
+
+        $this->actingAs($this->programLeader)
+            ->postJson("/api/program/projects/{$this->project->id}/tranches/split")->assertCreated()
+            ->assertJsonPath('tranches.0.name', 'Release 3')
+            ->assertJsonPath('tranches.1.name', 'Release 4');
+
+        $this->assertSame(
+            ['Upon signing of the MOA', 'Upon liquidation of Release 3'],
+            ProjectTranche::where('project_id', $this->project->id)->orderBy('release_number')->pluck('name')->all()
+        );
     }
 
     public function test_split_amounts_are_centavos_with_the_last_taking_the_remainder(): void

@@ -19,6 +19,12 @@ final class ReleaseWording
     /** Ordinal tranche names the setup form used to generate. */
     private const ORDINALS = 'first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|final|last';
 
+    /** Ordinals that stand for a release number (final / last do not). */
+    private const ORDINAL_NUMBERS = [
+        'first' => 1, 'second' => 2, 'third' => 3, 'fourth' => 4, 'fifth' => 5,
+        'sixth' => 6, 'seventh' => 7, 'eighth' => 8, 'ninth' => 9, 'tenth' => 10,
+    ];
+
     /** "Second tranche", "Tranche 3", "Release Tranche 3", "Release 2"… */
     private const REFERENCE = '(?:release\s+)?(?:(?:' . self::ORDINALS . ')\s+(?:tranche|release)|tranche\s*\d+|release\s*\d+)(?=\W|$)';
 
@@ -52,6 +58,38 @@ final class ReleaseWording
 
         // "Release Tranche 3" became "Release Release 3".
         return preg_replace('/\b(release)\s+release\b/iu', '$1', $text);
+    }
+
+    /**
+     * Update number references in a stored milestone after a renumbering:
+     * "Upon liquidation of Release 3" -> "Upon liquidation of Release 2"
+     * when old release 3 became 2. References to numbers not in $numbers are
+     * left alone. The wording is normalized to "Release N".
+     *
+     * @param  array<int, int>  $numbers  old number => new number
+     */
+    public static function renumber(?string $text, array $numbers): ?string
+    {
+        if ($text === null || trim($text) === '' || $numbers === []) {
+            return $text;
+        }
+
+        $text = preg_replace_callback(
+            '/\b(?:release\s+)?(?:(' . self::ORDINALS . ')\s+(?:tranche|release)|(?:tranche|release)\s*(\d+))\b/iu',
+            function (array $match) use ($numbers) {
+                $ordinal = strtolower((string) ($match[1] ?? ''));
+                $old = $ordinal !== ''
+                    ? (self::ORDINAL_NUMBERS[$ordinal] ?? null)
+                    : (int) ($match[2] ?? 0);
+
+                return $old !== null && isset($numbers[$old])
+                    ? self::label($numbers[$old])
+                    : $match[0];
+            },
+            $text
+        );
+
+        return self::apply($text);
     }
 
     /**

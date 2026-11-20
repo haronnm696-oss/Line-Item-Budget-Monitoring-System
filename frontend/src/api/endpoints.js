@@ -218,8 +218,10 @@ export const ENDPOINTS = {
   programLineItems: (projectId) => `/api/program/projects/${projectId}/line-items`,
   programLineItem: (id) => `/api/program/line-items/${id}`,
   programTranches: (projectId) => `/api/program/projects/${projectId}/tranches`,
-  // Release 1 (70%) and Release 2 (30%) of the funder total; only while the project has no releases.
+  // The first two releases (70% and 30% of the funder total); only while the project has no releases.
   programTranchesSplit: (projectId) => `/api/program/projects/${projectId}/tranches/split`,
+  // One click: renumber scheduled, never-requested releases 1, 2, … by planned date.
+  programTranchesRenumber: (projectId) => `/api/program/projects/${projectId}/tranches/renumber`,
   programTranche: (id) => `/api/program/tranches/${id}`,
   programApprovals: '/api/program/approvals',
   programAudit: '/api/program/audit',
