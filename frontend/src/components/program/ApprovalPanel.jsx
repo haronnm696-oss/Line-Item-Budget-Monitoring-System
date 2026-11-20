@@ -89,18 +89,18 @@ function Liquidation({ details }) {
       </dl>
       {period && (
         <p className="ld-muted">
-          Verified expenses dated {formatDate(period.from)} to {period.to ? formatDate(period.to) : 'today'}
+          Spent (verified expenses and verified payroll) dated {formatDate(period.from)} to {period.to ? formatDate(period.to) : 'today'}
           {period.starts === 'project_start'
             ? ' (first release: from the project start to the next release).'
             : ' (from this release to the next one).'}
         </p>
       )}
       {expenses.length === 0 ? (
-        <p className="ld-muted">{period ? 'No verified expenses in this period.' : 'Expenses are shown once the funds for this release are released.'}</p>
+        <p className="ld-muted">{period ? 'No verified expenses or payroll in this period.' : 'Spending is shown once the funds for this release are released.'}</p>
       ) : (
         <div className="ra-table-wrap">
           <table className="program-table ld-table">
-            <caption className="pa-sr-only">Verified expenses charged against the release</caption>
+            <caption className="pa-sr-only">Verified expenses and payroll charged against the release</caption>
             <thead>
               <tr>
                 <th scope="col">Date</th>
@@ -111,7 +111,7 @@ function Liquidation({ details }) {
             </thead>
             <tbody>
               {expenses.map((row) => (
-                <tr key={row.id}>
+                <tr key={`${row.kind ?? 'expense'}-${row.id}`}>
                   <td>{formatDate(row.date)}</td>
                   <td>{row.reference_no ?? '—'}</td>
                   <td>{row.payee ?? row.description ?? '—'}{row.line_item ? <div className="project-code">{row.line_item}</div> : null}</td>
@@ -132,11 +132,10 @@ function Liquidation({ details }) {
 function Payroll({ details }) {
   return (
     <dl className="ld-fields">
-      <div><dt>Payroll month</dt><dd>{details.month}</dd></div>
+      <div><dt>Pay period</dt><dd>{details.month}</dd></div>
       <div><dt>Step sent to you</dt><dd>{details.step}</dd></div>
       <div><dt>People paid</dt><dd>{details.people}</dd></div>
       <div><dt>Gross pay</dt><dd>{peso(details.gross_total)}</dd></div>
-      <div><dt>Deductions</dt><dd>{peso(details.deductions_total)}</dd></div>
       <div><dt>Net pay</dt><dd><b>{peso(details.net_total)}</b></dd></div>
     </dl>
   );

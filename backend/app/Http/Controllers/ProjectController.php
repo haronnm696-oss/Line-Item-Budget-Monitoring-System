@@ -16,8 +16,8 @@ class ProjectController extends Controller
     /**
      * Project list: every project for the Program Leader, otherwise only the
      * projects the user is assigned to. Spent comes from
-     * ProjectFinancialService: verified expenses only (payroll is excluded),
-     * the same figure as the Program Leader dashboard.
+     * ProjectFinancialService: verified expenses and verified payroll, the
+     * same figure as the Program Leader dashboard.
      */
     public function index(Request $request)
     {
@@ -53,8 +53,6 @@ class ProjectController extends Controller
         $payload['project']['agency'] = $payload['project']['funding_agency'];
         $payload['project']['budget'] = $payload['project']['total_budget'];
         $payload['project']['spent'] = $payload['project']['total_spent'];
-        // PAYROLL_RATES_LABEL: printed at the top of the Payroll register.
-        $payload['payroll_rates_label'] = config('payroll.rates_label');
 
         return response()->json($payload);
     }

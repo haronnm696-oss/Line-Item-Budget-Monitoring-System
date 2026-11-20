@@ -7,10 +7,11 @@ use App\Models\AuditTrail;
 use App\Models\LibCategory;
 use App\Models\Payroll;
 use App\Models\PayrollBatch;
-use App\Models\ProjectUser;
 use App\Models\User;
 use App\Services\AuditLogger;
-use App\Services\PayrollCalculator;
+use App\Models\PayrollDeduction;
+use App\Models\ProjectPersonnel;
+use App\Services\PayrollService;
 use App\Services\ProjectFinancialService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -20,29 +21,16 @@ use Tests\Feature\Concerns\BuildsExpenseWorkflow;
 use Tests\TestCase;
 
 /**
- * Payroll: pay rates on the assignment, "create for a month", compute with
- * the deduction rules, and the monthly batch workflow with maker-checker,
- * one audit entry and one notification per batch hand-off.
+ * Payroll: honoraria from the project's personnel (Special Orders) for a
+ * pay period of consecutive months, amount = monthly honorarium x months
+ * effective, with NO deductions and NO allowances (net = gross); and the
+ * batch workflow with maker-checker, one audit entry and one notification
+ * per batch hand-off.
  */
 class PayrollTest extends TestCase
 {
     use RefreshDatabase;
     use BuildsExpenseWorkflow;
-
-    /**
-     * TEST VALUES ONLY, not official rates (the same block as the local
-     * .env until the MSU accounting office provides the real ones). The
-     * shipped config reads every value from the environment.
-     */
-    private const RULES = [
-        ['type' => 'GSIS', 'method' => 'percent', 'base' => 'basic', 'rate' => 7.25, 'employee_share' => 1, 'pre_tax' => true],
-        ['type' => 'PhilHealth', 'method' => 'percent', 'base' => 'basic', 'rate' => 3.4, 'employee_share' => 0.5, 'pre_tax' => true],
-        ['type' => 'Pag-IBIG', 'method' => 'percent', 'base' => 'basic', 'rate' => 1.5, 'employee_share' => 1, 'pre_tax' => true],
-        ['type' => 'Withholding Tax', 'method' => 'table', 'base' => 'taxable', 'brackets' => [
-            ['over' => 0, 'base_tax' => 0, 'rate' => 0],
-            ['over' => 30000, 'base_tax' => 0, 'rate' => 12.5],
-        ], 'pre_tax' => false],
-    ];
 
     private LibCategory $ps;
     private string $month = '2026-11';
@@ -51,7 +39,7 @@ class PayrollTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
-        config(['payroll.deductions' => self::RULES, 'documents.disk' => 'local']);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
         $this->ps = AuditLogger::muted(fn () => LibCategory::create([
             'project_id' => $this->project->id, 'category_type' => 'PS',
@@ -59,224 +47,226 @@ class PayrollTest extends TestCase
         ]));
     }
 
-    // ------------------------------------------------------------ computation
+    // ------------------------------------------------------------ pay period: honorarium x effective months
 
-    public function test_the_calculator_applies_each_rule_kind(): void
+    public function test_a_row_is_the_monthly_honorarium_times_the_effective_months(): void
     {
-        // basic 40,000 + allowance 2,000 = gross 42,000
-        // GSIS 7.25% of 40,000 = 2,900; PhilHealth 3.4% x 0.5 of 40,000 = 680;
-        // Pag-IBIG 1.5% of 40,000 = 600; taxable = 42,000 - 4,180 = 37,820
-        // -> 12.5% of (37,820 - 30,000) = 977.50.
-        $result = (new PayrollCalculator(self::RULES))->compute(40000, 2000);
+        $this->appoint($this->researcher, 8800, '2025-10-01', '2025-12-31');
 
-        $this->assertSame(42000.0, $result['gross']);
-        $this->assertSame([
-            ['type' => 'GSIS', 'amount' => 2900.0],
-            ['type' => 'PhilHealth', 'amount' => 680.0],
-            ['type' => 'Pag-IBIG', 'amount' => 600.0],
-            ['type' => 'Withholding Tax', 'amount' => 977.5],
-        ], $result['deductions']);
-        $this->assertSame(5157.5, $result['total_deductions']);
-        $this->assertSame(36842.5, $result['net']);
-        $this->assertSame([], $result['unset']);
+        $response = $this->actingAs($this->assistant)
+            ->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2025-10', 'to' => '2025-12', 'lib_category_id' => $this->ps->id])
+            ->assertCreated()
+            ->assertJsonPath('month_label', 'October to December 2025')
+            ->assertJsonPath('months', 3)
+            ->assertJsonPath('batch.months', 3)
+            ->assertJsonPath('batch.reference', 'PAY-2025-10-TO-2025-12')
+            ->assertJsonCount(1, 'rows');
 
-        // Below the 30,000 bracket: no tax. 25,000 -> 1,812.50 + 425 + 375.
-        $low = (new PayrollCalculator(self::RULES))->compute(25000);
-        $this->assertSame([1812.5, 425.0, 375.0, 0.0], array_column($low['deductions'], 'amount'));
-        $this->assertSame(22387.5, $low['net']);
+        $row = $response->json('rows.0');
+        $this->assertSame('(8,800 x 3 months) = 26,400.00', $row['computation']);
+        $this->assertSame(3, $row['months']);
+        $this->assertEquals(8800, $row['basic']);
+        $this->assertEquals(26400, $row['gross']);
+        $this->assertEquals(26400, $row['net']);
 
-        // Salary floor and a fixed rule with a cap.
-        $floor = (new PayrollCalculator([
-            ['type' => 'PhilHealth', 'method' => 'percent', 'base' => 'basic', 'rate' => 3.4, 'employee_share' => 0.5, 'base_min' => 10000],
-            ['type' => 'Union dues', 'method' => 'fixed', 'amount' => 900, 'max' => 500],
-        ]))->compute(8000);
-        $this->assertSame([170.0, 500.0], array_column($floor['deductions'], 'amount')); // 3.4% x 0.5 of the 10,000 floor
+        $batch = PayrollBatch::firstOrFail();
+        $this->assertSame([2025, 10, 2025, 12], [$batch->pay_year, $batch->pay_month, $batch->period_end_year, $batch->period_end_month]);
+        // Any month of the period opens the same batch.
+        $this->getJson("/api/projects/{$this->project->id}/payroll?month=2025-11")->assertOk()
+            ->assertJsonPath('batch.id', $batch->id)->assertJsonPath('month', '2025-10')->assertJsonPath('to', '2025-12');
     }
 
-    public function test_unset_rules_deduct_nothing_and_are_reported(): void
+    public function test_someone_effective_from_november_is_billed_two_of_three_months(): void
     {
-        // The shipped config, where every rate is still unset.
-        // Every variable empty (the local .env may hold test values).
-        config(['payroll.deductions' => $this->withEnv([], fn () => (require config_path('payroll.php'))['deductions'])]);
+        $this->appoint($this->researcher, 8800, '2025-10-01', '2025-12-31');
+        $this->appoint($this->assistant, 8800, '2025-11-01', '2026-06-30');
+        $late = AuditLogger::muted(fn () => $this->member('researcher'));
+        $this->appoint($late, 9000, '2026-01-01', '2026-06-30'); // not effective in the period
 
-        $result = app(PayrollCalculator::class)->compute(25000, 1000);
-        $this->assertSame(0.0, $result['total_deductions']);
-        $this->assertSame(26000.0, $result['net']);
-        $this->assertSame(['GSIS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax'], $result['unset']);
+        $response = $this->actingAs($this->assistant)
+            ->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2025-10', 'to' => '2025-12', 'lib_category_id' => $this->ps->id])
+            ->assertCreated();
+
+        $rows = collect($response->json('rows'))->keyBy('personnel.id');
+        $this->assertSame('(8,800 x 2 months) = 17,600.00', $rows[$this->assistant->id]['computation']);
+        $this->assertEquals(17600, $rows[$this->assistant->id]['gross']);
+        $this->assertEquals(26400, $rows[$this->researcher->id]['gross']);
+        $this->assertFalse($rows->has($late->id));
+
+        $this->assertSame([[
+            'user_id' => $late->id, 'name' => $late->name, 'reason' => 'not_effective', 'reason_text' => 'appointment not effective',
+        ]], $response->json('not_included'));
+        $this->assertStringContainsString("Not included: appointment not effective: {$late->name}.", $response->json('message'));
+        $this->assertEquals(44000, $response->json('totals.gross'));
+        $this->assertEquals(44000, $response->json('totals.net'));
+    }
+
+    public function test_a_changed_honorarium_in_the_period_is_paid_per_month(): void
+    {
+        $this->appoint($this->researcher, 8800, '2025-10-01', '2025-10-31');
+        $this->appoint($this->researcher, 9000, '2025-11-01', '2025-12-31', false);
 
         $this->actingAs($this->assistant)
-            ->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")
-            ->assertOk()
-            ->assertJsonPath('unset_rules', ['GSIS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax']);
+            ->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2025-10', 'to' => '2025-12', 'lib_category_id' => $this->ps->id])
+            ->assertCreated()
+            ->assertJsonPath('rows.0.computation', '(8,800 x 1 month) + (9,000 x 2 months) = 26,800.00')
+            ->assertJsonPath('rows.0.months', 3);
     }
 
-    public function test_the_config_reads_every_value_from_the_environment(): void
+    public function test_net_equals_gross_with_no_deductions_or_allowance(): void
     {
-        // TEST VALUES ONLY (not official rates); floors / ceilings test the bounds.
-        $vars = [
-            'PAYROLL_GSIS_RATE' => '7.25', 'PAYROLL_GSIS_EMPLOYEE_SHARE' => '1',
-            'PAYROLL_PHILHEALTH_RATE' => '3.4', 'PAYROLL_PHILHEALTH_EMPLOYEE_SHARE' => '0.5',
-            'PAYROLL_PHILHEALTH_BASE_MIN' => '10000', 'PAYROLL_PHILHEALTH_BASE_MAX' => '20000',
-            'PAYROLL_PAGIBIG_RATE' => '1.5', 'PAYROLL_PAGIBIG_EMPLOYEE_SHARE' => '1',
-            'PAYROLL_PAGIBIG_BASE_MIN' => '', 'PAYROLL_PAGIBIG_BASE_MAX' => '5000',
-            'PAYROLL_WITHHOLDING_TAX_BRACKETS' => '[{"over":0,"base_tax":0,"rate":0},{"over":30000,"base_tax":0,"rate":12.5}]',
-        ];
-        $rules = $this->withEnv($vars, fn () => (require config_path('payroll.php'))['deductions']);
+        $payroll = $this->onePayroll();
 
-        $this->assertSame([7.25, 1.0, null, null], [$rules[0]['rate'], $rules[0]['employee_share'], $rules[0]['base_min'], $rules[0]['base_max']]);
-        $this->assertSame([3.4, 0.5, 10000.0, 20000.0], [$rules[1]['rate'], $rules[1]['employee_share'], $rules[1]['base_min'], $rules[1]['base_max']]);
-        $this->assertNull($rules[2]['base_min']); // empty = no floor
-        $this->assertCount(2, $rules[3]['brackets']);
+        $this->assertSame(30000.0, (float) $payroll->gross_pay);
+        $this->assertSame(30000.0, (float) $payroll->net_pay);
+        $this->assertSame(0.0, (float) $payroll->total_deductions);
+        $this->assertSame(0.0, (float) $payroll->allowance);
+        $this->assertSame(0, PayrollDeduction::count());
 
-        // gross 42,000: GSIS 7.25% of 42,000 = 3,045; PhilHealth 3.4% x 0.5 of
-        // min(42,000, 20,000) = 340; Pag-IBIG 1.5% of min(42,000, 5,000) = 75;
-        // taxable 42,000 - 3,460 = 38,540 -> 12.5% of 8,540 = 1,067.50.
-        $result = (new PayrollCalculator($rules))->compute(42000);
-        $this->assertSame([3045.0, 340.0, 75.0, 1067.5], array_column($result['deductions'], 'amount'));
-        $this->assertSame([], $result['unset']);
-    }
-
-    public function test_missing_or_invalid_environment_values_stay_unset(): void
-    {
-        $rules = $this->withEnv([
-            'PAYROLL_GSIS_RATE' => '7.25',                   // no employee share: not assumed to be 100%
-            'PAYROLL_PHILHEALTH_RATE' => 'five', 'PAYROLL_PHILHEALTH_EMPLOYEE_SHARE' => '0.5', // not a number
-            'PAYROLL_PAGIBIG_RATE' => '1.5', 'PAYROLL_PAGIBIG_EMPLOYEE_SHARE' => '1.5',        // share above 1
-            'PAYROLL_WITHHOLDING_TAX_BRACKETS' => '[{"over":0,"rate":12.5}]',                  // base_tax missing
-        ], fn () => (require config_path('payroll.php'))['deductions']);
-
-        $this->assertNull($rules[0]['employee_share']);
-        $this->assertNull($rules[1]['rate']);
-        $this->assertNull($rules[3]['brackets']);
-        $result = (new PayrollCalculator($rules))->compute(30000);
-        $this->assertSame(0.0, $result['total_deductions']);
-        $this->assertSame(['GSIS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax'], $result['unset']);
-    }
-
-    /** Run $read with these environment variables set, then restore them. */
-    private function withEnv(array $vars, callable $read)
-    {
-        $all = array_fill_keys([
-            'PAYROLL_GSIS_RATE', 'PAYROLL_GSIS_EMPLOYEE_SHARE', 'PAYROLL_GSIS_BASE_MIN', 'PAYROLL_GSIS_BASE_MAX',
-            'PAYROLL_PHILHEALTH_RATE', 'PAYROLL_PHILHEALTH_EMPLOYEE_SHARE', 'PAYROLL_PHILHEALTH_BASE_MIN', 'PAYROLL_PHILHEALTH_BASE_MAX',
-            'PAYROLL_PAGIBIG_RATE', 'PAYROLL_PAGIBIG_EMPLOYEE_SHARE', 'PAYROLL_PAGIBIG_BASE_MIN', 'PAYROLL_PAGIBIG_BASE_MAX',
-            'PAYROLL_WITHHOLDING_TAX_BRACKETS',
-        ], '');
-        $set = function (array $values) {
-            foreach ($values as $key => $value) {
-                $_ENV[$key] = $_SERVER[$key] = $value;
-                putenv("{$key}={$value}");
-            }
-        };
-        $set(array_merge($all, $vars));
-        try {
-            return $read();
-        } finally {
-            $set($all);
+        $run = $this->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")->assertOk();
+        $this->assertFalse($run->json('legacy_amounts'));
+        foreach (['deductionBreakdown', 'unset_rules', 'rates_label'] as $gone) {
+            $this->assertArrayNotHasKey($gone, $run->json());
         }
+        foreach (['allowance', 'deductions', 'deduction_items'] as $gone) {
+            $this->assertArrayNotHasKey($gone, $run->json('rows.0'));
+        }
+        $this->assertSame(['gross', 'net', 'recorded_deductions'], array_keys($run->json('totals')));
     }
 
-    // ------------------------------------------------------------ pay rates and create
-
-    public function test_finance_sets_pay_rates_with_one_audit_entry_each(): void
+    public function test_no_allowance_can_be_entered(): void
     {
-        $audit = AuditTrail::count();
-        $this->actingAs($this->finance)
-            ->patchJson("/api/projects/{$this->project->id}/pay-rates/{$this->researcher->id}", ['monthly_rate' => 30000, 'allowance' => 2000])
-            ->assertOk()
-            ->assertJsonPath('member.monthly_rate', 30000)
-            ->assertJsonPath('member.allowance', 2000);
-        $this->assertSame($audit + 1, AuditTrail::count());
-        $this->assertSame('pay_rate_changed', AuditTrail::latest('id')->value('action'));
+        $payroll = $this->onePayroll();
 
-        foreach ([$this->assistant, $this->projectLeader, $this->researcher, $this->outsider] as $user) {
-            $this->actingAs($user)
-                ->patchJson("/api/projects/{$this->project->id}/pay-rates/{$this->researcher->id}", ['monthly_rate' => 1])
-                ->assertForbidden();
-        }
-        $this->actingAs($this->programLeader)
-            ->patchJson("/api/projects/{$this->project->id}/pay-rates/{$this->researcher->id}", ['monthly_rate' => 31000])
-            ->assertOk();
-        $this->actingAs($this->finance)
-            ->patchJson("/api/projects/{$this->project->id}/pay-rates/{$this->outsider->id}", ['monthly_rate' => 1])
-            ->assertNotFound();
-    }
-
-    public function test_pay_rates_are_seen_by_finance_assistants_and_the_program_leader_only(): void
-    {
-        $this->rate($this->researcher, 30000, 1500);
-        $url = "/api/projects/{$this->project->id}/pay-rates";
-
-        foreach ([$this->finance, $this->assistant, $this->programLeader] as $user) {
-            $members = collect($this->actingAs($user)->getJson($url)->assertOk()->json('members'))->keyBy('user_id');
-            $this->assertSame(30000, $members[$this->researcher->id]['monthly_rate']);
-            $this->assertSame(1500, $members[$this->researcher->id]['allowance']);
-            $this->assertNull($members[$this->projectLeader->id]['monthly_rate']); // "Not set"
-        }
-        foreach ([$this->researcher, $this->projectLeader, $this->outsider] as $user) {
-            $this->actingAs($user)->getJson($url)->assertForbidden();
-        }
-
-        // A Research Assistant reads but never edits.
         $this->actingAs($this->assistant)
-            ->patchJson("{$url}/{$this->researcher->id}", ['monthly_rate' => 1])
-            ->assertForbidden();
+            ->patchJson("/api/payroll/{$payroll->id}", ['allowance' => 1000])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.allowance.0', 'Project honoraria have no allowance.');
+        $this->assertSame(0.0, (float) $payroll->fresh()->allowance);
+        $this->assertSame(30000.0, (float) $payroll->fresh()->gross_pay);
     }
 
-    public function test_pay_rate_validation_and_one_audit_entry_per_change(): void
+    public function test_no_deduction_setting_is_needed_to_submit(): void
     {
-        $url = "/api/projects/{$this->project->id}/pay-rates/{$this->researcher->id}";
-        $this->actingAs($this->finance);
-        $audit = AuditTrail::count();
+        $this->assertFalse(file_exists(config_path('payroll.php')));
+        $this->assertNull(config('payroll'));
+        $this->onePayroll();
 
-        $this->patchJson($url, ['monthly_rate' => -1])->assertStatus(422)
-            ->assertJsonPath('errors.monthly_rate.0', 'The monthly rate cannot be negative.');
-        $this->patchJson($url, ['monthly_rate' => '1000.123'])->assertStatus(422)
-            ->assertJsonPath('errors.monthly_rate.0', 'Use at most two decimals for the monthly rate.');
-        $this->patchJson($url, ['monthly_rate' => 'abc'])->assertStatus(422)->assertJsonValidationErrors(['monthly_rate']);
-        $this->patchJson($url, ['monthly_rate' => 1000, 'allowance' => -5])->assertStatus(422)
-            ->assertJsonPath('errors.allowance.0', 'The allowance cannot be negative.');
-        $this->patchJson($url, ['monthly_rate' => 1000, 'allowance' => '1.555'])->assertStatus(422)->assertJsonValidationErrors(['allowance']);
-        $this->patchJson($url, ['allowance' => 1])->assertStatus(422)->assertJsonValidationErrors(['monthly_rate']); // must be present
-        $this->assertSame($audit, AuditTrail::count());
-
-        $this->patchJson($url, ['monthly_rate' => '25000.50', 'allowance' => '0'])->assertOk()
-            ->assertJsonPath('member.monthly_rate', 25000.5)->assertJsonPath('member.allowance', 0);
-        $this->assertSame($audit + 1, AuditTrail::count());
-
-        // The same values again: nothing changed, no audit entry.
-        $this->patchJson($url, ['monthly_rate' => 25000.5, 'allowance' => 0])->assertOk();
-        $this->assertSame($audit + 1, AuditTrail::count());
-
-        // Cleared = "Not set": both null, one more entry.
-        $this->patchJson($url, ['monthly_rate' => null])->assertOk()
-            ->assertJsonPath('member.monthly_rate', null)->assertJsonPath('member.allowance', null);
-        $this->assertSame($audit + 2, AuditTrail::count());
-        $this->assertSame(['pay_rate_changed', 'pay_rate_changed'], AuditTrail::latest('id')->take(2)->pluck('action')->all());
+        $this->actingAs($this->assistant)->postJson("/api/payroll-batches/{$this->batch()->id}/submit")
+            ->assertOk()->assertJsonPath('batch.workflow_status', 'submitted');
     }
 
-    public function test_compute_names_the_people_without_a_rate_and_never_pays_them_zero(): void
+    public function test_overlapping_periods_are_refused(): void
+    {
+        $this->appoint($this->researcher, 8800, '2025-01-01', '2026-12-31');
+        $this->actingAs($this->assistant)
+            ->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2025-10', 'to' => '2025-12', 'lib_category_id' => $this->ps->id])
+            ->assertCreated();
+
+        foreach ([['2025-11', '2025-11'], ['2025-12', '2026-02'], ['2025-09', '2025-10'], ['2025-08', '2026-01'], ['2025-10', '2025-11']] as [$from, $to]) {
+            $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $from, 'to' => $to, 'lib_category_id' => $this->ps->id])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors(['period']);
+        }
+        $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2025-11', 'to' => '2025-11', 'lib_category_id' => $this->ps->id])
+            ->assertJsonPath('errors.period.0', 'November 2025 overlaps the October to December 2025 payroll of this project. Each month is paid in one payroll only: choose months that no other payroll covers.');
+        // The page says so before preparing.
+        $this->getJson("/api/projects/{$this->project->id}/payroll?month=2025-09&to=2025-10")->assertOk()
+            ->assertJsonPath('batch', null)
+            ->assertJsonPath('overlap_text', 'September to October 2025 overlaps the October to December 2025 payroll of this project. Each month is paid in one payroll only: choose months that no other payroll covers.');
+
+        // The next quarter, right after, is fine.
+        $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2026-01', 'to' => '2026-03', 'lib_category_id' => $this->ps->id])
+            ->assertCreated();
+        $this->assertSame(2, PayrollBatch::count());
+        $this->assertSame(2, Payroll::count());
+
+        // The last month cannot come first; at most 12 months.
+        $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2026-06', 'to' => '2026-04', 'lib_category_id' => $this->ps->id])
+            ->assertStatus(422)->assertJsonPath('errors.to.0', 'The last month cannot be before the first month.');
+        $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => '2026-04', 'to' => '2027-04', 'lib_category_id' => $this->ps->id])
+            ->assertStatus(422)->assertJsonPath('errors.to.0', 'A payroll covers at most 12 consecutive months.');
+    }
+
+    public function test_verified_batches_stay_as_recorded_and_draft_ones_recompute_without_deductions_or_allowances(): void
     {
         $this->rate($this->researcher, 30000);
-        $this->rate($this->assistant, 0); // 0.00 counts as no rate
+        $legacy = function (string $stage, int $month) {
+            return AuditLogger::muted(function () use ($stage, $month) {
+                $batch = PayrollBatch::create(['project_id' => $this->project->id, 'pay_year' => 2026, 'pay_month' => $month, 'prepared_by' => $this->assistant->id, 'workflow_status' => $stage]);
+                $row = Payroll::create([
+                    'project_id' => $this->project->id, 'payroll_batch_id' => $batch->id, 'lib_category_id' => $this->ps->id,
+                    'personnel_id' => $this->researcher->id, 'computed_by' => $this->assistant->id,
+                    'pay_month' => $month, 'pay_year' => 2026, 'basic_rate' => 30000, 'allowance' => 1000,
+                    'gross_pay' => 31000, 'total_deductions' => 3100, 'net_pay' => 27900,
+                    'status' => Payroll::STATUS_FOR_WORKFLOW[$stage], 'workflow_status' => $stage,
+                ]);
+                PayrollDeduction::create(['payroll_id' => $row->id, 'deduction_type' => 'GSIS', 'amount' => 3100]);
+
+                return $batch;
+            });
+        };
+        $verified = $legacy('verified', 9);
+        $draft = $legacy('draft', 10);
+        $this->payrollFileFor($draft, $this->assistant);
+
+        // Verified: unchanged, shown as recorded.
+        $this->actingAs($this->assistant)->getJson("/api/projects/{$this->project->id}/payroll?month=2026-09")->assertOk()
+            ->assertJsonPath('legacy_amounts', true)
+            ->assertJsonPath('batch.needs_recompute', false)
+            ->assertJsonPath('rows.0.computation', '(30,000 x 1 month) + allowance 1,000.00 = 31,000.00')
+            ->assertJsonPath('rows.0.recorded_deductions', 3100);
+        $this->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => '2026-09'])->assertStatus(422);
+        $row = $verified->rows()->firstOrFail();
+        $this->assertSame([31000.0, 1000.0, 3100.0, 27900.0], [(float) $row->gross_pay, (float) $row->allowance, (float) $row->total_deductions, (float) $row->net_pay]);
+        $this->assertSame(1, $row->deductions()->count());
+        $register = $this->getJson("/api/projects/{$this->project->id}/payroll-register")->assertOk();
+        $this->assertTrue($register->json('has_recorded_deductions'));
+        $this->assertEquals(27900, $register->json('totals.net'));
+
+        // Draft: must be recomputed before it can be submitted; then net = gross.
+        $this->getJson("/api/projects/{$this->project->id}/payroll?month=2026-10")->assertJsonPath('batch.needs_recompute', true);
+        $this->postJson("/api/payroll-batches/{$draft->id}/submit")->assertStatus(422)
+            ->assertJsonPath('errors.rows.0', PayrollService::NEEDS_RECOMPUTE);
+        $this->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => '2026-10'])->assertOk()
+            ->assertJsonPath('legacy_amounts', false)
+            ->assertJsonPath('batch.needs_recompute', false)
+            ->assertJsonPath('rows.0.computation', '(30,000 x 1 month) = 30,000.00');
+        $row = $draft->rows()->firstOrFail();
+        $this->assertSame([30000.0, 0.0, 0.0, 30000.0], [(float) $row->gross_pay, (float) $row->allowance, (float) $row->total_deductions, (float) $row->net_pay]);
+        $this->assertSame(0, $row->deductions()->count());
+        $this->postJson("/api/payroll-batches/{$draft->id}/submit")->assertOk();
+    }
+
+    // ------------------------------------------------------------ create from personnel
+    // Personnel records (who is paid, and how much): PersonnelTest.
+
+    public function test_compute_names_personnel_with_no_honorarium_and_never_pays_them_zero(): void
+    {
+        $this->rate($this->researcher, 30000);
+        $this->rate($this->assistant, 0); // 0.00: named, never a 0.00 row
         $this->createMonth();
 
         $run = $this->actingAs($this->assistant)->getJson("/api/projects/{$this->project->id}/payroll?month={$this->month}")->assertOk();
-        $names = collect($run->json('unrated_members'))->pluck('name')->all();
-        $this->assertContains($this->assistant->name, $names);
-        $this->assertContains($this->projectLeader->name, $names);
-        $this->assertContains($this->finance->name, $names);
-        $this->assertNotContains($this->researcher->name, $names);
-        $this->assertSame('zero', collect($run->json('unrated_members'))->firstWhere('user_id', $this->assistant->id)['reason']);
+        // Members without a personnel record (Job Order, professional
+        // services) are not paid through payroll and are not listed.
+        $this->assertSame([['user_id' => $this->assistant->id, 'name' => $this->assistant->name, 'reason' => 'zero', 'reason_text' => 'honorarium 0.00']], $run->json('not_included'));
 
         $response = $this->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => $this->month])->assertOk();
-        $message = $response->json('message');
-        $this->assertStringStartsWith('Payroll computed for 1 entry. Not included: no pay rate set for ', $message);
-        foreach ([$this->assistant, $this->projectLeader, $this->finance] as $user) {
-            $this->assertStringContainsString($user->name, $message);
-        }
+        $this->assertSame("Payroll computed for 1 entry. Not included (honorarium 0.00): {$this->assistant->name}.", $response->json('message'));
         $this->assertSame(1, Payroll::count());
         $this->assertSame(0, Payroll::where('gross_pay', 0)->count());
+    }
+
+    public function test_only_personnel_whose_period_covers_the_month_are_paid(): void
+    {
+        $this->rate($this->researcher, 30000);
+        $this->rate($this->assistant, 20000);
+        AuditLogger::muted(fn () => \App\Models\ProjectPersonnel::where('user_id', $this->assistant->id)
+            ->update(['effective_from' => '2026-01-01', 'effective_to' => '2026-10-31']));
+
+        $this->createMonth();
+        $this->assertSame([$this->researcher->id], Payroll::pluck('personnel_id')->map(fn ($id) => (int) $id)->all());
     }
 
     public function test_recompute_removes_rows_whose_rate_became_zero_or_not_set(): void
@@ -287,10 +277,9 @@ class PayrollTest extends TestCase
         $this->createMonth();
         $this->assertSame(3, Payroll::count());
 
-        // The assistant's rate becomes 0.00 and the Project Leader's is cleared.
+        // The assistant's honorarium becomes 0.00 and the Project Leader's record is removed.
         $this->rate($this->assistant, 0);
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $this->projectLeader->id)
-            ->update(['monthly_rate' => null, 'allowance' => null]));
+        $this->setHonorarium($this->projectLeader, null);
         $removedIds = Payroll::whereIn('personnel_id', [$this->assistant->id, $this->projectLeader->id])->pluck('id');
 
         $audit = AuditTrail::count();
@@ -304,9 +293,9 @@ class PayrollTest extends TestCase
         $this->assertSame([$this->researcher->id], Payroll::pluck('personnel_id')->map(fn ($id) => (int) $id)->all());
         $this->assertSame(0, \App\Models\PayrollDeduction::whereIn('payroll_id', $removedIds)->count());
         $message = $response->json('message');
-        $this->assertStringStartsWith('Payroll computed for 1 entry. Not included: no pay rate set for ', $message);
-        $this->assertStringContainsString($this->assistant->name, $message);
-        $this->assertStringContainsString($this->projectLeader->name, $message);
+        $this->assertStringStartsWith('Payroll computed for 1 entry.', $message);
+        $this->assertStringContainsString("Not included (honorarium 0.00): {$this->assistant->name}.", $message);
+        $this->assertStringContainsString("Removed from this payroll: {$this->projectLeader->name}.", $message);
         $this->assertEqualsCanonicalizing([$this->assistant->name, $this->projectLeader->name], $response->json('removed_members'));
 
         // One "deleted" entry per removed row, one "computed" for the row kept.
@@ -326,12 +315,12 @@ class PayrollTest extends TestCase
 
     public function test_create_for_a_month_computes_one_row_per_rated_active_member(): void
     {
-        $this->rate($this->researcher, 40000, 2000);
-        $this->rate($this->assistant, 20000, 0);
+        $this->rate($this->researcher, 40000);
+        $this->rate($this->assistant, 20000);
         $inactive = AuditLogger::muted(fn () => $this->member('researcher'));
         $this->rate($inactive, 25000);
         AuditLogger::muted(fn () => $inactive->forceFill(['is_active' => false])->save());
-        // The project leader has no rate: no row.
+        // The project leader is not personnel: no row, and not named.
 
         $audit = AuditTrail::count();
         $response = $this->actingAs($this->assistant)
@@ -339,28 +328,23 @@ class PayrollTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('month_label', 'November 2026')
             ->assertJsonCount(2, 'rows');
-        // People without a rate are named, not given a 0.00 row.
-        $this->assertStringStartsWith('Payroll created for 2 people. Not included: no pay rate set for ', $response->json('message'));
-        $this->assertStringContainsString($this->projectLeader->name, $response->json('message'));
+        $this->assertSame('Payroll created for 2 people.', $response->json('message'));
 
         $this->assertSame($audit + 2, AuditTrail::count());
         $this->assertSame(['created', 'created'], AuditTrail::latest('id')->take(2)->pluck('action')->all());
 
+        // Honorarium only, one month: no deductions, no allowance, net = gross.
         $row = collect($response->json('rows'))->firstWhere('personnel.id', $this->researcher->id);
-        $this->assertSame(42000, $row['gross']);
-        $this->assertSame(5157.5, $row['deductions']);
-        $this->assertSame(36842.5, $row['net']);
+        $this->assertEquals(40000, $row['gross']);
+        $this->assertEquals(40000, $row['net']);
+        $this->assertSame('(40,000 x 1 month) = 40,000.00', $row['computation']);
         $this->assertSame('draft', $row['workflow_status']);
-        $this->assertCount(4, $row['deduction_items']);
-        $this->assertSame(4, Payroll::findOrFail($row['id'])->deductions()->count());
-
-        $breakdown = collect($response->json('deductionBreakdown'))->pluck('amount', 'type');
-        $this->assertSame(2900 + 1450, (int) $breakdown['GSIS']); // 7.25% of 40,000 and of 20,000
+        $this->assertSame(0, Payroll::findOrFail($row['id'])->deductions()->count());
 
         // A second create for the same month adds nothing.
         $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $this->month, 'lib_category_id' => $this->ps->id])
             ->assertStatus(422)
-            ->assertJsonPath('errors.month.0', 'Payroll for November 2026 already exists for everyone with a pay rate.');
+            ->assertJsonPath('errors.month.0', 'Payroll for November 2026 already exists for all personnel.');
         $this->assertSame(2, Payroll::count());
     }
 
@@ -369,7 +353,7 @@ class PayrollTest extends TestCase
         $this->actingAs($this->assistant)
             ->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $this->month, 'lib_category_id' => $this->ps->id])
             ->assertStatus(422)
-            ->assertJsonPath('errors.month.0', 'No one on this project has a monthly rate yet. Set pay rates first.');
+            ->assertJsonPath('errors.month.0', 'No personnel with an appointment effective in November 2026 and a monthly honorarium. The Program Leader adds personnel on the project page.');
 
         $this->rate($this->researcher, 30000);
         $this->postJson("/api/projects/{$this->project->id}/payroll", ['month' => $this->month, 'lib_category_id' => $this->lineItem->id])
@@ -393,11 +377,11 @@ class PayrollTest extends TestCase
 
     public function test_compute_refreshes_every_row_while_the_batch_is_editable(): void
     {
-        $this->rate($this->researcher, 30000, 2000);
+        $this->rate($this->researcher, 30000);
         $this->rate($this->assistant, 20000);
         $this->createMonth();
 
-        $this->rate($this->researcher, 40000, 0);
+        $this->rate($this->researcher, 40000);
         $this->rate($this->assistant, 25000);
 
         $audit = AuditTrail::count();
@@ -405,7 +389,7 @@ class PayrollTest extends TestCase
             ->postJson("/api/projects/{$this->project->id}/payroll/compute", ['month' => $this->month])
             ->assertOk()
             ->assertJsonPath('rated_members', 2);
-        $this->assertStringStartsWith('Payroll computed for 2 entries. Not included: no pay rate set for ', $response->json('message'));
+        $this->assertSame('Payroll computed for 2 entries.', $response->json('message'));
         $this->assertSame($audit + 2, AuditTrail::count()); // one per row changed
         $this->assertSame(40000.0, (float) Payroll::where('personnel_id', $this->researcher->id)->value('gross_pay'));
         $this->assertSame(25000.0, (float) Payroll::where('personnel_id', $this->assistant->id)->value('gross_pay'));
@@ -427,20 +411,21 @@ class PayrollTest extends TestCase
         $audit = AuditTrail::count();
 
         $this->actingAs($this->assistant)
-            ->patchJson("/api/payroll/{$payroll->id}", ['allowance' => 1000])
+            ->patchJson("/api/payroll/{$payroll->id}", ['basic_rate' => 31000])
             ->assertOk()
-            ->assertJsonPath('payroll.gross', 31000);
+            ->assertJsonPath('payroll.gross', 31000)
+            ->assertJsonPath('payroll.net', 31000);
         $this->assertSame($audit + 1, AuditTrail::count());
 
         $batch = $this->batch();
         $this->postJson("/api/payroll-batches/{$batch->id}/submit")->assertOk();
-        $this->patchJson("/api/payroll/{$payroll->id}", ['allowance' => 5])
+        $this->patchJson("/api/payroll/{$payroll->id}", ['basic_rate' => 5])
             ->assertStatus(422)
             ->assertJsonPath('errors.workflow_status.0', 'This payroll cannot be edited while it is submitted.');
 
         // Returned: editable again.
-        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Check the allowance.'])->assertOk();
-        $this->actingAs($this->assistant)->patchJson("/api/payroll/{$payroll->id}", ['allowance' => 500])->assertOk();
+        $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Check the honorarium.'])->assertOk();
+        $this->actingAs($this->assistant)->patchJson("/api/payroll/{$payroll->id}", ['basic_rate' => 30500])->assertOk();
     }
 
     // ------------------------------------------------------------ batch workflow
@@ -481,7 +466,9 @@ class PayrollTest extends TestCase
 
         // Three rows, three hand-offs: 1 + 2 + 1 notifications (one per recipient per hand-off).
         $this->assertSame(4, DB::table('notifications')->count());
-        $this->assertSame(0.0, app(ProjectFinancialService::class)->spent($this->project));
+        // A verified batch is spent: 30,000 + 20,000 + 45,000.
+        $this->assertSame(95000.0, app(ProjectFinancialService::class)->spent($this->project));
+        $this->assertSame(95000.0, app(ProjectFinancialService::class)->spentPayroll($this->project));
 
         // Files of a verified payroll stay.
         $this->actingAs($this->assistant)->post("/api/payroll-batches/{$batch->id}/documents", [
@@ -497,8 +484,8 @@ class PayrollTest extends TestCase
 
         $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => ' '])->assertStatus(422);
         $audit = AuditTrail::count();
-        $this->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Wrong allowance.'])
-            ->assertOk()->assertJsonPath('batch.workflow_status', 'returned')->assertJsonPath('batch.return_reason', 'Wrong allowance.');
+        $this->postJson("/api/payroll-batches/{$batch->id}/return", ['reason' => 'Wrong honorarium.'])
+            ->assertOk()->assertJsonPath('batch.workflow_status', 'returned')->assertJsonPath('batch.return_reason', 'Wrong honorarium.');
         $this->assertStep($audit, 'returned', $batch->id);
         $this->assertNotified($this->assistant, 'returned');
         $this->assertRowsAre('returned', 'draft');
@@ -866,10 +853,25 @@ class PayrollTest extends TestCase
 
     // ------------------------------------------------------------ helpers
 
-    private function rate(User $user, float $monthly, float $allowance = 0): void
+    /** A personnel record (Special Order) for $user; $replace removes their other records first. */
+    private function appoint(User $user, float $monthly, string $from, string $to, bool $replace = true): void
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $user->id)
-            ->update(['monthly_rate' => $monthly, 'allowance' => $allowance]));
+        AuditLogger::muted(function () use ($user, $monthly, $from, $to, $replace) {
+            if ($replace) {
+                ProjectPersonnel::where('project_id', $this->project->id)->where('user_id', $user->id)->delete();
+            }
+            ProjectPersonnel::create([
+                'project_id' => $this->project->id, 'user_id' => $user->id, 'position' => 'Project Staff',
+                'special_order_no' => 'SO No. 0002 s. 2025', 'effective_from' => $from, 'effective_to' => $to,
+                'monthly_honorarium' => $monthly,
+            ]);
+        });
+    }
+
+    /** The person's personnel record with this monthly honorarium (project period). */
+    private function rate(User $user, float $monthly): void
+    {
+        $this->setHonorarium($user, $monthly);
     }
 
     private function createMonth(?User $by = null): void

@@ -11,11 +11,11 @@ use Tests\Feature\Concerns\BuildsExpenseWorkflow;
 use Tests\TestCase;
 
 /**
- * Balancing query per line item: allocated, spent (verified), pending
- * (submitted / approved expenses, unverified expenses linked to a purchase
- * request, and approved open purchase requests) and
- * available = allocated - spent - pending. Payroll is not included. The
- * same money is never counted twice.
+ * Balancing query per line item: allocated, spent (verified expenses and
+ * verified payroll), pending (submitted / approved expenses and payroll,
+ * unverified expenses linked to a purchase request, and approved open
+ * purchase requests) and available = allocated - spent - pending. The same
+ * money is never counted twice.
  */
 class BalancingTest extends TestCase
 {
@@ -44,13 +44,16 @@ class BalancingTest extends TestCase
                 ]);
             }
 
-            // A PS line with verified payroll: payroll is not spent.
+            // A PS line with payroll: verified is spent (funder share), submitted
+            // and approved are pending, draft and returned count nowhere.
             $ps = LibCategory::create(['project_id' => $this->project->id, 'category_type' => 'PS', 'line_item_name' => 'Salaries', 'allocated_amount' => 60000]);
-            Payroll::create([
-                'project_id' => $this->project->id, 'lib_category_id' => $ps->id, 'personnel_id' => $this->researcher->id,
-                'computed_by' => $this->assistant->id, 'pay_month' => 11, 'pay_year' => 2026, 'basic_rate' => 30000,
-                'gross_pay' => 30000, 'net_pay' => 30000, 'status' => 'approved', 'workflow_status' => 'verified',
-            ]);
+            foreach (['verified' => [11, 30000], 'submitted' => [10, 5000], 'endorsed' => [9, 4000], 'draft' => [8, 700], 'returned' => [7, 60]] as $stage => [$month, $amount]) {
+                Payroll::create([
+                    'project_id' => $this->project->id, 'lib_category_id' => $ps->id, 'personnel_id' => $this->researcher->id,
+                    'computed_by' => $this->assistant->id, 'pay_month' => $month, 'pay_year' => 2026, 'basic_rate' => $amount,
+                    'gross_pay' => $amount, 'net_pay' => $amount, 'status' => $stage === 'verified' ? 'approved' : 'draft', 'workflow_status' => $stage,
+                ]);
+            }
 
             return $ps;
         });
@@ -67,12 +70,16 @@ class BalancingTest extends TestCase
         $this->assertSame(498149.5, $supplies['available']);
 
         $salaries = $rows[$ps->id];
-        $this->assertSame([60000, 0, 0, 60000], [$salaries['allocated'], $salaries['spent'], $salaries['pending'], $salaries['available']]);
+        $this->assertSame([60000, 30000, 9000, 21000], [$salaries['allocated'], $salaries['spent'], $salaries['pending'], $salaries['available']]);
+        $this->assertSame([30000, 9000], [$salaries['spent_payroll'], $salaries['pending_payroll']]);
+        $this->assertSame([30000, 9000], [$salaries['sources']['funder']['spent'], $salaries['sources']['funder']['pending']]);
+        $this->assertSame([0, 0], [$salaries['sources']['implementing_agency']['spent'], $salaries['sources']['implementing_agency']['pending']]);
 
         $response->assertJsonPath('totals.allocated', 560000)
-            ->assertJsonPath('totals.spent', 1250.5)
-            ->assertJsonPath('totals.pending', 600)
-            ->assertJsonPath('totals.available', 558149.5);
+            ->assertJsonPath('totals.spent', 31250.5)
+            ->assertJsonPath('totals.pending', 9600)
+            ->assertJsonPath('totals.pending_payroll', 9000)
+            ->assertJsonPath('totals.available', 519149.5);
 
         // One line item.
         $this->getJson("/api/projects/{$this->project->id}/balancing?line_item={$ps->id}")

@@ -97,7 +97,7 @@ export default function FinanceRecordPanel({ projectId, target, refreshKey, acti
                 {item.can_verify && verifyHere && (
                   <>
                     <p className="ld-muted fin-verify-note">
-                      {item.counts_as_spent ? `Verifying adds ${peso(item.amount)} to Total spent.` : 'Payroll is not counted in LIB spent.'}
+                      {`Verifying adds ${peso(item.amount)} to Total spent${item.type === 'payroll' ? ', charged to each person’s PS line item' : ''}. Spent = verified expenses and verified payroll.`}
                     </p>
                     <button type="button" className="program-btn danger" disabled={busy} onClick={() => actions.reject(item)}>Reject</button>
                     <button type="button" className="program-btn primary" disabled={busy} onClick={() => actions.verify(item)}>{busy ? 'Saving…' : 'Verify'}</button>

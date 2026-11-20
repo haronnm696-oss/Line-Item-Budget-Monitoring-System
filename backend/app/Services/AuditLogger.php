@@ -31,6 +31,7 @@ class AuditLogger
         'Liquidation' => 'liquidations',
         'ProjectReport' => 'project_reports',
         'ProjectUser' => 'project_user',
+        'ProjectPersonnel' => 'project_personnel',
     ];
 
     private static int $muted = 0;

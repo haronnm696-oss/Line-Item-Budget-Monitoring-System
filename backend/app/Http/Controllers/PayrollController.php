@@ -6,78 +6,96 @@ use App\Models\LibCategory;
 use App\Models\Payroll;
 use App\Models\PayrollBatch;
 use App\Models\Project;
-use App\Services\PayrollCalculator;
 use App\Services\PayrollService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * Payroll API. Rows are created / computed / edited per person; submit,
- * approve / return and verify / reject act on the month's batch. Every
- * change goes through PayrollService; project scoping is enforced by the
- * project.access middleware.
+ * Payroll API. A batch covers a pay period of consecutive months (one month
+ * or a quarter); ?month= is any month of it. Rows are created / computed /
+ * edited per person; submit, approve / return and verify / reject act on the
+ * batch. Project honoraria have no deductions and no allowances (net =
+ * gross). Every change goes through PayrollService; project scoping is
+ * enforced by the project.access middleware.
  */
 class PayrollController extends Controller
 {
     private const MONTH = ['regex:/^\d{4}-(0[1-9]|1[0-2])$/'];
 
-    public function __construct(private PayrollService $payroll, private PayrollCalculator $calculator)
+    public function __construct(private PayrollService $payroll)
     {
     }
 
-    /** GET /api/projects/{project}/payroll?month=YYYY-MM (default: this month, Manila). */
+    /**
+     * GET /api/projects/{project}/payroll?month=YYYY-MM[&to=YYYY-MM]
+     * The batch whose period includes `month`; with no batch there, the
+     * period month..to (default: one month) as it would be prepared.
+     */
     public function index(Request $request, Project $project)
     {
-        $data = $request->validate(['month' => array_merge(['nullable'], self::MONTH)], $this->monthMessage());
-        [$year, $month] = $this->parts($data['month'] ?? now('Asia/Manila')->format('Y-m'));
+        $data = $request->validate([
+            'month' => array_merge(['nullable'], self::MONTH),
+            'to' => array_merge(['nullable'], self::MONTH),
+        ], $this->monthMessage());
+        $from = $this->first($data['month'] ?? now('Asia/Manila')->format('Y-m'));
+        $to = isset($data['to']) ? $this->first($data['to']) : $from;
 
-        return response()->json($this->run($project, $year, $month));
+        return response()->json($this->run($project, $from, $to->lt($from) ? $from : $to));
     }
 
-    /** POST /api/projects/{project}/payroll { month, lib_category_id } — create and compute the month. */
+    /** POST /api/projects/{project}/payroll { month, to?, lib_category_id } — create and compute the period. */
     public function store(Request $request, Project $project)
     {
         $data = $request->validate([
             'month' => array_merge(['required'], self::MONTH),
+            'to' => array_merge(['nullable'], self::MONTH),
             'lib_category_id' => ['required', 'integer', $this->psLineItem($project)],
         ], $this->monthMessage() + ['lib_category_id.exists' => 'Choose a Personal Services (PS) line item of this project.']);
-        [$year, $month] = $this->parts($data['month']);
+        $from = $this->first($data['month']);
+        $to = isset($data['to']) ? $this->first($data['to']) : $from;
 
-        $created = $this->payroll->createMonth($project, $year, $month, LibCategory::findOrFail($data['lib_category_id']), $request->user());
+        $created = $this->payroll->createPeriod($project, $from, $to, LibCategory::findOrFail($data['lib_category_id']), $request->user());
 
         return response()->json([
-            'message' => 'Payroll created for ' . $created->count() . ' ' . ($created->count() === 1 ? 'person' : 'people') . '.' . $this->notIncluded($project),
-        ] + $this->run($project, $year, $month), 201);
+            'message' => 'Payroll created for ' . $created->count() . ' ' . ($created->count() === 1 ? 'person' : 'people') . '.' . $this->notIncludedText($project, $from, $to),
+        ] + $this->run($project, $from, $to), 201);
     }
 
-    /** POST /api/projects/{project}/payroll/compute { month } — recompute draft / returned rows. */
+    /** POST /api/projects/{project}/payroll/compute { month } — recompute the draft / returned batch covering the month. */
     public function compute(Request $request, Project $project)
     {
         $data = $request->validate(['month' => array_merge(['required'], self::MONTH)], $this->monthMessage());
-        [$year, $month] = $this->parts($data['month']);
+        $month = $this->first($data['month']);
 
-        $result = $this->payroll->computeMonth($project, $year, $month, $request->user());
+        $result = $this->payroll->computeMonth($project, $month->year, $month->month, $request->user());
         $rows = $result['rows'];
+        $batch = $result['batch'];
 
         return response()->json([
-            'message' => 'Payroll computed for ' . $rows->count() . ' ' . ($rows->count() === 1 ? 'entry' : 'entries') . '.' . $this->notIncluded($project, $result['removed']),
-            // Rows taken out of this batch because the person's rate is now not set or 0.00.
+            'message' => 'Payroll computed for ' . $rows->count() . ' ' . ($rows->count() === 1 ? 'entry' : 'entries') . '.'
+                . $this->notIncludedText($project, $batch->periodStart(), $batch->periodEnd(), $result['removed']),
+            // Rows taken out of this batch: not effective in the period any more, or honorarium 0.00.
             'removed_members' => $result['removed'],
-        ] + $this->run($project, $year, $month));
+        ] + $this->run($project, $batch->periodStart(), $batch->periodEnd()));
     }
 
+    /** PATCH /api/payroll/{payroll} { basic_rate?, lib_category_id? } — no allowance: honoraria have none. */
     public function update(Request $request, Payroll $payroll)
     {
         $data = $request->validate([
             'basic_rate' => ['sometimes', 'numeric', 'gt:0', 'max:9999999999999.99'],
-            'allowance' => ['sometimes', 'numeric', 'min:0', 'max:9999999999999.99'],
+            'allowance' => ['prohibited'],
             'lib_category_id' => ['sometimes', 'integer', $this->psLineItem($payroll->project)],
-        ], ['lib_category_id.exists' => 'Choose a Personal Services (PS) line item of this project.']);
+        ], [
+            'lib_category_id.exists' => 'Choose a Personal Services (PS) line item of this project.',
+            'allowance.prohibited' => 'Project honoraria have no allowance.',
+        ]);
 
         return response()->json(['message' => 'Payroll updated.', 'payroll' => $this->row($this->payroll->update($payroll, $data, $request->user()))]);
     }
 
-    // Batch hand-offs: the whole month at once.
+    // Batch hand-offs: the whole period at once.
 
     public function submit(Request $request, PayrollBatch $payrollBatch)
     {
@@ -116,39 +134,43 @@ class PayrollController extends Controller
 
     // ---------------------------------------------------------------- views
 
-    private function run(Project $project, int $year, int $month): array
+    /**
+     * The batch covering $from (its own period), or the period $from..$to
+     * as it would be prepared.
+     */
+    private function run(Project $project, Carbon $from, Carbon $to): array
     {
-        $rows = Payroll::query()
-            ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
-            ->with(['personnel', 'libCategory', 'deductions', 'computedBy', 'plReviewedBy', 'verifiedBy'])
-            ->orderBy('id')
-            ->get();
+        $batch = $this->payroll->batchFor($project, $from->year, $from->month);
+        if ($batch) {
+            [$from, $to] = [$batch->periodStart(), $batch->periodEnd()];
+        }
 
-        $breakdown = $rows->flatMap->deductions
-            ->groupBy('deduction_type')
-            ->map(fn ($items, $type) => ['type' => $type, 'amount' => round((float) $items->sum('amount'), 2)])
-            ->values();
-
-        $batch = $this->payroll->batchFor($project, $year, $month);
+        $rows = $batch
+            ? $batch->rows()->with(['personnel', 'libCategory', 'computedBy', 'plReviewedBy', 'verifiedBy'])->orderBy('id')->get()
+            : collect();
+        $months = PayrollBatch::monthsBetween($from, $to);
 
         return [
-            'month' => sprintf('%04d-%02d', $year, $month),
-            'month_label' => PayrollService::monthLabel($year, $month),
+            'month' => $from->format('Y-m'),
+            'to' => $to->format('Y-m'),
+            'months' => $months,
+            'month_label' => PayrollBatch::periodLabel($from, $to),
+            'max_months' => PayrollService::MAX_MONTHS,
             'batch' => $batch ? $this->batch($batch) : null,
             'rows' => $rows->map(fn (Payroll $row) => $this->row($row))->values(),
-            'deductionBreakdown' => $breakdown,
             'totals' => [
                 'gross' => round((float) $rows->sum('gross_pay'), 2),
-                'deductions' => round((float) $rows->sum('total_deductions'), 2),
                 'net' => round((float) $rows->sum('net_pay'), 2),
+                // Only rows recorded before deductions were removed (verified batches stay as recorded).
+                'recorded_deductions' => round((float) $rows->sum('total_deductions'), 2),
             ],
-            // Deduction rules whose rates are not set yet (config/payroll.php).
-            'unset_rules' => $this->calculator->unsetRules(),
-            // PAYROLL_RATES_LABEL (e.g. demo rates): shown as a warning when set.
-            'rates_label' => config('payroll.rates_label'),
-            'rated_members' => $this->payroll->ratedMembers($project)->count(),
-            // Assigned people left out (no rate, or 0.00): named, never computed as 0.00.
-            'unrated_members' => $this->payroll->unratedMembers($project),
+            // Rows recorded with an allowance or deductions (older batches).
+            'legacy_amounts' => $rows->contains(fn (Payroll $row) => $row->hasLegacyAmounts()),
+            // Without a batch: why this period cannot be prepared (it overlaps another batch).
+            'overlap_text' => $batch ? null : $this->payroll->overlapMessage($project, $from, $to),
+            'rated_members' => $this->payroll->payees($project, $from, $to)->count(),
+            // Personnel not paid in the period: named, never computed as 0.00.
+            'not_included' => $this->payroll->notIncluded($project, $from, $to),
             'ps_line_items' => $project->libCategories()->where('category_type', 'PS')->orderBy('id')->get()
                 ->map(fn (LibCategory $item) => ['id' => $item->id, 'name' => $item->line_item_name])->values(),
         ];
@@ -156,7 +178,7 @@ class PayrollController extends Controller
 
     private function batchResponse(string $message, PayrollBatch $batch)
     {
-        return response()->json(['message' => $message] + $this->run($batch->project, $batch->pay_year, $batch->pay_month));
+        return response()->json(['message' => $message] + $this->run($batch->project, $batch->periodStart(), $batch->periodEnd()));
     }
 
     private function batch(PayrollBatch $batch): array
@@ -166,9 +188,16 @@ class PayrollController extends Controller
 
         return [
             'id' => $batch->id,
+            'reference' => $batch->reference(),
+            'period_label' => $batch->monthLabel(),
+            'months' => $batch->monthCount(),
             'workflow_status' => $batch->workflow_status,
             'workflow_label' => PayrollService::LABELS[$batch->workflow_status] ?? $batch->workflow_status,
             'editable' => $batch->isEditable(),
+            // A draft / returned batch still carrying old allowances or deductions.
+            'needs_recompute' => $this->payroll->needsRecompute($batch),
+            // Line items this draft / returned batch would overspend (submit is refused while any).
+            'over_balance' => $batch->isEditable() ? $this->payroll->overBalance($batch, false) : [],
             // Self-pay escalation to the Program Leader: 'approve' / 'verify' step, or null.
             'escalated_step' => ($batch->pendingEscalation()?->payload ?? [])['step'] ?? null,
             'waiting_text' => $this->payroll->waitingText($batch, request()->user()),
@@ -188,7 +217,7 @@ class PayrollController extends Controller
 
     private function row(Payroll $payroll): array
     {
-        $payroll->loadMissing(['personnel', 'libCategory', 'deductions', 'computedBy', 'plReviewedBy', 'verifiedBy']);
+        $payroll->loadMissing(['personnel', 'libCategory', 'computedBy', 'plReviewedBy', 'verifiedBy']);
         $person = fn ($user) => $user ? ['id' => $user->id, 'name' => $user->name] : null;
 
         return [
@@ -200,12 +229,15 @@ class PayrollController extends Controller
             'position' => $payroll->personnel?->position,
             'lib_category_id' => $payroll->lib_category_id,
             'category' => $payroll->libCategory?->line_item_name,
+            // Monthly honorarium and the months paid: "(8,800 x 3 months) = 26,400.00".
             'basic' => round((float) $payroll->basic_rate, 2),
-            'allowance' => round((float) $payroll->allowance, 2),
+            'months' => $payroll->monthsPaid(),
+            'segments' => $payroll->segments(),
+            'computation' => $payroll->computationText(),
             'gross' => round((float) $payroll->gross_pay, 2),
-            'deductions' => round((float) $payroll->total_deductions, 2),
-            'deduction_items' => $payroll->deductions->map(fn ($d) => ['type' => $d->deduction_type, 'amount' => round((float) $d->amount, 2)])->values(),
             'net' => round((float) $payroll->net_pay, 2),
+            // Non-zero only on rows recorded before deductions were removed.
+            'recorded_deductions' => round((float) $payroll->total_deductions, 2),
             'status' => $payroll->status,
             'workflow_status' => $payroll->workflow_status,
             'workflow_label' => PayrollService::LABELS[$payroll->workflow_status] ?? $payroll->workflow_status,
@@ -220,16 +252,29 @@ class PayrollController extends Controller
     }
 
     /**
-     * " Not included: no pay rate set for A, B." (empty when everyone has a
-     * rate). $removed adds people whose row Recompute just took out (they may
-     * no longer be assigned to the project).
+     * " Not included: appointment not effective: A, B. Not included
+     * (honorarium 0.00): C." (empty when none). $removed adds people whose
+     * row Recompute just took out.
      */
-    private function notIncluded(Project $project, array $removed = []): string
+    private function notIncludedText(Project $project, Carbon $from, Carbon $to, array $removed = []): string
     {
-        $names = collect($this->payroll->unratedMembers($project))->pluck('name')
-            ->merge($removed)->unique()->sort()->values();
+        $people = collect($this->payroll->notIncluded($project, $from, $to));
+        $notEffective = $people->where('reason', 'not_effective')->pluck('name');
+        $zero = $people->where('reason', 'zero')->pluck('name');
+        $removed = collect($removed)->diff($notEffective)->diff($zero);
 
-        return $names->isEmpty() ? '' : ' Not included: no pay rate set for ' . $names->join(', ', ' and ') . '.';
+        $text = '';
+        foreach ([
+            'Not included: ' . PayrollService::NOT_EFFECTIVE => $notEffective,
+            'Not included (honorarium 0.00)' => $zero,
+            'Removed from this payroll' => $removed,
+        ] as $label => $names) {
+            if ($names->isNotEmpty()) {
+                $text .= ' ' . $label . ': ' . $names->unique()->sort()->values()->join(', ', ' and ') . '.';
+            }
+        }
+
+        return $text;
     }
 
     private function psLineItem(Project $project)
@@ -239,13 +284,14 @@ class PayrollController extends Controller
             ->where('category_type', 'PS');
     }
 
-    private function parts(string $month): array
+    /** "2025-10" -> 1 October 2025. */
+    private function first(string $month): Carbon
     {
-        return [(int) substr($month, 0, 4), (int) substr($month, 5, 2)];
+        return Carbon::create((int) substr($month, 0, 4), (int) substr($month, 5, 2), 1)->startOfDay();
     }
 
     private function monthMessage(): array
     {
-        return ['month.regex' => 'Use a month in the form YYYY-MM.'];
+        return ['month.regex' => 'Use a month in the form YYYY-MM.', 'to.regex' => 'Use a month in the form YYYY-MM.'];
     }
 }

@@ -8,11 +8,13 @@ use App\Models\Document;
 use App\Models\Expense;
 use App\Models\PayrollBatch;
 use App\Models\Project;
+use App\Models\ProjectPersonnel;
 use App\Models\PurchaseRequest;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\DocumentStorage;
 use App\Services\ExpenseWorkflowService;
+use App\Services\PersonnelService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -80,6 +82,13 @@ class DocumentController extends Controller
      */
     public function download(Request $request, Document $document, DocumentStorage $storage)
     {
+        // A Special Order (personnel): Program Leader, Project Leader and
+        // Finance/Admin only; not Research Assistants or Researchers.
+        if ($document->documentable instanceof ProjectPersonnel) {
+            $access = app(PersonnelService::class)->access($document->documentable->project, $request->user());
+            abort_unless(in_array($access, [PersonnelService::EDIT, PersonnelService::VIEW], true), 403, 'You cannot open this Special Order.');
+        }
+
         $previewable = in_array($document->mime, ['application/pdf', 'image/jpeg', 'image/png'], true);
         $response = $storage->response($document, $request->boolean('inline') && $previewable);
 

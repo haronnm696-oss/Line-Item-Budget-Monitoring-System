@@ -10,7 +10,7 @@ import { useApiData } from '../../lib/useApiData';
 import { todayInManila } from '../../lib/datetime';
 import { peso } from '../money';
 import {
-  PS_NOTE, defaultLineItemId, groupLineItems, lineItemAvailable, prefillFromRequest,
+  HONORARIA_NOTE, PS_NOTE, defaultLineItemId, expenseLineItems, groupLineItems, honorariaLineItems, lineItemAvailable, prefillFromRequest,
   rememberLineItemId, rememberedLineItemId,
 } from '../../lib/expenseForm';
 import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
@@ -80,7 +80,10 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   const { user } = useAuth();
   const balancing = useApiData(ENDPOINTS.balancing(projectId));
   const approved = useApiData(assistant ? `${ENDPOINTS.purchaseRequests(projectId)}?workflow_status=endorsed` : null);
-  const lineItems = balancing.data?.line_items ?? [];
+  const allLineItems = balancing.data?.line_items ?? [];
+  // Honoraria lines (personnel linked) are paid through Payroll, never as an expense.
+  const lineItems = expenseLineItems(allLineItems);
+  const honorariaLines = honorariaLineItems(allLineItems);
   const requests = Array.isArray(approved.data?.purchase_requests) ? approved.data.purchase_requests : [];
   const [form, setForm] = useState(editing ? toForm(expense.edit) : { ...EMPTY, expense_date: todayInManila() });
   const [receipt, setReceipt] = useState(null);
@@ -316,6 +319,11 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
               ))}
             </select>
             {chosen?.type === 'PS' && <div className="ld-hint" role="note">{PS_NOTE}</div>}
+            {honorariaLines.length > 0 && (
+              <div className="ld-hint" role="note">
+                <span aria-hidden="true">ⓘ</span> {HONORARIA_NOTE}: {honorariaLines.map((item) => item.name).join(', ')} {honorariaLines.length === 1 ? 'is' : 'are'} not listed here.
+              </div>
+            )}
             {chosen && Number(form.amount) > available && (
               <div className="ld-hint is-risk" role="status">
                 ⚠ More than the {peso(available)} available on this line item{fundedByShown ? ` (${sourceName(source, labels)})` : ''}.

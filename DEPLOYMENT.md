@@ -250,16 +250,12 @@ Aiven console before you deploy.
 | `DOCUMENTS_DISK` | `database` | Documents are stored in `document_contents`, so they survive Render's ephemeral filesystem. |
 | `RUN_DEMO_ASSIGN` | `1` only for the release that needs it | Runs the idempotent `DemoProjectAssignmentsSeeder` on boot. |
 | `RUN_DOCUMENT_IMPORT` | `1` only for the release that needs it | Copies document files from the old disk into the database on boot (idempotent). |
-| `PAYROLL_RATES_LABEL` | Empty, unless the rates are not official | Optional warning, e.g. `Demo deduction rates, not official`. When set, every Payroll page shows it as a warning banner and the Payroll register PDF and CSV print it at the top. Set it whenever the `PAYROLL_*` rates are demo or test values; clear it (and redeploy) once the official rates are in. |
-| `PAYROLL_*` | **Official values only** | GSIS, PhilHealth, Pag-IBIG and `PAYROLL_WITHHOLDING_TAX_BRACKETS`, as provided by the MSU accounting office. See `backend/.env.example` for the format. |
 
-- **Never** copy the payroll test values from `backend/tests/Feature/PayrollTest.php`
-  or a local `.env` into Render. If the official values are not available yet,
-  leave the `PAYROLL_*` variables empty. The Payroll page then shows
-  "Deduction rates are not set yet" and blocks submission. It never computes
-  with guessed rates.
-- The configuration is cached at boot, so every change needs a redeploy.
-  Draft and returned payroll batches need **Recompute** after a rate change.
+- Payroll has no environment settings. Project honoraria have no deductions
+  (no GSIS, PhilHealth, Pag-IBIG or withholding tax) and no allowances: each
+  row is the monthly honorarium x the months the Special Order is effective
+  in the pay period, and net pay = gross pay. Any `PAYROLL_*` or
+  `PAYROLL_RATES_LABEL` variable left on Render is ignored and can be removed.
 
 ### 5.4 Post-deploy checks
 

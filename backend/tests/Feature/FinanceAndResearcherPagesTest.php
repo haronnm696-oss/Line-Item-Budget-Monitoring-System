@@ -33,7 +33,7 @@ class FinanceAndResearcherPagesTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
-        config(['payroll.deductions' => [], 'documents.disk' => 'local']);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
         $this->ps = AuditLogger::muted(fn () => LibCategory::create([
             'project_id' => $this->project->id, 'category_type' => 'PS',
@@ -219,30 +219,47 @@ class FinanceAndResearcherPagesTest extends TestCase
         $this->assertEquals($res->json('category_summary.ps.allocated'), $groups['PS']['subtotal']['allocated']);
     }
 
-    public function test_verifying_an_expense_changes_spent_for_every_role_but_payroll_does_not(): void
+    public function test_verifying_an_expense_or_a_payroll_raises_spent_equally_for_every_role(): void
     {
         $expense = $this->expenseIn('endorsed', null, true, ['amount' => 2000, 'pl_reviewed_by' => $this->projectLeader->id, 'pl_reviewed_at' => now()]);
         $batch = $this->submittedBatch();
+        $payroll = round((float) $batch->rows()->sum('gross_pay'), 2);
+        $this->assertGreaterThan(0, $payroll);
         $this->actingAs($this->projectLeader)->postJson("/api/payroll-batches/{$batch->id}/endorse")->assertOk();
 
+        // Program Leader, Project Leader, Research Assistant, Finance/Admin, Researcher.
         $spent = fn () => [
+            $this->actingAs($this->programLeader)->getJson("/api/program/projects/{$this->project->id}")->json('project.spent'),
             $this->actingAs($this->projectLeader)->getJson($this->url('leader-overview'))->json('kpis.total_spent'),
+            $this->actingAs($this->assistant)->getJson($this->url('balancing'))->json('totals.spent'),
             $this->actingAs($this->finance)->getJson($this->url('finance-overview'))->json('kpis.total_spent'),
             $this->actingAs($this->researcher)->getJson($this->url('budget-summary'))->json('kpis.total_spent'),
-            $this->actingAs($this->programLeader)->getJson("/api/program/projects/{$this->project->id}")->json('project.spent'),
+            $this->actingAs($this->finance)->getJson("/api/projects/{$this->project->id}")->json('kpis.total_spent'), // Reports
         ];
-        $this->assertEquals([0, 0, 0, 0], $spent());
+        $this->assertEquals(array_fill(0, 6, 0), $spent());
+        // Waiting for verification: pending, not spent.
+        $this->assertEquals($payroll, $this->actingAs($this->assistant)->getJson($this->url('balancing'))->json('totals.pending_payroll'));
 
         $this->actingAs($this->finance)->postJson("/api/expenses/{$expense->id}/verify")->assertOk();
-        $this->assertEquals([2000, 2000, 2000, 2000], $spent());
+        $this->assertEquals(array_fill(0, 6, 2000), $spent());
 
         $this->actingAs($this->finance)->postJson("/api/payroll-batches/{$batch->id}/verify")->assertOk();
         $this->assertSame('verified', $batch->fresh()->workflow_status);
-        $this->assertEquals([2000, 2000, 2000, 2000], $spent());
+        $this->assertEquals(array_fill(0, 6, 2000 + $payroll), $spent());
+        $this->assertEquals(0, $this->actingAs($this->assistant)->getJson($this->url('balancing'))->json('totals.pending_payroll'));
 
-        // Verified this month: the amount is expenses only; the counts stay separate.
+        // Reports agree: the utilization CSV grand total and the R&D Form B spent.
+        $csv = $this->actingAs($this->finance)->get("/api/projects/{$this->project->id}/reports/utilization")->assertOk()->getContent();
+        $grand = collect(array_map('str_getcsv', explode("\r\n", substr($csv, 3))))->first(fn ($row) => ($row[0] ?? '') === 'GRAND TOTAL');
+        $this->assertEquals(2000 + $payroll, (float) $grand[3]);
+        $formB = collect($this->getJson("/api/projects/{$this->project->id}")->json('form_b.sections'))
+            ->flatMap(fn ($s) => $s['cost_types'])->flatMap(fn ($c) => $c['groups'])
+            ->flatMap(fn ($g) => array_merge($g['items'], collect($g['subgroups'])->flatMap(fn ($sg) => $sg['items'])->all()));
+        $this->assertEquals(2000 + $payroll, $formB->sum('spent'));
+
+        // Verified this month: expenses and payroll; the counts stay separate.
         $kpis = $this->actingAs($this->finance)->getJson($this->url('finance-overview'))->json('kpis');
-        $this->assertEquals(2000, $kpis['verified_this_month']);
+        $this->assertEquals(2000 + $payroll, $kpis['verified_this_month']);
         $this->assertSame(1, $kpis['verified_this_month_expenses']);
         $this->assertSame(1, $kpis['verified_this_month_payroll']);
         $this->assertArrayNotHasKey('verified_this_month_count', $kpis);
@@ -277,12 +294,12 @@ class FinanceAndResearcherPagesTest extends TestCase
             ['delete', "/api/documents/{$document->id}", []],
             ['post', "/api/projects/{$p}/payroll", ['month' => '2026-12', 'lib_category_id' => $this->ps->id]],
             ['post', "/api/projects/{$p}/payroll/compute", ['month' => '2026-11']],
-            ['patch', "/api/payroll/{$payrollRow->id}", ['allowance' => 1]],
+            ['patch', "/api/payroll/{$payrollRow->id}", ['basic_rate' => 1]],
             ['post', "/api/payroll-batches/{$batch->id}/endorse", []],
             ['post', "/api/payroll-batches/{$batch->id}/return", ['reason' => 'x']],
             ['post', "/api/payroll-batches/{$batch->id}/verify", []],
             ['post', "/api/payroll-batches/{$batch->id}/documents", ['document_type' => 'payroll_file', 'file' => $file()]],
-            ['patch', "/api/projects/{$p}/pay-rates/{$this->assistant->id}", ['monthly_rate' => 1]],
+            ['post', "/api/program/projects/{$p}/personnel", ['user_id' => $this->assistant->id]],
             ['post', "/api/projects/{$p}/purchase-requests", ['lib_category_id' => $this->lineItem->id, 'description' => 'x', 'quantity' => 1, 'estimated_amount' => 1]],
             ['patch', "/api/purchase-requests/{$request->id}", ['description' => 'x']],
             ['post', "/api/purchase-requests/{$request->id}/endorse", []],
@@ -323,8 +340,7 @@ class FinanceAndResearcherPagesTest extends TestCase
 
     private function rate(User $user, float $monthly): void
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $user->id)
-            ->update(['monthly_rate' => $monthly, 'allowance' => 0]));
+        $this->setHonorarium($user, $monthly);
     }
 
     private function submittedBatch(): PayrollBatch

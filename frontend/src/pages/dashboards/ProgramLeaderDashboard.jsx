@@ -133,7 +133,7 @@ export default function ProgramLeaderDashboard() {
   const approvals = Array.isArray(data?.approvals) ? data.approvals : [];
   const fundingSources = Array.isArray(data?.funding_sources) ? data.funding_sources : [];
 
-  // Spent = verified expenses (same rule as the Projects page).
+  // Spent = verified expenses and verified payroll (same rule as the Projects page).
   // Released = funds of released releases (tranches in the API). Remaining = budget - spent.
   const budget = Number(kpis.portfolio_budget) || 0;
   const spent = Number(kpis.total_spent ?? kpis.total_disbursed) || 0;

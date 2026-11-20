@@ -45,13 +45,13 @@ class ProjectSummaryService
                 'total_spent' => $metrics['spent'],
                 'remaining' => $metrics['remaining'],
                 'utilization_pct' => $metrics['utilization_pct'],
-                'verified_transactions' => $this->leader->spentQuery($project)->count(),
+                'verified_transactions' => $this->leader->spentRows($project)->count(),
                 'verified_with_receipt' => $compliance['verified_with_receipt'],
             ],
             'monthly_expenses' => $this->program->monthlyExpenses(collect([$project]), now()->startOfDay()),
             'category_summary' => $this->program->categorySummary(collect([$project]), $metrics['budget']),
             'line_items' => $this->financials->categoryRows($project),
-            'transactions' => $this->leader->transactionRows($this->leader->spentQuery($project)->limit(5)->get()),
+            'transactions' => $this->leader->spentRows($project)->take(5)->values()->all(),
         ];
     }
 }

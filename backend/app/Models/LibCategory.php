@@ -126,10 +126,11 @@ class LibCategory extends Model
         return LineItemComputation::describe($this->attributesToArray());
     }
 
-    /** Verified expenses charged to this line item (payroll is excluded). */
+    /** Spent on this line item: verified expenses + verified payroll charged to it. */
     public function spentAmount(): float
     {
-        return (float) ProjectFinancialService::onlySpent($this->expenses())->sum('amount');
+        return round((float) ProjectFinancialService::onlySpent($this->expenses())->sum('amount')
+            + (float) ProjectFinancialService::onlySpentPayroll($this->payrolls())->sum('gross_pay'), 2);
     }
 
     public function remainingAmount(): float

@@ -183,7 +183,7 @@ function Kpis({ kpis, funder }) {
       <section className="program-card pl-kpi">
         <div className="pl-kpi-head"><span className="pl-kpi-label">Total spent</span></div>
         <div className="pl-kpi-value"><AnimatedNumber value={kpis.total_spent} format={peso} /></div>
-        <div className="pl-kpi-sub">{formatPct(utilization)} of the total budget · verified expenses</div>
+        <div className="pl-kpi-sub">{formatPct(utilization)} of the total budget · verified expenses and verified payroll</div>
         <div className="pl-track"><span style={{ width: `${clampPct(utilization)}%` }} /></div>
       </section>
 
@@ -297,12 +297,12 @@ function TransactionSummary({ rows, projectQuery }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Transaction summary</div>
-          <div className="program-card-sub">Latest verified expenses</div>
+          <div className="program-card-sub">Latest verified expenses and payroll</div>
         </div>
         <Link className="program-card-link" to={`/transactions${projectQuery}`}>View transaction history</Link>
       </div>
       {rows.length === 0 ? (
-        <p className="ld-empty">No verified expenses yet.</p>
+        <p className="ld-empty">No verified expenses or payroll yet.</p>
       ) : (
         <ul className="ld-mini-list">
           {rows.map((row) => (

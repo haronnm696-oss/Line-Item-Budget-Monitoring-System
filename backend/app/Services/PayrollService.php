@@ -7,7 +7,7 @@ use App\Models\LibCategory;
 use App\Models\Payroll;
 use App\Models\PayrollBatch;
 use App\Models\Project;
-use App\Models\ProjectUser;
+use App\Models\ProjectPersonnel;
 use App\Models\User;
 use App\Notifications\WorkflowNotification;
 use App\Services\Concerns\RunsWorkflow;
@@ -16,8 +16,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Payroll computation and the monthly approval (FR: automatic payroll
- * computation). One PayrollBatch per project and month groups the rows:
+ * Payroll computation and approval (FR: automatic payroll computation). One
+ * PayrollBatch per project and pay period (one or more consecutive months,
+ * e.g. October to December 2025; periods of a project never overlap) groups
+ * the rows, one per person:
  *
  *   draft --submit--> submitted --endorse--> endorsed --verify--> verified
  *   draft/returned <------ return (Project Leader) / reject (Finance/Admin)
@@ -32,10 +34,21 @@ use Illuminate\Validation\ValidationException;
  * Project Leader". If no Finance/Admin
  * without pay in it (and not its maker or approver) may verify, the verify
  * step goes to the Program Leader. Both are pending "payroll" approval
- * requests on the Program Leader Approvals page (decideEscalation()). Rows (one per person) are created and computed
- * with PayrollCalculator (config/payroll.php) and can be edited only while
- * the batch is draft or returned; each row change has its own audit entry.
- * The rows' workflow columns follow the batch. Payroll is not LIB spent.
+ * requests on the Program Leader Approvals page (decideEscalation()).
+ *
+ * Rows are computed with PayrollCalculator from the project's personnel
+ * (Special Orders): monthly honorarium x months the appointment is
+ * effective within the period. Project honoraria have NO deductions and NO
+ * allowances: net = gross. Rows can be edited only while the batch is draft
+ * or returned; each row change has its own audit entry. A draft / returned
+ * row still carrying an allowance or deductions from before must be
+ * recomputed before the batch is submitted; verified batches stay as
+ * recorded.
+ * The rows' workflow columns follow the batch. A verified batch is spent
+ * (ProjectFinancialService), charged to each row's PS line item from the
+ * funder's share; submitted / approved batches are pending. A batch may not
+ * charge a line item more than its available amount (checked on submit and
+ * again when it is verified).
  */
 class PayrollService
 {
@@ -51,77 +64,168 @@ class PayrollService
 
     private const ENCODERS = ['research-assistant', 'finance-admin'];
 
-    public function __construct(private PayrollCalculator $calculator)
+    /** Longest pay period a batch may cover. */
+    public const MAX_MONTHS = 12;
+
+    public const NOT_EFFECTIVE = 'appointment not effective';
+
+    public const NEEDS_RECOMPUTE = 'Recompute this payroll before submitting: it was computed with deductions or allowances, which project honoraria do not have.';
+
+    public function __construct(private PayrollCalculator $calculator, private PersonnelService $personnel, private ProjectFinancialService $financials)
     {
     }
 
+    /**
+     * A batch may not charge any line item more than its available amount
+     * (allocated - spent - pending, funder share: ProjectFinancialService).
+     * $isPending: the batch is already counted in "pending" (submitted or
+     * approved), so its own amount is added back.
+     *
+     * @return array<int, string> one message per line item over its balance
+     */
+    public function overBalance(PayrollBatch $batch, bool $isPending): array
+    {
+        $balances = collect($this->financials->balancing($batch->project)['line_items'])->keyBy('id');
+        $labels = ProjectFinancialService::sourceLabels($batch->project);
+        $messages = [];
+
+        foreach ($batch->rows()->get()->groupBy('lib_category_id') as $lineItemId => $rows) {
+            $line = $balances->get((int) $lineItemId);
+            if (! $line) {
+                continue;
+            }
+            $amount = round((float) $rows->sum('gross_pay'), 2);
+            $available = round((float) $line['sources'][ProjectFinancialService::PAYROLL_SOURCE]['available'] + ($isPending ? $amount : 0), 2);
+            if ($amount > $available + 0.004) {
+                $messages[] = sprintf(
+                    'The %s payroll charges ₱%s to %s, more than the ₱%s available%s. Ask the Project Leader for a realignment, or take people out of this payroll.',
+                    $batch->monthLabel(),
+                    number_format($amount, 2),
+                    $line['name'],
+                    number_format(max(0, $available), 2),
+                    $line['has_counterpart'] ? ' from the ' . $labels['funder'] . ' share' : ''
+                );
+            }
+        }
+
+        return $messages;
+    }
+
+    private function requireWithinBalance(PayrollBatch $batch, bool $isPending): void
+    {
+        if ($messages = $this->overBalance($batch, $isPending)) {
+            throw ValidationException::withMessages(['amount' => $messages]);
+        }
+    }
+
+    /** The project's batch whose period includes the month, if any. */
     public function batchFor(Project $project, int $year, int $month): ?PayrollBatch
     {
-        return PayrollBatch::query()
-            ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
-            ->first();
+        return $this->batches($project)->first(fn (PayrollBatch $batch) => $batch->coversMonth($year, $month));
+    }
+
+    /**
+     * Batches of the project sharing a month with [$from, $to] (first days
+     * of months), other than $exceptId.
+     *
+     * @return Collection<int, PayrollBatch>
+     */
+    public function overlapping(Project $project, Carbon $from, Carbon $to, ?int $exceptId = null): Collection
+    {
+        return $this->batches($project)
+            ->filter(fn (PayrollBatch $batch) => (int) $batch->id !== (int) $exceptId && $batch->overlaps($from, $to))
+            ->values();
+    }
+
+    /** "October to December 2025 overlaps the November 2025 payroll of this project. …", or null. */
+    public function overlapMessage(Project $project, Carbon $from, Carbon $to, ?int $exceptId = null): ?string
+    {
+        $others = $this->overlapping($project, $from, $to, $exceptId);
+        if ($others->isEmpty()) {
+            return null;
+        }
+
+        return sprintf(
+            '%s overlaps the %s payroll of this project. Each month is paid in one payroll only: choose months that no other payroll covers.',
+            PayrollBatch::periodLabel($from, $to),
+            $others->map(fn (PayrollBatch $batch) => $batch->monthLabel())->join(', ', ' and ')
+        );
     }
 
     // ---------------------------------------------------------------- rows
 
     /**
-     * Create the month's batch (if needed) and one computed row per active
-     * member with a monthly rate who has no row yet.
+     * Create the period's batch (if needed) and one computed row per person
+     * of the project's personnel (Special Order) effective in the period
+     * with an honorarium above zero, who has no row yet. Refused when the
+     * period overlaps another batch of the project. The row is charged to
+     * the person's PS line item ($lineItem when none).
      *
      * @return Collection<int, Payroll> the rows created
      */
-    public function createMonth(Project $project, int $year, int $month, LibCategory $lineItem, User $actor): Collection
+    public function createPeriod(Project $project, Carbon $from, Carbon $to, LibCategory $lineItem, User $actor): Collection
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can prepare payroll.');
-        $existingBatch = $this->batchFor($project, $year, $month);
+        [$from, $to] = $this->requirePeriod($from, $to);
+        $label = PayrollBatch::periodLabel($from, $to);
+
+        $existingBatch = $this->batches($project)->first(fn (PayrollBatch $batch) => $batch->periodStart()->eq($from) && $batch->periodEnd()->eq($to));
+        if ($overlap = $this->overlapMessage($project, $from, $to, $existingBatch?->id)) {
+            throw ValidationException::withMessages(['period' => [$overlap]]);
+        }
         if ($existingBatch) {
             $this->requireState($existingBatch, PayrollBatch::EDITABLE, 'changed');
         }
 
-        $members = $this->ratedMembers($project);
-        if ($members->isEmpty()) {
+        $payees = $this->payees($project, $from, $to);
+        if ($payees->isEmpty()) {
             throw ValidationException::withMessages([
-                'month' => ['No one on this project has a monthly rate yet. Set pay rates first.'],
+                'month' => ['No personnel with an appointment effective in ' . $label . ' and a monthly honorarium. The Program Leader adds personnel on the project page.'],
             ]);
         }
 
-        $existing = Payroll::query()
-            ->where('project_id', $project->id)->where('pay_year', $year)->where('pay_month', $month)
-            ->pluck('personnel_id')->map(fn ($id) => (int) $id)->all();
-        $toCreate = $members->reject(fn (ProjectUser $member) => in_array((int) $member->user_id, $existing, true))->values();
+        $existing = $existingBatch ? $existingBatch->rows()->pluck('personnel_id')->map(fn ($id) => (int) $id)->all() : [];
+        $toCreate = $payees->reject(fn (array $payee) => in_array($payee['user_id'], $existing, true))->values();
         if ($toCreate->isEmpty()) {
             throw ValidationException::withMessages([
-                'month' => ['Payroll for ' . self::monthLabel($year, $month) . ' already exists for everyone with a pay rate.'],
+                'month' => ['Payroll for ' . $label . ' already exists for all personnel.'],
             ]);
         }
 
-        return AuditLogger::transaction(function () use ($toCreate, $project, $year, $month, $lineItem, $actor) {
+        return AuditLogger::transaction(function () use ($toCreate, $project, $from, $to, $lineItem, $actor) {
+            $oneMonth = $from->eq($to);
             $batch = PayrollBatch::query()->firstOrCreate(
-                ['project_id' => $project->id, 'pay_year' => $year, 'pay_month' => $month],
-                ['prepared_by' => $actor->id, 'workflow_status' => 'draft']
+                ['project_id' => $project->id, 'pay_year' => $from->year, 'pay_month' => $from->month],
+                [
+                    'period_end_year' => $oneMonth ? null : $to->year,
+                    'period_end_month' => $oneMonth ? null : $to->month,
+                    'prepared_by' => $actor->id,
+                    'workflow_status' => 'draft',
+                ]
             );
             $batch = $this->lockRecord($batch);
             $this->requireState($batch, PayrollBatch::EDITABLE, 'changed');
 
-            return $toCreate->map(function (ProjectUser $member) use ($batch, $project, $year, $month, $lineItem, $actor) {
-                $result = $this->calculator->compute((float) $member->monthly_rate, (float) $member->allowance);
+            return $toCreate->map(function (array $payee) use ($batch, $project, $from, $lineItem, $actor) {
+                $result = $payee['result'];
                 $payroll = Payroll::create([
                     'project_id' => $project->id,
                     'payroll_batch_id' => $batch->id,
-                    'lib_category_id' => $lineItem->id,
-                    'personnel_id' => $member->user_id,
+                    'lib_category_id' => $payee['record']->lib_category_id ?: $lineItem->id,
+                    'personnel_id' => $payee['user_id'],
                     'computed_by' => $actor->id,
-                    'pay_month' => $month,
-                    'pay_year' => $year,
+                    'pay_month' => $from->month,
+                    'pay_year' => $from->year,
                     'basic_rate' => $result['basic'],
-                    'allowance' => $result['allowance'],
+                    'months' => $result['months'],
+                    'computation' => $result['segments'],
+                    'allowance' => 0,
                     'gross_pay' => $result['gross'],
-                    'total_deductions' => $result['total_deductions'],
+                    'total_deductions' => 0,
                     'net_pay' => $result['net'],
                     'workflow_status' => $batch->workflow_status,
                     'status' => Payroll::STATUS_FOR_WORKFLOW[$batch->workflow_status],
                 ]);
-                $this->storeDeductions($payroll, $result['deductions']);
                 AuditLogger::write('created', $payroll, [], $this->money($payroll), $actor);
 
                 return $payroll->fresh();
@@ -130,13 +234,14 @@ class PayrollService
     }
 
     /**
-     * Recompute every row of the month's batch from the current pay rates and
-     * deduction rules (batch draft or returned only). A person whose rate is
-     * now not set or 0.00 is taken out of the batch (one "deleted" audit
-     * entry each), the same as Prepare leaves them out; never a 0.00 row.
+     * Recompute every row of the batch covering the month from the current
+     * personnel records (batch draft or returned only): honorarium x
+     * effective months, no allowance, no deductions. A person no longer
+     * effective in the period, or with an honorarium of 0.00, is taken out
+     * of the batch (one "deleted" audit entry each), never a 0.00 row.
      * Submitted and verified batches are refused, so they never change.
      *
-     * @return array{rows: Collection<int, Payroll>, removed: array<int, string>}
+     * @return array{rows: Collection<int, Payroll>, removed: array<int, string>, batch: PayrollBatch}
      */
     public function computeMonth(Project $project, int $year, int $month, User $actor): array
     {
@@ -150,18 +255,18 @@ class PayrollService
         }
         $this->requireState($batch, PayrollBatch::EDITABLE, 'computed');
 
-        $rates = ProjectUser::query()->where('project_id', $project->id)->get()->keyBy('user_id');
+        $payees = $this->payees($project, $batch->periodStart(), $batch->periodEnd());
 
-        return AuditLogger::transaction(function () use ($batch, $rates, $actor) {
+        return AuditLogger::transaction(function () use ($batch, $payees, $actor) {
             $this->requireState($this->lockRecord($batch), PayrollBatch::EDITABLE, 'computed');
 
             $rows = collect();
             $removed = [];
             foreach ($batch->rows()->with('personnel')->orderBy('id')->get() as $row) {
                 $locked = $this->lockRecord($row);
-                $rate = $rates->get($locked->personnel_id);
+                $payee = $payees->get((int) $locked->personnel_id);
 
-                if (! $rate || $rate->monthly_rate === null || (float) $rate->monthly_rate <= 0) {
+                if (! $payee) {
                     $old = $this->money($locked);
                     $locked->deductions()->delete();
                     $locked->delete();
@@ -170,13 +275,18 @@ class PayrollService
                     continue;
                 }
 
-                $rows->push($this->recompute($locked, (float) $rate->monthly_rate, (float) $rate->allowance, [], 'computed', $actor));
+                $rows->push($this->recompute($locked, $payee['result']['segments'], [], 'computed', $actor));
             }
 
-            return ['rows' => $rows, 'removed' => $removed];
+            return ['rows' => $rows, 'removed' => $removed, 'batch' => $batch];
         });
     }
 
+    /**
+     * Edit one row (batch draft or returned): the monthly honorarium (applied
+     * to every month the row pays) and / or its PS line item. Any allowance
+     * or deduction left from before is cleared.
+     */
     public function update(Payroll $payroll, array $data, User $actor): Payroll
     {
         $this->requireRole($payroll->project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can edit payroll.');
@@ -185,15 +295,11 @@ class PayrollService
         return AuditLogger::transaction(function () use ($payroll, $data, $actor) {
             $this->requireState($this->lockRecord($payroll->batch), PayrollBatch::EDITABLE, 'edited');
             $locked = $this->lockRecord($payroll);
+            $segments = array_key_exists('basic_rate', $data)
+                ? [['honorarium' => (float) $data['basic_rate'], 'months' => $locked->monthsPaid()]]
+                : $locked->segments();
 
-            return $this->recompute(
-                $locked,
-                array_key_exists('basic_rate', $data) ? (float) $data['basic_rate'] : (float) $locked->basic_rate,
-                array_key_exists('allowance', $data) ? (float) $data['allowance'] : (float) $locked->allowance,
-                array_intersect_key($data, array_flip(['lib_category_id'])),
-                'updated',
-                $actor
-            );
+            return $this->recompute($locked, $segments, array_intersect_key($data, array_flip(['lib_category_id'])), 'updated', $actor);
         });
     }
 
@@ -212,6 +318,10 @@ class PayrollService
         if (! $batch->rows()->exists()) {
             throw ValidationException::withMessages(['rows' => ['There is no payroll in this batch to submit.']]);
         }
+        if ($this->needsRecompute($batch)) {
+            throw ValidationException::withMessages(['rows' => [self::NEEDS_RECOMPUTE]]);
+        }
+        $this->requireWithinBalance($batch, false);
         // Same rule as the Payroll page: the signed payroll file goes with the batch.
         if (! $batch->documents()->where('document_type', 'payroll_file')->exists()) {
             throw ValidationException::withMessages(['documents' => ['Upload the payroll file before submitting.']]);
@@ -355,6 +465,8 @@ class PayrollService
     {
         $this->checkVerifier($batch, $actor, 'verify');
         $this->requireState($batch, ['endorsed'], 'verified');
+        // Verifying makes it spent: it must still fit its line items.
+        $this->requireWithinBalance($batch, true);
 
         $batch = $this->move($batch, 'verified', $actor, 'verified', ['endorsed'], [
             'verified_by' => $actor->id,
@@ -430,6 +542,9 @@ class PayrollService
         }
 
         $this->requireNotSame($batch->pl_reviewed_by, $actor, 'You approved this payroll; another person must verify it.');
+        if ($decision === 'approved') {
+            $this->requireWithinBalance($batch, true);
+        }
 
         return $decision === 'approved'
             ? $this->move($batch, 'verified', $actor, 'verified', ['endorsed'], ['verified_by' => $actor->id, 'verified_at' => now()], $remarks)
@@ -522,47 +637,101 @@ class PayrollService
         return Carbon::create($year, $month, 1)->format('F Y');
     }
 
-    /** Active members of the project with a monthly rate above zero, one per person. */
-    public function ratedMembers(Project $project): Collection
+    /**
+     * People paid for the period: effective in at least one of its months
+     * with an honorarium above zero, active and assigned. Keyed by user id.
+     *
+     * @return Collection<int, array{user_id: int, name: string, record: ProjectPersonnel, result: array}>
+     */
+    public function payees(Project $project, Carbon $from, Carbon $to): Collection
     {
-        return ProjectUser::query()
-            ->where('project_id', $project->id)
-            ->whereNotNull('monthly_rate')
-            ->where('monthly_rate', '>', 0)
-            ->with('user')
-            ->orderBy('id')
-            ->get()
-            ->filter(fn (ProjectUser $member) => $member->user && $member->user->is_active)
-            ->unique('user_id')
-            ->values();
+        return $this->personnel->recordsByPerson($project)
+            ->map(function (Collection $records, int $userId) use ($from, $to) {
+                $result = $this->calculator->forPeriod($records, $from, $to);
+                $latest = $records->sortByDesc(fn (ProjectPersonnel $r) => [$r->effective_from?->timestamp ?? 0, $r->id])
+                    ->first(fn (ProjectPersonnel $r) => $this->effectiveMonths($r, $from, $to) > 0);
+
+                return $result['gross'] > 0 && $latest
+                    ? ['user_id' => $userId, 'name' => $latest->user->name, 'record' => $latest, 'result' => $result]
+                    : null;
+            })
+            ->filter()
+            ->sortBy('name');
     }
 
     /**
-     * Active members of the project who are NOT included in payroll: no
-     * monthly rate set, or a rate of 0.00. Names and the reason, so the page
-     * can say who is missing (they never get a 0.00 row).
+     * Personnel of the project NOT paid in the period, by name: their
+     * appointment is not effective in any month of it ("not_effective"), or
+     * their honorarium is 0.00 there ("zero"). They never get a 0.00 row.
+     * People without a personnel record are not listed (Job Order and
+     * professional services go through expenses).
      *
-     * @return array<int, array{user_id: int, name: string, reason: string}>
+     * @return array<int, array{user_id: int, name: string, reason: string, reason_text: string}>
      */
-    public function unratedMembers(Project $project): array
+    public function notIncluded(Project $project, Carbon $from, Carbon $to): array
     {
-        $rated = $this->ratedMembers($project)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        return $this->personnel->recordsByPerson($project)
+            ->map(function (Collection $records, int $userId) use ($from, $to) {
+                $effective = $records->contains(fn (ProjectPersonnel $r) => $this->effectiveMonths($r, $from, $to) > 0);
+                if ($effective && $this->calculator->forPeriod($records, $from, $to)['gross'] > 0) {
+                    return null;
+                }
 
-        return ProjectUser::query()
-            ->where('project_id', $project->id)
-            ->with('user')
-            ->orderBy('id')
-            ->get()
-            ->filter(fn (ProjectUser $member) => $member->user && $member->user->is_active && ! in_array((int) $member->user_id, $rated, true))
-            ->unique('user_id')
-            ->map(fn (ProjectUser $member) => [
-                'user_id' => (int) $member->user_id,
-                'name' => $member->user->name,
-                'reason' => $member->monthly_rate === null ? 'not_set' : 'zero',
-            ])
+                return [
+                    'user_id' => $userId,
+                    'name' => $records->first()->user->name,
+                    'reason' => $effective ? 'zero' : 'not_effective',
+                    'reason_text' => $effective ? 'honorarium 0.00' : self::NOT_EFFECTIVE,
+                ];
+            })
+            ->filter()
             ->sortBy('name')
             ->values()
             ->all();
+    }
+
+    /** True when a draft / returned row still carries an allowance or deductions. */
+    public function needsRecompute(PayrollBatch $batch): bool
+    {
+        return $batch->isEditable() && $batch->rows()
+            ->where(fn ($q) => $q->where('allowance', '>', 0)->orWhere('total_deductions', '>', 0))
+            ->exists();
+    }
+
+    /**
+     * $from / $to as first days of months, $to not before $from, at most
+     * MAX_MONTHS months.
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function requirePeriod(Carbon $from, Carbon $to): array
+    {
+        $from = $from->copy()->startOfMonth()->startOfDay();
+        $to = $to->copy()->startOfMonth()->startOfDay();
+        if ($to->lt($from)) {
+            throw ValidationException::withMessages(['to' => ['The last month cannot be before the first month.']]);
+        }
+        if (PayrollBatch::monthsBetween($from, $to) > self::MAX_MONTHS) {
+            throw ValidationException::withMessages(['to' => ['A payroll covers at most ' . self::MAX_MONTHS . ' consecutive months.']]);
+        }
+
+        return [$from, $to];
+    }
+
+    private function effectiveMonths(ProjectPersonnel $record, Carbon $from, Carbon $to): int
+    {
+        $count = 0;
+        for ($month = $from->copy(); $month->lte($to); $month->addMonthNoOverflow()) {
+            $count += $record->coversMonth($month->year, $month->month) ? 1 : 0;
+        }
+
+        return $count;
+    }
+
+    /** @return Collection<int, PayrollBatch> */
+    private function batches(Project $project): Collection
+    {
+        return PayrollBatch::query()->where('project_id', $project->id)->orderBy('pay_year')->orderBy('pay_month')->get();
     }
 
     protected function stageLabels(): array
@@ -791,34 +960,31 @@ class PayrollService
         });
     }
 
-    /** Recompute one locked row with one audit entry (old / new money fields). */
-    private function recompute(Payroll $locked, float $basic, float $allowance, array $extra, string $auditAction, User $actor): Payroll
+    /**
+     * Recompute one locked row from its segments with one audit entry
+     * (old / new money fields): no allowance, no deductions, net = gross.
+     */
+    private function recompute(Payroll $locked, array $segments, array $extra, string $auditAction, User $actor): Payroll
     {
-        $result = $this->calculator->compute($basic, $allowance);
+        $result = $this->calculator->fromSegments($segments);
         $old = $this->money($locked);
 
         $locked->update(array_merge($extra, [
             // Whoever last computed or edited the row is one of its makers.
             'computed_by' => $actor->id,
             'basic_rate' => $result['basic'],
-            'allowance' => $result['allowance'],
+            'months' => $result['months'],
+            'computation' => $result['segments'],
+            'allowance' => 0,
             'gross_pay' => $result['gross'],
-            'total_deductions' => $result['total_deductions'],
+            'total_deductions' => 0,
             'net_pay' => $result['net'],
         ]));
-        $this->storeDeductions($locked, $result['deductions']);
+        $locked->deductions()->delete();
 
         AuditLogger::write($auditAction, $locked, $old, $this->money($locked->fresh()), $actor);
 
         return $locked->fresh();
-    }
-
-    private function storeDeductions(Payroll $payroll, array $deductions): void
-    {
-        $payroll->deductions()->delete();
-        foreach ($deductions as $deduction) {
-            $payroll->deductions()->create(['deduction_type' => $deduction['type'], 'amount' => $deduction['amount']]);
-        }
     }
 
     private function money(Payroll $payroll): array
@@ -830,6 +996,7 @@ class PayrollService
             'pay_year' => $payroll->pay_year,
             'lib_category_id' => $payroll->lib_category_id,
             'basic_rate' => (float) $payroll->basic_rate,
+            'months' => $payroll->monthsPaid(),
             'allowance' => (float) $payroll->allowance,
             'gross_pay' => (float) $payroll->gross_pay,
             'total_deductions' => (float) $payroll->total_deductions,

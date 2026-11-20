@@ -17,7 +17,7 @@ import { sourceLabels } from '../../lib/fundingSource';
 const MONEY = /^\d+(\.\d{1,2})?$/;
 
 /** '' -> error text; else null. */
-function moneyError(text, { positive = false } = {}) {
+export function moneyError(text, { positive = false } = {}) {
   const value = String(text ?? '').trim();
   if (value === '') return 'Enter an amount.';
   if (value.startsWith('-')) return 'The amount cannot be negative.';
@@ -26,7 +26,7 @@ function moneyError(text, { positive = false } = {}) {
   return null;
 }
 
-function Dialog({ title, labelId, busy, onClose, children }) {
+export function Dialog({ title, labelId, busy, onClose, children }) {
   const panelRef = useRef(null);
   useEffect(() => {
     panelRef.current?.querySelector('input, select, textarea, button:not(.program-icon-btn)')?.focus();
@@ -53,7 +53,7 @@ function Dialog({ title, labelId, busy, onClose, children }) {
 }
 
 /** Label + control + error, wired for screen readers. */
-function Field({ id, label, error, hint, full = false, children }) {
+export function Field({ id, label, error, hint, full = false, children }) {
   return (
     <div className={`program-field${full ? ' full' : ''}`}>
       <label htmlFor={id}>{label}</label>
@@ -65,7 +65,7 @@ function Field({ id, label, error, hint, full = false, children }) {
 }
 
 /** Runs a write: busy state, server field errors, or a general message. */
-function useSave(onSaved) {
+export function useSave(onSaved) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [serverErrors, setServerErrors] = useState({});

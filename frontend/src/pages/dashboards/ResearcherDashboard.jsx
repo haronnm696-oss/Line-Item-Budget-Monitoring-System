@@ -74,7 +74,7 @@ export default function ResearcherDashboard() {
                 <section className="program-card pl-kpi">
                   <div className="pl-kpi-head"><span className="pl-kpi-label">Total spent</span></div>
                   <div className="pl-kpi-value"><AnimatedNumber value={data.kpis.total_spent} format={peso} /></div>
-                  <div className="pl-kpi-sub">{formatPct(data.kpis.utilization_pct)} of the total budget · verified expenses</div>
+                  <div className="pl-kpi-sub">{formatPct(data.kpis.utilization_pct)} of the total budget · verified expenses and verified payroll</div>
                   <div className="pl-track"><span style={{ width: `${clampPct(data.kpis.utilization_pct)}%` }} /></div>
                 </section>
                 <section className="program-card pl-kpi">
@@ -107,7 +107,7 @@ export default function ResearcherDashboard() {
                     <Link className="program-card-link" to={`/transactions${q}`}>View all</Link>
                   </div>
                   {data.transactions.length === 0 ? (
-                    <p className="ld-empty">No verified expenses yet.</p>
+                    <p className="ld-empty">No verified expenses or payroll yet.</p>
                   ) : (
                     <TransactionTable rows={data.transactions} />
                   )}

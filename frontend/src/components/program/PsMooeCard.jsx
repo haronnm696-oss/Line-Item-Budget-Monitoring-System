@@ -11,7 +11,7 @@ function pctOf(spent, allocated) {
 }
 
 /**
- * Allocated (line items) and spent (verified expenses) by category.
+ * Allocated (line items) and spent (verified expenses and verified payroll) by category.
  * `summary` is the Overview payload's category_summary.
  */
 export default function PsMooeCard({ summary, action = null }) {

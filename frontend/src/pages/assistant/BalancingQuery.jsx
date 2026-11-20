@@ -42,7 +42,7 @@ export default function BalancingQuery() {
           <div className="program-eyebrow">Track · Research Assistant</div>
           <h1 className="program-h1">Balancing query</h1>
           <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Available = Allocated − Spent − Pending. Payroll is not part of LIB spent.
+            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Available = Allocated − Spent − Pending. Spent = verified expenses and verified payroll.
           </p>
         </div>
         <div className="pl-head-actions"><ProjectSelect picker={picker} id="ra-balancing-project" /></div>
@@ -61,6 +61,7 @@ export default function BalancingQuery() {
                     <th scope="col" className="num">Spent</th>
                     <th scope="col" className="num">Pending expenses</th>
                     <th scope="col" className="num">Pending requests</th>
+                    <th scope="col" className="num">Pending payroll</th>
                     <th scope="col" className="num">Available</th>
                   </tr>
                 </thead>
@@ -70,17 +71,19 @@ export default function BalancingQuery() {
                     if (group.length === 0) return null;
                     return (
                       <Fragment key={type}>
-                        <tr className="ld-group-row"><th colSpan={6} scope="colgroup">{label}</th></tr>
+                        <tr className="ld-group-row"><th colSpan={7} scope="colgroup">{label}</th></tr>
                         {group.map((row) => (
                           <tr key={row.id} className={String(row.id) === highlight ? 'ld-highlight' : ''}>
                             <td>
                               <div className="project-name">{row.name}</div>
                               {row.code && <div className="project-code">{row.code}</div>}
+                              {row.honoraria && <div className="project-code">Honoraria: paid through Payroll</div>}
                             </td>
                             <td className="num">{peso(row.allocated)}</td>
                             <td className="num">{peso(row.spent)}</td>
                             <td className="num">{peso(row.pending_expenses)}</td>
                             <td className="num">{peso(row.pending_purchase_requests)}</td>
+                            <td className="num">{peso(row.pending_payroll ?? 0)}</td>
                             <td className="num ld-amount"><Money value={row.available} /></td>
                           </tr>
                         ))}
@@ -90,6 +93,7 @@ export default function BalancingQuery() {
                           <td className="num">{peso(sum(group, 'spent'))}</td>
                           <td className="num">{peso(sum(group, 'pending_expenses'))}</td>
                           <td className="num">{peso(sum(group, 'pending_purchase_requests'))}</td>
+                          <td className="num">{peso(sum(group, 'pending_payroll'))}</td>
                           <td className="num"><Money value={sum(group, 'available')} /></td>
                         </tr>
                       </Fragment>
@@ -100,7 +104,7 @@ export default function BalancingQuery() {
                       <th scope="row">Project total</th>
                       <td className="num">{peso(totals.allocated)}</td>
                       <td className="num">{peso(totals.spent)}</td>
-                      <td className="num" colSpan={2}>{peso(totals.pending)} pending</td>
+                      <td className="num" colSpan={3}>{peso(totals.pending)} pending</td>
                       <td className="num"><Money value={totals.available} /></td>
                     </tr>
                   )}
@@ -108,7 +112,7 @@ export default function BalancingQuery() {
               </table>
             </div>
             <p className="ld-muted">
-              Spent = verified expenses. Pending = expenses submitted but not yet verified, plus approved purchase requests not yet fulfilled.
+              Spent = verified expenses and verified payroll. Pending = expenses and payroll waiting for approval or verification, plus approved purchase requests not yet fulfilled.
               A linked expense replaces its purchase request, so nothing is counted twice.
             </p>
           </section>

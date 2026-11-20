@@ -81,6 +81,7 @@ class ExpenseWorkflowService
     {
         $this->requireRole($project, $actor, array_merge(self::ENCODERS, [self::LEADER]), 'Only a Research Assistant, Finance/Admin staff or the Project Leader of this project can record expenses.');
         $linkId = $data['purchase_request_id'] ?? null;
+        $this->requireNotHonoraria($project->id, $data['lib_category_id'] ?? null);
 
         [$expense, $request] = AuditLogger::transaction(function () use ($project, $data, $actor, $linkId) {
             $data['funding_source'] = $this->fundingSource($data['lib_category_id'] ?? null, $data['funding_source'] ?? null, $linkId);
@@ -124,6 +125,7 @@ class ExpenseWorkflowService
             if ($current && $lineItem !== (int) $locked->lib_category_id) {
                 throw ValidationException::withMessages(['lib_category_id' => ["A linked expense stays on its purchase request's line item."]]);
             }
+            $this->requireNotHonoraria((int) $locked->project_id, $lineItem);
 
             // Re-resolved when the line item, the source or the link changes:
             // a hidden "Funded by" choice (no counterpart) means the funder.
@@ -186,6 +188,7 @@ class ExpenseWorkflowService
                 'documents' => ['Attach at least one receipt before submitting.'],
             ]);
         }
+        $this->requireNotHonoraria((int) $expense->project_id, $expense->lib_category_id);
         $this->requireAvailable($expense);
 
         // A Project Leader's own expense skips their approval step.
@@ -203,6 +206,19 @@ class ExpenseWorkflowService
         }
 
         return $expense;
+    }
+
+    /**
+     * No double counting: a PS line item that personnel are linked to
+     * (honoraria line) is paid through Payroll only, never as an expense.
+     */
+    private function requireNotHonoraria(int $projectId, $lineItemId): void
+    {
+        if ($lineItemId && in_array((int) $lineItemId, ProjectFinancialService::honorariaLineIds($projectId), true)) {
+            throw ValidationException::withMessages(['lib_category_id' => [
+                ProjectFinancialService::HONORARIA_LINE . ' Choose another line item for this expense.',
+            ]]);
+        }
     }
 
     /**

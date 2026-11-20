@@ -39,7 +39,7 @@ const FEATURES = [
   {
     icon: 'wallet',
     title: 'Payroll for project personnel',
-    text: 'Compute salaries, allowances, and government deductions for personnel services.',
+    text: 'Compute project honoraria from Special Orders: monthly honorarium x months effective.',
   },
   {
     icon: 'file',

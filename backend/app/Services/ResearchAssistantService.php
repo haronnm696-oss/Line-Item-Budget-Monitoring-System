@@ -328,16 +328,15 @@ class ResearchAssistantService
             'next_step' => match ($batch->workflow_status) {
                 'draft' => $documents->where('document_type', 'payroll_file')->isEmpty() ? 'Upload the payroll file, then submit' : 'Submit when ready',
                 'returned' => 'Correct it and submit again',
-                'verified' => 'Verified (payroll is not part of LIB spent)',
+                'verified' => 'Verified (counted in spent)',
                 default => $this->payroll->waitingText($batch, $user),
             },
             'escalated' => $batch->pendingEscalation() !== null,
             'submitted_by' => ['id' => $batch->submitted_by ?? $batch->prepared_by, 'name' => optional(User::find($batch->submitted_by ?? $batch->prepared_by))->name],
             'fields' => [
-                ['label' => 'Month', 'value' => $batch->monthLabel()],
+                ['label' => 'Pay period', 'value' => $batch->monthLabel()],
                 ['label' => 'People', 'value' => (string) $rows->count()],
                 ['label' => 'Gross pay', 'value' => round((float) $rows->sum('gross_pay'), 2), 'kind' => 'money'],
-                ['label' => 'Deductions', 'value' => round((float) $rows->sum('total_deductions'), 2), 'kind' => 'money'],
                 ['label' => 'Net pay', 'value' => round((float) $rows->sum('net_pay'), 2), 'kind' => 'money'],
                 ['label' => 'Project Leader', 'value' => $batch->plReviewedBy?->name],
                 ['label' => 'Verified by', 'value' => $batch->workflow_status === 'verified' ? $batch->verifiedBy?->name : null],
@@ -402,7 +401,7 @@ class ResearchAssistantService
     {
         return match ($type) {
             'expense' => $record->reference_no ?: 'EXP-' . $record->id,
-            'payroll' => 'PAY-' . $record->monthKey(),
+            'payroll' => $record->reference(),
             'purchase_request' => 'PR-' . $record->id,
         };
     }

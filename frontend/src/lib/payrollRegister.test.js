@@ -5,52 +5,56 @@ import { REGISTER_PERIOD, registerCell, registerColumns, registerDocumentHtml, r
 
 const escape = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const money = (value) => `P${Number(value).toFixed(2)}`;
-const types = ['GSIS', 'PhilHealth', 'Pag-IBIG', 'Withholding Tax'];
-const person = (name, gross, deductions) => {
-  const total = Object.values(deductions).reduce((a, b) => a + b, 0);
-  return { name, position: 'Researcher', monthly_rate: gross, allowance: 0, gross, deductions: { GSIS: 0, PhilHealth: 0, 'Pag-IBIG': 0, 'Withholding Tax': 0, ...deductions }, total_deductions: total, net: gross - total };
-};
+const person = (name, honorarium, months) => ({
+  name, position: 'Researcher', monthly_rate: honorarium, months,
+  computation: `(${honorarium.toLocaleString('en-US')} x ${months} ${months === 1 ? 'month' : 'months'}) = ${(honorarium * months).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+  gross: honorarium * months, recorded_deductions: 0, net: honorarium * months,
+});
 const register = {
   project: { code: 'P-1', title: 'Project <one>' },
   period_label: 'All dates',
-  rates_label: null,
-  deduction_types: types,
+  has_recorded_deductions: false,
   months: [
-    { month: '2026-10', month_label: 'October 2026', rows: [person('Ana', 30000, { GSIS: 2700 }), person('Ben', 20000, { PhilHealth: 500 })],
-      totals: { monthly_rate: 50000, allowance: 0, gross: 50000, deductions: { GSIS: 2700, PhilHealth: 500, 'Pag-IBIG': 0, 'Withholding Tax': 0 }, total_deductions: 3200, net: 46800 } },
+    { month: '2025-10', month_label: 'October to December 2025', months: 3, rows: [person('Ana', 8800, 3), person('Ben', 8800, 2)],
+      totals: { people: 2, gross: 44000, recorded_deductions: 0, net: 44000 } },
   ],
-  totals: { monthly_rate: 50000, allowance: 0, gross: 50000, deductions: { GSIS: 2700, PhilHealth: 500, 'Pag-IBIG': 0, 'Withholding Tax': 0 }, total_deductions: 3200, net: 46800 },
+  totals: { people: 2, gross: 44000, recorded_deductions: 0, net: 44000 },
 };
 
 test('Reports periods map to the API period', () => {
   assert.deepEqual(REGISTER_PERIOD, { 'All dates': 'all', 'Current year': 'year', 'Last 90 days': '90d' });
 });
 
-test('one column per deduction between gross and total deductions', () => {
+test('no deduction or allowance columns: computation, gross and net only', () => {
   const labels = registerColumns(register).map((c) => c.label);
-  assert.deepEqual(labels, ['Month', 'Name', 'Position', 'Monthly rate', 'Allowance', 'Gross pay', ...types, 'Total deductions', 'Net pay']);
+  assert.deepEqual(labels, ['Pay period', 'Name', 'Position', 'Computation', 'Gross pay', 'Net pay']);
+  assert.ok(!labels.some((label) => /allowance|gsis|philhealth|pag-ibig|tax/i.test(label)));
 });
 
-test('rows: each person, a month total, then the grand total', () => {
+test('older verified batches with recorded deductions get one "Recorded deductions" column', () => {
+  const labels = registerColumns({ ...register, has_recorded_deductions: true }).map((c) => c.label);
+  assert.deepEqual(labels, ['Pay period', 'Name', 'Position', 'Computation', 'Gross pay', 'Recorded deductions', 'Net pay']);
+});
+
+test('rows: each person, a period total, then the grand total', () => {
   const rows = registerRows(register);
   assert.deepEqual(rows.map((r) => r.kind), ['person', 'person', 'month', 'grand']);
-  const gsis = registerColumns(register).find((c) => c.label === 'GSIS');
-  assert.equal(registerCell(rows[0], gsis), 2700);
-  assert.equal(registerCell(rows[2], gsis), 2700);
-  assert.equal(rows[2].name, 'Month total');
+  const computation = registerColumns(register).find((c) => c.key === 'computation');
+  assert.equal(registerCell(rows[0], computation), '(8,800 x 3 months) = 26,400.00');
+  const net = registerColumns(register).find((c) => c.key === 'net');
+  assert.equal(registerCell(rows[2], net), 44000);
+  assert.equal(rows[2].name, 'Period total');
   assert.equal(registerRows({ months: [] }).length, 0);
 });
 
-test('the printed register lists people and totals, and prints the label only when set', () => {
+test('the printed register lists people, computations and totals', () => {
   const html = registerTableHtml(register, escape, money);
   assert.match(html, /Ana/);
-  assert.match(html, /P46800\.00/);
+  assert.match(html, /\(8,800 x 2 months\) = 17,600\.00/);
+  assert.match(html, /P44000\.00/);
   assert.match(registerTableHtml({ ...register, months: [] }, escape, money), /No verified payroll/);
 
-  const plain = registerDocumentHtml(register, { escape, money, generated: 'Nov 18, 2026' });
-  assert.doesNotMatch(plain, /rates-label" role/);
-  assert.match(plain, /Project &lt;one&gt;/);
-  const labelled = registerDocumentHtml({ ...register, rates_label: 'Demo deduction rates, not official' }, { escape, money, generated: '' });
-  assert.match(labelled, /⚠ Demo deduction rates, not official/);
-  assert.ok(labelled.indexOf('Demo deduction rates') < labelled.indexOf('<table>'));
+  const doc = registerDocumentHtml(register, { escape, money, generated: 'Nov 18, 2026' });
+  assert.match(doc, /Project &lt;one&gt;/);
+  assert.match(doc, /no deductions and no allowances/);
 });

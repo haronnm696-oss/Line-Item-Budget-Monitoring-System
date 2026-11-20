@@ -35,7 +35,7 @@ class ResearchAssistantPagesTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
-        config(['payroll.deductions' => [], 'documents.disk' => 'local']);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
         $this->ps = AuditLogger::muted(fn () => LibCategory::create([
             'project_id' => $this->project->id, 'category_type' => 'PS',
@@ -173,23 +173,21 @@ class ResearchAssistantPagesTest extends TestCase
             ->assertJsonMissing(['can_resubmit' => true]);
     }
 
-    public function test_the_payroll_rates_label_is_sent_only_when_set(): void
+    public function test_no_payroll_rates_label_or_deduction_settings_are_sent(): void
     {
         $this->submittedBatch();
         $urls = [
-            [$this->assistant, $this->url('payroll?month=2026-11'), 'rates_label'],
-            [$this->finance, $this->url('payroll-batches'), 'rates_label'],
-            [$this->finance, $this->url(), 'payroll_rates_label'], // Reports: Payroll register
+            [$this->assistant, $this->url('payroll?month=2026-11'), ['rates_label', 'unset_rules', 'deductionBreakdown']],
+            [$this->finance, $this->url('payroll-batches'), ['rates_label']],
+            [$this->finance, $this->url(), ['payroll_rates_label']], // Reports: Payroll register
+            [$this->finance, $this->url('payroll-register'), ['rates_label', 'deduction_types']],
         ];
 
-        config(['payroll.rates_label' => null]);
-        foreach ($urls as [$user, $url, $key]) {
-            $this->assertNull($this->actingAs($user)->getJson($url)->assertOk()->json($key), $url);
-        }
-
-        config(['payroll.rates_label' => 'Demo deduction rates, not official']);
-        foreach ($urls as [$user, $url, $key]) {
-            $this->actingAs($user)->getJson($url)->assertOk()->assertJsonPath($key, 'Demo deduction rates, not official');
+        foreach ($urls as [$user, $url, $keys]) {
+            $json = $this->actingAs($user)->getJson($url)->assertOk()->json();
+            foreach ($keys as $key) {
+                $this->assertArrayNotHasKey($key, $json, $url);
+            }
         }
     }
 
@@ -406,8 +404,7 @@ class ResearchAssistantPagesTest extends TestCase
 
     private function submittedBatch(): PayrollBatch
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $this->researcher->id)
-            ->update(['monthly_rate' => 30000, 'allowance' => 0]));
+        $this->setHonorarium($this->researcher, 30000);
         $this->actingAs($this->assistant)
             ->postJson($this->url('payroll'), ['month' => '2026-11', 'lib_category_id' => $this->ps->id])
             ->assertCreated();

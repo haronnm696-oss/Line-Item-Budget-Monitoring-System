@@ -13,8 +13,10 @@ import { formatDate } from '../../lib/datetime';
 const FILTERS = ['from', 'to', 'line_item', 'category'];
 
 /**
- * Transactions: verified (spent) expenses of the project, newest first,
- * 25 per page, with date range, line item and category filters in the URL.
+ * Transactions: what Total spent adds up, newest first, 25 per page, with
+ * date range, line item and category filters in the URL. Spent = verified
+ * expenses and verified payroll (one payroll row per batch and line item,
+ * `kind: 'payroll'`; its documents are the batch's payroll files).
  */
 export default function Transactions() {
   const picker = useAssignedProject();
@@ -56,7 +58,7 @@ export default function Transactions() {
           <h1 className="program-h1">Transactions</h1>
           <p className="program-sub">
             {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}
-            Verified expenses, newest first
+            Spent = verified expenses and verified payroll, newest first
           </p>
         </div>
         <div className="pl-head-actions">
@@ -99,7 +101,7 @@ export default function Transactions() {
         {validationError ? (
           <div className="program-banner error" role="alert">{validationError}</div>
         ) : (
-          <LoadState state={result} loadingText="Loading transactions…" emptyText={hasFilters ? 'No verified expenses match these filters.' : 'No verified expenses yet.'} isEmpty={rows.length === 0}>
+          <LoadState state={result} loadingText="Loading transactions…" emptyText={hasFilters ? 'No verified expenses or payroll match these filters.' : 'No verified expenses or payroll yet.'} isEmpty={rows.length === 0}>
             <section className="program-card">
               <div className="program-card-head">
                 <div>
@@ -120,10 +122,10 @@ export default function Transactions() {
                   </thead>
                   <tbody>
                     {rows.map((row) => (
-                      <tr key={row.id}>
+                      <tr key={`${row.kind ?? 'expense'}-${row.id}`}>
                         <td>{formatDate(row.date)}</td>
                         <td>
-                          <div className="project-name">{row.description}</div>
+                          <div className="project-name">{row.kind === 'payroll' ? <><span className="ra-type">Payroll</span> {row.description}</> : row.description}</div>
                           <div className="project-code">
                             {[row.payee, row.reference_no && `Ref. ${row.reference_no}`, row.verified_by && `Verified by ${row.verified_by}`].filter(Boolean).join(' · ')}
                           </div>
@@ -134,7 +136,7 @@ export default function Transactions() {
                           <button type="button" className="ld-link" onClick={() => setDocsFor(row)}>
                             {row.documents_count > 0 ? `${row.documents_count} document${row.documents_count === 1 ? '' : 's'}` : 'View documents'}
                           </button>
-                          {row.receipts_count === 0 && <div className="project-code">No receipt</div>}
+                          {row.kind !== 'payroll' && row.receipts_count === 0 && <div className="project-code">No receipt</div>}
                         </td>
                       </tr>
                     ))}
@@ -158,12 +160,14 @@ export default function Transactions() {
           <aside className="ld-panel" role="dialog" aria-modal="true" aria-labelledby="tx-docs-title" onClick={(e) => e.stopPropagation()}>
             <div className="ld-panel-head">
               <div>
-                <div className="ld-panel-eyebrow">Expense · {formatDate(docsFor.date)} · {peso(docsFor.amount)}</div>
+                <div className="ld-panel-eyebrow">{docsFor.kind === 'payroll' ? 'Payroll' : 'Expense'} · {formatDate(docsFor.date)} · {peso(docsFor.amount)}</div>
                 <h2 className="ld-panel-title" id="tx-docs-title">{docsFor.description}</h2>
               </div>
               <button type="button" className="program-icon-btn" onClick={() => setDocsFor(null)} aria-label="Close panel">×</button>
             </div>
-            <DocumentList type="expense" id={docsFor.id} />
+            {docsFor.kind === 'payroll'
+              ? (docsFor.batch_id ? <DocumentList type="payroll" id={docsFor.batch_id} /> : <p className="ld-muted">No payroll files.</p>)
+              : <DocumentList type="expense" id={docsFor.id} />}
           </aside>
         </div>
       )}

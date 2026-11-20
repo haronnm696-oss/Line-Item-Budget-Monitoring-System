@@ -140,9 +140,11 @@ class FinanceService
             'kpis' => [
                 'to_verify' => $queue['counts']['waiting'],
                 'to_verify_actionable' => collect($queue['items'])->where('can_verify', true)->count(),
-                // Expense amount verified this month (payroll is not spent), and the
-                // counts of expenses and payroll batches verified, kept separate.
-                'verified_this_month' => round((float) (clone $verifiedExpenses)->sum('amount'), 2),
+                // Amount verified this month (expenses and payroll: both are spent),
+                // and the counts of expenses and payroll batches verified, kept separate.
+                'verified_this_month' => round((float) (clone $verifiedExpenses)->sum('amount')
+                    + (float) ProjectFinancialService::onlySpentPayroll(\App\Models\Payroll::query())
+                        ->whereIn('payroll_batch_id', (clone $verifiedBatches)->select('id'))->sum('gross_pay'), 2),
                 'verified_this_month_expenses' => (clone $verifiedExpenses)->count(),
                 'verified_this_month_payroll' => (clone $verifiedBatches)->count(),
                 'month_label' => Carbon::now('Asia/Manila')->format('F Y'),
@@ -161,7 +163,7 @@ class FinanceService
         ];
     }
 
-    /** Every payroll batch of the project, newest month first, with its next step. */
+    /** Every payroll batch of the project, newest period first, with its next step. */
     public function payrollBatches(Project $project, User $user): array
     {
         return PayrollBatch::query()->where('project_id', $project->id)
@@ -355,7 +357,7 @@ class FinanceService
         $preparer = $batch->submittedBy ?? $batch->preparedBy;
 
         return [
-            'reference' => 'PAY-' . $batch->monthKey(),
+            'reference' => $batch->reference(),
             'title' => 'Payroll ' . $batch->monthLabel(),
             'month' => $batch->monthKey(),
             'details' => $rows->count() . ' ' . ($rows->count() === 1 ? 'person' : 'people') . ' · net ₱' . number_format((float) $rows->sum('net_pay'), 2),
@@ -365,21 +367,21 @@ class FinanceService
             'next_step' => match ($batch->workflow_status) {
                 'draft' => 'Being prepared',
                 'returned' => 'Returned to the preparer',
-                'verified' => 'Verified (payroll is not part of LIB spent)',
+                'verified' => 'Verified (counted in spent)',
                 default => $this->payroll->waitingText($batch, $user),
             },
             'submitted_by' => ['id' => $preparer?->id, 'name' => $preparer?->name],
             'approval_note' => null,
             'can_verify' => $canVerify,
             'blocked_text' => $blocked,
-            'counts_as_spent' => false,
+            // Verified payroll is spent, charged to each person's PS line item.
+            'counts_as_spent' => true,
             'can_edit' => false,
             'edit' => null,
             'fields' => [
-                ['label' => 'Month', 'value' => $batch->monthLabel()],
+                ['label' => 'Pay period', 'value' => $batch->monthLabel()],
                 ['label' => 'People', 'value' => (string) $rows->count()],
                 ['label' => 'Gross pay', 'value' => round((float) $rows->sum('gross_pay'), 2), 'kind' => 'money'],
-                ['label' => 'Deductions', 'value' => round((float) $rows->sum('total_deductions'), 2), 'kind' => 'money'],
                 ['label' => 'Net pay', 'value' => round((float) $rows->sum('net_pay'), 2), 'kind' => 'money'],
                 ['label' => 'Approved by', 'value' => $batch->plReviewedBy?->name],
                 ['label' => 'Verified by', 'value' => $batch->workflow_status === 'verified' ? $batch->verifiedBy?->name : null],

@@ -97,9 +97,11 @@ class ProgramDashboardService
     }
 
     /**
-     * Verified expenses per calendar month of the current year, by
-     * expense_date. Months after the current month are future slots with no
-     * amount: the Overview is descriptive only and never projects ahead.
+     * Spent per calendar month of the current year: verified expenses by
+     * expense_date and verified payroll by its entry date
+     * (ProjectFinancialService::spentEntries()). Months after the current
+     * month are future slots with no amount: the Overview is descriptive
+     * only and never projects ahead.
      *
      * @return array<int, array{month: string, label: string, amount: float|null, is_future: bool}>
      */
@@ -108,19 +110,11 @@ class ProgramDashboardService
         $year = (int) $today->year;
         $totals = array_fill(1, 12, 0.0);
 
-        if ($projects->isNotEmpty()) {
-            Expense::query()
-                ->whereIn('project_id', $projects->pluck('id'))
-                ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
-                ->whereBetween('expense_date', [
-                    Carbon::create($year, 1, 1)->toDateString(),
-                    Carbon::create($year, 12, 31)->toDateString(),
-                ])
-                ->get(['amount', 'expense_date'])
-                ->each(function ($expense) use (&$totals) {
-                    $totals[(int) $expense->expense_date->month] += (float) $expense->amount;
-                });
-        }
+        ProjectFinancialService::spentEntries($projects->pluck('id')->map(fn ($id) => (int) $id)->all())
+            ->filter(fn (array $entry) => $entry['date'] && (int) substr($entry['date'], 0, 4) === $year)
+            ->each(function (array $entry) use (&$totals) {
+                $totals[(int) substr($entry['date'], 5, 2)] += $entry['amount'];
+            });
 
         return collect(range(1, 12))->map(function (int $month) use ($year, $today, $totals) {
             $date = Carbon::create($year, $month, 1);
@@ -136,10 +130,10 @@ class ProgramDashboardService
     }
 
     /**
-     * PS vs MOOE: allocated from line items, spent from verified expenses
-     * through their line item. Verified expenses whose line item is missing
-     * or not PS/MOOE are reported as uncategorized so the parts always add
-     * up to total spent.
+     * PS vs MOOE: allocated from line items, spent (verified expenses and
+     * verified payroll) through their line item. Spending whose line item is
+     * missing or not PS/MOOE is reported as uncategorized so the parts always
+     * add up to total spent.
      *
      * @return array<string, mixed>
      */
@@ -157,22 +151,15 @@ class ProgramDashboardService
         $spent = ['PS' => 0.0, 'MOOE' => 0.0];
         $uncategorized = 0.0;
         $uncategorizedCount = 0;
-        if ($projects->isNotEmpty()) {
-            Expense::query()
-                ->whereIn('project_id', $projects->pluck('id'))
-                ->tap(fn ($query) => ProjectFinancialService::onlySpent($query))
-                ->with('libCategory:id,category_type')
-                ->get(['id', 'lib_category_id', 'amount'])
-                ->each(function ($expense) use (&$spent, &$uncategorized, &$uncategorizedCount) {
-                    $type = $expense->libCategory?->category_type;
-                    if (array_key_exists((string) $type, $spent)) {
-                        $spent[$type] += (float) $expense->amount;
-                    } else {
-                        $uncategorized += (float) $expense->amount;
-                        $uncategorizedCount++;
-                    }
-                });
-        }
+        ProjectFinancialService::spentEntries($projects->pluck('id')->map(fn ($id) => (int) $id)->all())
+            ->each(function (array $entry) use (&$spent, &$uncategorized, &$uncategorizedCount) {
+                if (array_key_exists((string) $entry['type'], $spent)) {
+                    $spent[$entry['type']] += $entry['amount'];
+                } else {
+                    $uncategorized += $entry['amount'];
+                    $uncategorizedCount++;
+                }
+            });
 
         $bucket = fn (string $type) => [
             'allocated' => round($allocated[$type], 2),
@@ -779,15 +766,15 @@ class ProgramDashboardService
 
     /**
      * Most recent recorded expense (any status) or payroll period. A payroll
-     * entry counts from the last day of its pay month, capped at today.
+     * batch counts from the last day of its period's last month, capped at today.
      */
     protected function lastEntryDate(Project $project, Carbon $today): ?string
     {
         $expense = $project->expenses()->max('expense_date');
-        $payroll = $project->payrolls()
-            ->orderByDesc('pay_year')
-            ->orderByDesc('pay_month')
-            ->first(['pay_year', 'pay_month']);
+        $payrollEnd = \App\Models\PayrollBatch::query()->where('project_id', $project->id)->get()
+            ->map(fn (\App\Models\PayrollBatch $batch) => $batch->periodEnd())
+            ->sortByDesc(fn (Carbon $date) => $date->timestamp)
+            ->first();
 
         $dates = collect();
 
@@ -795,8 +782,8 @@ class ProgramDashboardService
             $dates->push(Carbon::parse($expense)->startOfDay());
         }
 
-        if ($payroll) {
-            $end = Carbon::create((int) $payroll->pay_year, (int) $payroll->pay_month, 1)->endOfMonth()->startOfDay();
+        if ($payrollEnd) {
+            $end = $payrollEnd->copy()->endOfMonth()->startOfDay();
             $dates->push($end->greaterThan($today) ? $today->copy() : $end);
         }
 

@@ -1,9 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
-import { rateText } from '../../lib/payRate';
-import { peso } from '../money';
-import { PayRateForm } from '../payroll/PayRates';
 import { contactNumberCounter, contactNumberError } from '../../lib/authValidation';
 import ContactNumberInput from '../ContactNumberInput';
 import AcademicUnitFields from '../AcademicUnitFields';
@@ -401,12 +398,12 @@ export function MismatchWarning({ assignment, user }) {
 /**
  * One assignment in the "Edit project assignments" dialog. The role on the
  * project is the account role (read-only); an older row whose role differs
- * gets a warning and "Fix". Also: set the pay rate, or remove the person
- * from the project (confirmation + required reason).
+ * gets a warning and "Fix". Also: remove the person from the project
+ * (confirmation + required reason). Pay is kept under Personnel on the
+ * project page, not here.
  */
 function AssignmentRow({ user, assignment, programWide, onFix, onRemove, onDone }) {
   const [removing, setRemoving] = useState(false);
-  const [editingRate, setEditingRate] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -459,23 +456,11 @@ function AssignmentRow({ user, assignment, programWide, onFix, onRemove, onDone 
       )}
 
       {!programWide && !removing && (
-        editingRate ? (
-          <PayRateForm
-            projectId={assignment.project_id}
-            member={{ user_id: user.id, name: user.name, monthly_rate: assignment.monthly_rate ?? null, allowance: assignment.allowance ?? null }}
-            idBase={`${base}-pay`}
-            onCancel={() => setEditingRate(false)}
-            onSaved={(_, message) => { setEditingRate(false); onDone(`${message.replace(/\.$/, '')} on ${assignment.project}.`); }}
-          />
-        ) : (
-          <div className="pu-asg-pay">
-            <span>Monthly rate: <b>{rateText(assignment.monthly_rate, peso)}</b></span>
-            <span>Allowance: <b>{assignment.monthly_rate == null ? 'Not set' : rateText(assignment.allowance, peso)}</b></span>
-            <button type="button" className="program-btn sm" disabled={busy} onClick={() => { setEditingRate(true); setError(''); }}>
-              Edit pay rate<span className="pa-sr-only"> on {assignment.project}</span>
-            </button>
-          </div>
-        )
+        <div className="pu-asg-pay">
+          <Link className="au-link" to={`/program-projects/${assignment.project_id}#personnel-title`}>
+            Pay and Special Order: Personnel on the project page
+          </Link>
+        </div>
       )}
 
       {removing ? (

@@ -186,14 +186,34 @@ class DashboardService
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * The project's ledger: every expense (any status) plus verified payroll
+     * (one row per batch and line item, `kind` payroll), newest first.
+     */
     protected function expenseRows(Project $project): array
     {
+        $payroll = ProjectFinancialService::payrollEntries([(int) $project->id])->map(fn (array $p) => [
+            'kind' => 'payroll',
+            'id' => $p['key'],
+            'batch_id' => $p['batch_id'],
+            'date' => $p['date'],
+            'ref' => $p['reference_no'],
+            'desc' => $p['description'],
+            'category' => $p['line_item'],
+            'type' => $p['type'],
+            'amount' => $p['amount'],
+            'status' => 'Verified',
+            'recorded_by' => $p['recorded_by'],
+            'verified_by' => $p['verified_by'],
+        ]);
+
         return $project->expenses()
             ->with(['libCategory', 'recordedBy', 'verifiedBy'])
             ->orderByDesc('expense_date')
             ->orderByDesc('id')
             ->get()
             ->map(fn ($expense) => [
+                'kind' => 'expense',
                 'id' => $expense->id,
                 'date' => $expense->expense_date?->toDateString(),
                 'ref' => $expense->reference_no,
@@ -205,6 +225,9 @@ class DashboardService
                 'recorded_by' => $expense->recordedBy?->name,
                 'verified_by' => $expense->verifiedBy?->name,
             ])
+            ->concat($payroll)
+            ->sortByDesc('date')
+            ->values()
             ->all();
     }
 

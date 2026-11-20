@@ -56,7 +56,7 @@ export default function LineItemBudget() {
           <h1 className="program-h1">Line-item budget</h1>
           <p className="program-sub">
             {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}
-            Available = allocated − spent − pending. Payroll is not included.
+            Available = allocated − spent − pending. Spent = verified expenses and verified payroll.
           </p>
         </div>
         <div className="pl-head-actions">

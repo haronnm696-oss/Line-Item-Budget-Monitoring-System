@@ -31,7 +31,7 @@ class ProjectLeaderPagesTest extends TestCase
     {
         parent::setUp();
         $this->buildWorkflowFixtures();
-        config(['payroll.deductions' => [], 'documents.disk' => 'local']);
+        config(['documents.disk' => 'local']);
         Storage::fake('local');
         $this->ps = AuditLogger::muted(fn () => LibCategory::create([
             'project_id' => $this->project->id, 'category_type' => 'PS',
@@ -362,8 +362,7 @@ class ProjectLeaderPagesTest extends TestCase
 
     private function rate(User $user, float $monthly): void
     {
-        AuditLogger::muted(fn () => ProjectUser::where('project_id', $this->project->id)->where('user_id', $user->id)
-            ->update(['monthly_rate' => $monthly, 'allowance' => 0]));
+        $this->setHonorarium($user, $monthly);
     }
 
     /** A month's payroll created and submitted by the Research Assistant. */
