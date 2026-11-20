@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DATE_MAX, DATE_MIN, inDateRange } from '../../lib/dateRange';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchProgramAudit } from '../../api/program';
 import { PH_TIME_LABEL, formatDateTime } from '../../lib/datetime';
@@ -222,11 +223,11 @@ export default function ProgramAudit() {
         </div>
         <div className="program-field au-date">
           <label htmlFor="audit-from">From</label>
-          <input id="audit-from" className="program-input" type="date" value={filters.from} max={filters.to || undefined} onChange={(event) => setFilter('from', event.target.value)} />
+          <input id="audit-from" className="program-input" type="date" min={DATE_MIN} value={filters.from} max={filters.to || DATE_MAX} onChange={(event) => { if (inDateRange(event.target.value)) setFilter('from', event.target.value); }} />
         </div>
         <div className="program-field au-date">
           <label htmlFor="audit-to">To</label>
-          <input id="audit-to" className="program-input" type="date" value={filters.to} min={filters.from || undefined} onChange={(event) => setFilter('to', event.target.value)} />
+          <input id="audit-to" className="program-input" type="date" value={filters.to} min={filters.from || DATE_MIN} max={DATE_MAX} onChange={(event) => { if (inDateRange(event.target.value)) setFilter('to', event.target.value); }} />
         </div>
         {hasFilters && (
           <button type="button" className="pp-clear" onClick={clearFilters}>Clear filters</button>

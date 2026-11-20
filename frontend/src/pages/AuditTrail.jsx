@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DATE_BOUNDS, inDateRange } from '../lib/dateRange';
 import Chip from '../components/Chip';
 import LoadState from '../components/LoadState';
 import { ENDPOINTS } from '../api/endpoints';
@@ -228,7 +229,7 @@ export default function AuditTrail() {
             <option key={rt} value={rt}>{rt === 'All' ? 'All record types' : rt}</option>
           ))}
         </select>
-        <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+        <input type="date" {...DATE_BOUNDS} value={dateFilter} onChange={(e) => { if (inDateRange(e.target.value)) setDateFilter(e.target.value); }} />
       </div>
 
       <LoadState state={state} loadingText="Loading audit entries…">

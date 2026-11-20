@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MoneyInput;
 use App\Models\ApprovalRequest;
 use App\Models\Document;
 use App\Models\Project;
@@ -101,7 +102,7 @@ class BudgetRequestController extends Controller
             'to_lib_category_id' => ['nullable', 'integer', 'required_if:type,realignment'],
             // Realignment moves money within one source (funder by default).
             'funding_source' => ['nullable', Rule::in(\App\Models\LibCategory::SOURCES)],
-            'amount' => ['nullable', 'numeric', 'gt:0', 'max:9999999999999.99', 'required_if:type,realignment', 'required_if:type,liquidation'],
+            'amount' => array_merge(['nullable', 'gt:0', 'required_if:type,realignment', 'required_if:type,liquidation'], MoneyInput::RULES),
             'document_type' => ['nullable', Rule::in(Document::TYPES)],
             'files' => ['nullable', 'array', 'max:10'],
             'files.*' => DocumentController::fileRules(),

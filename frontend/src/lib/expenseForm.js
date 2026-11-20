@@ -3,6 +3,8 @@
  * line item, and filling the form from a linked purchase request.
  */
 
+import { moneyText } from './moneyInput.js';
+
 export const LINE_ITEM_GROUPS = ['PS', 'MOOE'];
 
 export const PS_NOTE = 'Salaries and honoraria are recorded through Payroll.';
@@ -85,7 +87,7 @@ function requestValues(request) {
   if (!request) return { lib_category_id: '', amount: '', payee: '', description: '' };
   return {
     lib_category_id: request.lib_category_id == null ? '' : String(request.lib_category_id),
-    amount: request.estimated_amount == null ? '' : String(request.estimated_amount),
+    amount: request.estimated_amount == null ? '' : moneyText(request.estimated_amount),
     payee: request.supplier == null ? '' : String(request.supplier),
     description: request.description == null ? '' : String(request.description),
   };

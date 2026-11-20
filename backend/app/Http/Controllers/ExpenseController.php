@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MoneyInput;
+use App\Rules\DateInRange;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Project;
@@ -114,10 +116,10 @@ class ExpenseController extends Controller
         return $request->validate([
             'lib_category_id' => [$required, 'integer', Rule::exists((new LibCategory())->getTable(), 'id')->where('project_id', $project->id)],
             'description' => [$required, 'string', 'max:500'],
-            'amount' => [$required, 'numeric', 'gt:0', 'max:9999999999999.99'],
+            'amount' => array_merge([$required, 'gt:0'], MoneyInput::RULES),
             // Funder by default; the implementing agency only on a line item with a counterpart.
             'funding_source' => ['sometimes', 'nullable', Rule::in(LibCategory::SOURCES)],
-            'expense_date' => [$required, 'date'],
+            'expense_date' => ['bail', $required, new DateInRange(), 'date'],
             'reference_no' => ['nullable', 'string', 'max:100'],
             'payee' => ['nullable', 'string', 'max:255'],
             // An approved purchase request of this project that the expense fulfils.

@@ -43,6 +43,8 @@ class Kernel extends HttpKernel
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             'throttle:api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            // "3,178,376.00" -> "3178376.00" on peso fields (App\Support\MoneyInput).
+            \App\Http\Middleware\NormalizeMoneyInput::class,
         ],
     ];
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\DateInRange;
 use App\Models\AuditTrail;
 use App\Models\Project;
 use App\Models\User;
@@ -25,8 +26,8 @@ class ProgramAuditController extends Controller
             'action' => ['nullable', 'string', 'max:50'],
             'project' => ['nullable', 'integer'],
             'user' => ['nullable', 'integer'],
-            'from' => ['nullable', 'date_format:Y-m-d'],
-            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'from' => ['bail', 'nullable', new DateInRange(), 'date_format:Y-m-d'],
+            'to' => ['bail', 'nullable', new DateInRange(), 'date_format:Y-m-d', 'after_or_equal:from'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 

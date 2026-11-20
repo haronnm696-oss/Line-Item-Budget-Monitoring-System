@@ -145,6 +145,13 @@ return [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
+        // Peso fields (App\Support\MoneyInput): commas are stripped first, so these mean a malformed amount.
+        'amount' => ['regex' => 'Enter a number with at most two decimals.', 'numeric' => 'Enter the amount as a number, for example 3,178,376.00.'],
+        'estimated_amount' => ['regex' => 'Enter a number with at most two decimals.', 'numeric' => 'Enter the amount as a number, for example 3,178,376.00.'],
+        'basic_rate' => ['regex' => 'Enter a number with at most two decimals.', 'numeric' => 'Enter the amount as a number, for example 3,178,376.00.'],
+        'total_approved_budget' => ['regex' => 'Enter a number with at most two decimals.', 'numeric' => 'Enter the amount as a number, for example 3,178,376.00.'],
+        'funding_agency_amount' => ['regex' => 'Enter a number with at most two decimals.', 'numeric' => 'Enter the amount as a number, for example 3,178,376.00.'],
+        'monthly_honorarium' => ['regex' => 'Enter a number with at most two decimals.', 'numeric' => 'Enter the amount as a number, for example 3,178,376.00.'],
     ],
 
     /*

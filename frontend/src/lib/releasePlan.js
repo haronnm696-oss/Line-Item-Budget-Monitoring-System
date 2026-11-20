@@ -5,6 +5,8 @@
  * the planned releases. Amounts are in pesos, rounded to centavos.
  */
 
+import { formatMoneyText, parseMoney } from './moneyInput.js';
+
 const cents = (value) => Math.round((Number(value) || 0) * 100);
 
 /** Share of the funder total in percent, two decimals; null without a funder total. */
@@ -32,18 +34,18 @@ export function releaseSummary(tranches, funderTotal) {
   };
 }
 
-/** Percent text -> amount text (centavos); '' when it cannot be computed. */
+/** Percent text -> amount text with commas ("847,000.00"); '' when it cannot be computed. */
 export function amountFromPercent(percentText, funderTotal) {
   const text = String(percentText ?? '').trim();
   if (text === '' || !/^\d+(\.\d+)?$/.test(text) || !(cents(funderTotal) > 0)) return '';
-  return (Math.round(cents(funderTotal) * Number(text) / 100) / 100).toFixed(2);
+  return formatMoneyText((Math.round(cents(funderTotal) * Number(text) / 100) / 100).toFixed(2));
 }
 
-/** Amount text -> percent text (two decimals, no trailing zeros); '' when it cannot be computed. */
+/** Amount text ("847,000.00" too) -> percent text (two decimals, no trailing zeros); '' when it cannot be computed. */
 export function percentFromAmount(amountText, funderTotal) {
-  const text = String(amountText ?? '').trim();
-  if (text === '' || !/^\d+(\.\d+)?$/.test(text)) return '';
-  const share = releaseShare(text, funderTotal);
+  const amount = parseMoney(amountText);
+  if (amount.value === null) return '';
+  const share = releaseShare(amount.value, funderTotal);
   return share == null ? '' : String(Number(share.toFixed(2)));
 }
 

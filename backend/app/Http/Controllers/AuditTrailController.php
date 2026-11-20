@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\DateInRange;
 use App\Models\AuditTrail;
 use App\Models\Project;
 use App\Models\ProjectTranche;
@@ -26,10 +27,10 @@ class AuditTrailController extends Controller
 
         $validated = $request->validate([
             'action' => ['nullable', 'string', 'max:50'],
-            'date' => ['nullable', 'date'],
+            'date' => ['bail', 'nullable', new DateInRange(), 'date'],
             'record_type' => ['nullable', 'string', 'max:100'],
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date'],
+            'from' => ['bail', 'nullable', new DateInRange(), 'date'],
+            'to' => ['bail', 'nullable', new DateInRange(), 'date'],
             'flagged' => ['nullable', 'boolean'],
             'project_id' => ['nullable', 'integer'],
         ]);

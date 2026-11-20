@@ -3,6 +3,8 @@
  * an "Edit and resubmit" form starts from, and the request body.
  */
 
+import { moneyNumber, moneyText } from './moneyInput.js';
+
 /** Row status -> label. A legacy "rejected" is a returned request. */
 export const REQUEST_STATUS = {
   pending: 'Pending',
@@ -27,7 +29,7 @@ export function initialForm(edit = null, initial = {}) {
       fromId: text(edit.from_lib_category_id),
       toId: text(edit.to_lib_category_id),
       fundingSource: edit.funding_source || 'funder',
-      amount: text(edit.amount),
+      amount: moneyText(edit.amount),
       title: edit.type === 'liquidation' ? text(edit.title) : '',
       justification: text(edit.justification),
     };
@@ -52,13 +54,13 @@ export function requestFields(form) {
     Object.assign(fields, {
       from_lib_category_id: Number(form.fromId),
       to_lib_category_id: Number(form.toId),
-      amount: Number(form.amount),
+      amount: moneyNumber(form.amount),
       // Realignment moves money within one source (funder by default).
       funding_source: form.fundingSource || 'funder',
     });
   }
   if (form.type === 'liquidation') {
-    Object.assign(fields, { amount: Number(form.amount), title: form.title.trim(), project_tranche_id: form.trancheId || '' });
+    Object.assign(fields, { amount: moneyNumber(form.amount), title: form.title.trim(), project_tranche_id: form.trancheId || '' });
   }
   fields.document_type = form.type === 'liquidation' ? 'receipt' : 'other';
   return fields;

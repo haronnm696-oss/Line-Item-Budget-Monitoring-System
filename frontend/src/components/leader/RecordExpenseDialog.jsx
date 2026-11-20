@@ -14,6 +14,11 @@ import {
   rememberLineItemId, rememberedLineItemId,
 } from '../../lib/expenseForm';
 import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
+import MoneyInput from '../MoneyInput';
+import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
+import { DATE_BOUNDS, dateRangeError } from '../../lib/dateRange';
+
+const GENERIC_MONEY = ['Enter an amount.', 'The amount must be more than zero.'];
 
 /** localStorage, or null when the browser blocks it. */
 function browserStorage() {
@@ -30,7 +35,7 @@ const FIELDS = Object.keys(EMPTY);
 /** The stored values as form strings. */
 function toForm(values) {
   const form = Object.fromEntries(FIELDS.map((key) => [key, values?.[key] == null ? '' : String(values[key])]));
-  return { ...form, funding_source: form.funding_source || FUNDER };
+  return { ...form, amount: moneyText(values?.amount), funding_source: form.funding_source || FUNDER };
 }
 
 /** Request body for the fields (only the changed ones when `before` is given). */
@@ -40,7 +45,7 @@ function payload(form, before = null) {
     // Funder unless the counterpart was chosen (offered only when the item has one).
     funding_source: form.funding_source || FUNDER,
     description: form.description.trim(),
-    amount: Number(form.amount),
+    amount: moneyNumber(form.amount),
     expense_date: form.expense_date,
     payee: form.payee.trim() || null,
     reference_no: form.reference_no.trim() || null,
@@ -156,8 +161,10 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
     const next = {};
     if (!form.lib_category_id) next.lib_category_id = 'Choose a line item.';
     if (!form.description.trim()) next.description = 'Describe the expense.';
-    if (!(Number(form.amount) > 0)) next.amount = 'Enter an amount greater than zero.';
+    const amountError = moneyError(form.amount, { positive: true });
+    if (amountError) next.amount = GENERIC_MONEY.includes(amountError) ? 'Enter an amount greater than zero.' : amountError;
     if (!form.expense_date) next.expense_date = 'Enter the expense date.';
+    else if (dateRangeError(form.expense_date)) next.expense_date = dateRangeError(form.expense_date);
     const hasReceipt = receipt || saved?.uploaded || (editing && keptReceipts.length > 0);
     if (submitting && !hasReceipt) next.file = editing ? 'Keep a receipt or attach a new one (PDF, JPG or PNG).' : 'Attach the receipt (PDF, JPG or PNG).';
     return next;
@@ -193,7 +200,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
         step = { ...step, uploaded: true };
         setSaved(step);
       }
-      const what = `“${form.description.trim()}” (${peso(form.amount)})`;
+      const what = `“${form.description.trim()}” (${peso(moneyNumber(form.amount))})`;
       if (!submitting) {
         onDone?.(editing ? `Saved your changes to ${what}. Submit it when it is ready.` : `Saved ${what} as a draft. Attach the receipt and submit it when ready.`);
         return;
@@ -324,7 +331,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
                 <span aria-hidden="true">ⓘ</span> {HONORARIA_NOTE}: {honorariaLines.map((item) => item.name).join(', ')} {honorariaLines.length === 1 ? 'is' : 'are'} not listed here.
               </div>
             )}
-            {chosen && Number(form.amount) > available && (
+            {chosen && moneyNumber(form.amount) > available && (
               <div className="ld-hint is-risk" role="status">
                 ⚠ More than the {peso(available)} available on this line item{fundedByShown ? ` (${sourceName(source, labels)})` : ''}.
               </div>
@@ -358,12 +365,12 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
           </div>
           <div className="program-field">
             <label htmlFor="ld-exp-amount">Amount (₱)</label>
-            <input id="ld-exp-amount" className="program-input" type="number" min="0.01" step="0.01" value={form.amount} onChange={set('amount')} disabled={locked} />
+            <MoneyInput id="ld-exp-amount" value={form.amount} onChange={set('amount')} disabled={locked} />
             {err('amount')}
           </div>
           <div className="program-field">
             <label htmlFor="ld-exp-date">Expense date</label>
-            <input id="ld-exp-date" className="program-input" type="date" value={form.expense_date} onChange={set('expense_date')} disabled={locked} />
+            <input id="ld-exp-date" className="program-input" type="date" {...DATE_BOUNDS} value={form.expense_date} onChange={set('expense_date')} disabled={locked} />
             {err('expense_date')}
           </div>
           <div className="program-field">

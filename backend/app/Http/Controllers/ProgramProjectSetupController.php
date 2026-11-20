@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MoneyInput;
+use App\Rules\DateInRange;
 use App\Models\LibCategory;
 use App\Models\Project;
 use App\Models\ProjectTranche;
@@ -17,7 +19,7 @@ use Illuminate\Validation\Rule;
  */
 class ProgramProjectSetupController extends Controller
 {
-    private const MONEY = ['numeric', 'min:0', 'max:9999999999999.99', 'regex:/^\d+(\.\d{1,2})?$/'];
+    private const MONEY = MoneyInput::RULES;
 
     public function __construct(private ProjectSetupService $setup)
     {
@@ -38,8 +40,8 @@ class ProgramProjectSetupController extends Controller
             'funding_agency_id' => ['required', 'integer', 'exists:funding_agencies,id'],
             'funder_reference' => ['nullable', 'string', 'max:100'],
             'total_approved_budget' => array_merge(['required', 'gt:0'], self::MONEY),
-            'start_date' => ['required', 'date'],
-            'end_date' => ['required', 'date', 'after:start_date'],
+            'start_date' => ['bail', 'required', new DateInRange(), 'date'],
+            'end_date' => ['bail', 'required', new DateInRange(), 'date', 'after:start_date'],
             'project_leader_id' => ['required', 'integer'],
         ] + $this->moaRules(), $this->messages());
 
@@ -55,8 +57,8 @@ class ProgramProjectSetupController extends Controller
             'funding_agency_id' => ['sometimes', 'required', 'integer', 'exists:funding_agencies,id'],
             'funder_reference' => ['sometimes', 'nullable', 'string', 'max:100'],
             'total_approved_budget' => array_merge(['sometimes', 'required', 'gt:0'], self::MONEY),
-            'start_date' => ['sometimes', 'required', 'date'],
-            'end_date' => ['sometimes', 'required', 'date', 'after:' . ($request->input('start_date') ?? $project->start_date?->toDateString())],
+            'start_date' => ['bail', 'sometimes', 'required', new DateInRange(), 'date'],
+            'end_date' => ['bail', 'sometimes', 'required', new DateInRange(), 'date', 'after:' . ($request->input('start_date') ?? $project->start_date?->toDateString())],
             'project_leader_id' => ['sometimes', 'required', 'integer'],
         ] + $this->moaRules() + $this->formBPrintRules(), $this->messages());
 
@@ -70,8 +72,8 @@ class ProgramProjectSetupController extends Controller
     {
         return [
             'moa_number' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'moa_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
-            'rd_committee_approved_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'moa_date' => ['bail', 'sometimes', 'nullable', new DateInRange(), 'date_format:Y-m-d'],
+            'rd_committee_approved_date' => ['bail', 'sometimes', 'nullable', new DateInRange(), 'date_format:Y-m-d'],
             'fund_source' => ['sometimes', 'nullable', 'string', 'max:255'],
             // "Grant amount from the funder (per MOA)"; blank = not entered.
             'funding_agency_amount' => array_merge(['sometimes', 'nullable'], self::MONEY),
@@ -184,7 +186,7 @@ class ProgramProjectSetupController extends Controller
         return [
             'name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'amount' => array_merge($required, ['gt:0'], self::MONEY),
-            'planned_release_date' => array_merge($required, ['date']),
+            'planned_release_date' => array_merge(['bail'], $required, [new DateInRange(), 'date']),
         ];
     }
 

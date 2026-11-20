@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DATE_BOUNDS, inDateRange } from '../../lib/dateRange';
 import { useSearchParams } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
@@ -70,11 +71,11 @@ export default function Transactions() {
         <div className="program-filter-row ld-controls">
           <div className="program-field">
             <label htmlFor="tx-from">From</label>
-            <input id="tx-from" type="date" className="program-input" value={searchParams.get('from') ?? ''} onChange={(e) => update({ from: e.target.value })} />
+            <input id="tx-from" type="date" className="program-input" {...DATE_BOUNDS} value={searchParams.get('from') ?? ''} onChange={(e) => { if (inDateRange(e.target.value)) update({ from: e.target.value }); }} />
           </div>
           <div className="program-field">
             <label htmlFor="tx-to">To</label>
-            <input id="tx-to" type="date" className="program-input" value={searchParams.get('to') ?? ''} onChange={(e) => update({ to: e.target.value })} />
+            <input id="tx-to" type="date" className="program-input" {...DATE_BOUNDS} value={searchParams.get('to') ?? ''} onChange={(e) => { if (inDateRange(e.target.value)) update({ to: e.target.value }); }} />
           </div>
           <div className="program-field">
             <label htmlFor="tx-category">Category</label>

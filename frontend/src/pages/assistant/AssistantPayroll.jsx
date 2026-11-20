@@ -20,8 +20,13 @@ import StagePill from '../../components/assistant/StagePill';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
 import { peso } from '../../components/money';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
+import MoneyInput from '../../components/MoneyInput';
+import { moneyNumber, moneyText, parseMoney } from '../../lib/moneyInput';
+import { MONTH_BOUNDS, MONTH_MAX, inDateRange } from '../../lib/dateRange';
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+// A pay period month, limited to 2000-2100 like every date input.
+const MONTH_OK = { test: (value) => MONTH_RE.test(value) && inDateRange(value) };
 
 /**
  * Payroll (Research Assistant): prepare the batch for a pay period of
@@ -36,8 +41,8 @@ export default function AssistantPayroll() {
   const { user } = useAuth();
   const picker = useAssignedProject({ role: 'research-assistant' });
   const { get, update } = useUrlQuery();
-  const month = MONTH_RE.test(get('month')) ? get('month') : todayInManila().slice(0, 7);
-  const toParam = MONTH_RE.test(get('to')) && get('to') >= month ? get('to') : month;
+  const month = MONTH_OK.test(get('month')) ? get('month') : todayInManila().slice(0, 7);
+  const toParam = MONTH_OK.test(get('to')) && get('to') >= month ? get('to') : month;
   const open = parseOpen(get('open'));
   const projectId = picker.projectId;
 
@@ -134,13 +139,13 @@ export default function AssistantPayroll() {
             <ProjectSelect picker={picker} id="ra-payroll-project" />
             <div className="program-field">
               <label htmlFor="ra-payroll-month">First month</label>
-              <input id="ra-payroll-month" className="program-input" type="month" value={month}
-                onChange={(event) => { if (MONTH_RE.test(event.target.value)) { actions.setFeedback(null); update({ month: event.target.value, to: event.target.value > toParam ? event.target.value : toParam }); } }} />
+              <input id="ra-payroll-month" className="program-input" type="month" {...MONTH_BOUNDS} value={month}
+                onChange={(event) => { if (MONTH_OK.test(event.target.value)) { actions.setFeedback(null); update({ month: event.target.value, to: event.target.value > toParam ? event.target.value : toParam }); } }} />
             </div>
             <div className="program-field">
               <label htmlFor="ra-payroll-to">Last month</label>
-              <input id="ra-payroll-to" className="program-input" type="month" value={toParam} min={month}
-                onChange={(event) => { if (MONTH_RE.test(event.target.value) && event.target.value >= month) { actions.setFeedback(null); update({ to: event.target.value }); } }} />
+              <input id="ra-payroll-to" className="program-input" type="month" value={toParam} min={month} max={MONTH_MAX}
+                onChange={(event) => { if (MONTH_OK.test(event.target.value) && event.target.value >= month) { actions.setFeedback(null); update({ to: event.target.value }); } }} />
             </div>
           </div>
         )}
@@ -371,21 +376,21 @@ function OwnDocuments({ docs, onRemoved, onError }) {
 
 /** Edit one row's monthly honorarium; the server recomputes honorarium x months (net = gross). */
 function RowDialog({ row, onClose, onDone }) {
-  const [basic, setBasic] = useState(String(row.basic));
+  const [basic, setBasic] = useState(moneyText(row.basic));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const months = Number(row.months) || 1;
 
   async function save(event) {
     event.preventDefault();
-    if (!(Number(basic) > 0)) {
-      setError('Enter a monthly honorarium above zero.');
+    if (parseMoney(basic).error || !(moneyNumber(basic) > 0)) {
+      setError(parseMoney(basic).error ?? 'Enter a monthly honorarium above zero.');
       return;
     }
     setBusy(true);
     setError('');
     try {
-      await apiWrite('patch', ENDPOINTS.payrollEntry(row.id), { basic_rate: Number(basic) });
+      await apiWrite('patch', ENDPOINTS.payrollEntry(row.id), { basic_rate: moneyNumber(basic) });
       onDone(`Updated ${row.name}'s payroll row; the amount was recomputed (honorarium x ${months} ${months === 1 ? 'month' : 'months'}).`);
     } catch (failure) {
       setError(errorText(failure, 'Could not save. Please try again.'));
@@ -406,7 +411,7 @@ function RowDialog({ row, onClose, onDone }) {
         <div className="program-form-grid">
           <div className="program-field">
             <label htmlFor="ra-row-basic">Monthly honorarium (₱), for {months} {months === 1 ? 'month' : 'months'}</label>
-            <input id="ra-row-basic" className="program-input" type="number" min="0.01" step="0.01" value={basic} onChange={(event) => setBasic(event.target.value)} disabled={busy} />
+            <MoneyInput id="ra-row-basic" value={basic} onChange={(event) => setBasic(event.target.value)} disabled={busy} />
           </div>
         </div>
         {error && <div className="field-err" role="alert">{error}</div>}

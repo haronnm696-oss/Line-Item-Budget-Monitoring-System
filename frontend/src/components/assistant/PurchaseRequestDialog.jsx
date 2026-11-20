@@ -8,6 +8,10 @@ import { uploadDocument } from '../../api/assistant';
 import { useAuth } from '../../context/AuthContext';
 import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
+import MoneyInput from '../MoneyInput';
+import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
+
+const GENERIC_MONEY = ['Enter an amount.', 'The amount must be more than zero.'];
 
 const EMPTY = { lib_category_id: '', description: '', quantity: '1', estimated_amount: '', supplier: '' };
 const FIELDS = Object.keys(EMPTY);
@@ -15,7 +19,8 @@ const SUPPORTING = ['quotation', 'invoice'];
 const TYPE_LABEL = { quotation: 'Quotation', invoice: 'Invoice', other: 'Other' };
 
 function toForm(values) {
-  return Object.fromEntries(FIELDS.map((key) => [key, values?.[key] == null ? '' : String(values[key])]));
+  const form = Object.fromEntries(FIELDS.map((key) => [key, values?.[key] == null ? '' : String(values[key])]));
+  return { ...form, estimated_amount: moneyText(values?.estimated_amount) };
 }
 
 function payload(form, before = null) {
@@ -23,7 +28,7 @@ function payload(form, before = null) {
     lib_category_id: Number(form.lib_category_id),
     description: form.description.trim(),
     quantity: Number(form.quantity),
-    estimated_amount: Number(form.estimated_amount),
+    estimated_amount: moneyNumber(form.estimated_amount),
     supplier: form.supplier.trim() || null,
   };
   if (!before) return value;
@@ -72,7 +77,8 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
     if (!form.lib_category_id) next.lib_category_id = 'Choose a line item.';
     if (!form.description.trim()) next.description = 'Describe what is needed.';
     if (!(Number.isInteger(Number(form.quantity)) && Number(form.quantity) >= 1)) next.quantity = 'Enter a whole number of at least 1.';
-    if (!(Number(form.estimated_amount) > 0)) next.estimated_amount = 'Enter an amount greater than zero.';
+    const amountError = moneyError(form.estimated_amount, { positive: true });
+    if (amountError) next.estimated_amount = GENERIC_MONEY.includes(amountError) ? 'Enter an amount greater than zero.' : amountError;
     if (form.supplier.trim().length > 255) next.supplier = 'Use at most 255 characters.';
     const hasSupporting = (file && SUPPORTING.includes(fileType)) || (saved?.uploaded && SUPPORTING.includes(fileType)) || keptSupporting.length > 0;
     if (submitting && !hasSupporting) next.file = 'Attach a quotation or invoice before submitting.';
@@ -109,7 +115,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
         step = { ...step, uploaded: true };
         setSaved(step);
       }
-      const what = `“${form.description.trim()}” (${peso(form.estimated_amount)})`;
+      const what = `“${form.description.trim()}” (${peso(moneyNumber(form.estimated_amount))})`;
       if (!submitting) {
         onDone?.(editing ? `Saved your changes to ${what}.` : `Saved ${what} as a draft.`);
         return;
@@ -186,7 +192,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
                 <option key={item.id} value={item.id}>{item.type} · {item.name} — {peso(item.available)} available</option>
               ))}
             </select>
-            {chosen && Number(form.estimated_amount) > Number(chosen.available) && (
+            {chosen && moneyNumber(form.estimated_amount) > Number(chosen.available) && (
               <div className="ld-hint is-risk" role="status">⚠ More than the {peso(chosen.available)} available on this line item.</div>
             )}
             {err('lib_category_id')}
@@ -203,7 +209,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
           </div>
           <div className="program-field">
             <label htmlFor="ra-pr-amount">Estimated amount (₱)</label>
-            <input id="ra-pr-amount" className="program-input" type="number" min="0.01" step="0.01" value={form.estimated_amount} onChange={set('estimated_amount')} disabled={locked} />
+            <MoneyInput id="ra-pr-amount" value={form.estimated_amount} onChange={set('estimated_amount')} disabled={locked} />
             {err('estimated_amount')}
           </div>
           <div className="program-field full">

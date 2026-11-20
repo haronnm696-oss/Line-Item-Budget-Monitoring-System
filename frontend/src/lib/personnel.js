@@ -1,3 +1,6 @@
+import { MONEY_NEGATIVE_ERROR, moneyText, parseMoney } from './moneyInput.js';
+import { DATE_RANGE_ERROR, inDateRange } from './dateRange.js';
+
 // Project personnel (the team appointed by Special Order, paid PS honoraria
 // through payroll). The server (PersonnelController / PersonnelService)
 // checks the same rules; these give early, clear messages.
@@ -5,7 +8,6 @@
 // The bank account number never comes back from the server: screens only
 // get `bank_account_masked` ("****9170").
 
-const MONEY = /^\d+(\.\d{1,2})?$/;
 const ACCOUNT = /^[0-9][0-9 -]*[0-9]$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -19,7 +21,7 @@ export function personnelForm(record) {
     special_order_no: text(record?.special_order_no),
     effective_from: text(record?.effective_from),
     effective_to: text(record?.effective_to),
-    monthly_honorarium: text(record?.monthly_honorarium),
+    monthly_honorarium: moneyText(record?.monthly_honorarium),
     bank_account: '',
     remove_bank_account: false,
   };
@@ -42,16 +44,19 @@ export function validatePersonnel(form, period, { creating }) {
   const from = value('effective_from');
   const to = value('effective_to');
   const inside = (date) => (!period?.start || date >= period.start) && (!period?.end || date <= period.end);
-  if (!DATE.test(from)) errors.effective_from = 'Enter the start date.';
+  if (!DATE.test(from)) errors.effective_from = inDateRange(from) ? 'Enter the start date.' : DATE_RANGE_ERROR;
+  else if (!inDateRange(from)) errors.effective_from = DATE_RANGE_ERROR;
   else if (!inside(from)) errors.effective_from = 'The start date must be within the project period.';
-  if (!DATE.test(to)) errors.effective_to = 'Enter the end date.';
+  if (!DATE.test(to)) errors.effective_to = inDateRange(to) ? 'Enter the end date.' : DATE_RANGE_ERROR;
+  else if (!inDateRange(to)) errors.effective_to = DATE_RANGE_ERROR;
   else if (!inside(to)) errors.effective_to = 'The end date must be within the project period.';
   else if (DATE.test(from) && to < from) errors.effective_to = 'The end date must be on or after the start date.';
 
-  const honorarium = value('monthly_honorarium');
-  if (honorarium === '') errors.monthly_honorarium = 'Enter the monthly honorarium.';
-  else if (honorarium.startsWith('-')) errors.monthly_honorarium = 'The monthly honorarium cannot be negative.';
-  else if (!MONEY.test(honorarium)) errors.monthly_honorarium = 'Enter a number with at most two decimals.';
+  // A peso field: "7,500.00" and "₱ 7,500" are accepted (lib/moneyInput).
+  const honorarium = parseMoney(value('monthly_honorarium'));
+  if (honorarium.blank) errors.monthly_honorarium = 'Enter the monthly honorarium.';
+  else if (honorarium.error === MONEY_NEGATIVE_ERROR) errors.monthly_honorarium = 'The monthly honorarium cannot be negative.';
+  else if (honorarium.error) errors.monthly_honorarium = honorarium.error;
 
   const account = value('bank_account');
   if (account && !ACCOUNT.test(account)) errors.bank_account = 'Use digits only (spaces and dashes are allowed).';
@@ -63,7 +68,7 @@ export function validatePersonnel(form, period, { creating }) {
     special_order_no: value('special_order_no'),
     effective_from: from,
     effective_to: to,
-    monthly_honorarium: Number(honorarium),
+    monthly_honorarium: honorarium.value,
   };
   if (creating) body.user_id = Number(value('user_id'));
   if (account) body.bank_account = account;

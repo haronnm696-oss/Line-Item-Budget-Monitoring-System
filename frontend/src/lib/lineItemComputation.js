@@ -1,3 +1,5 @@
+import { moneyNumber } from './moneyInput.js';
+
 /**
  * The optional Form B computation of a line item, mirroring the server
  * (backend/app/Support/LineItemComputation.php):
@@ -39,7 +41,8 @@ export function hasComputation(row) {
 export function computedAmount(row) {
   if (!hasComputation(row)) return null;
   const quantity = Math.trunc(Number(row.quantity));
-  const rate = Number(row.rate);
+  // The rate is a peso field: "8,800.00" and "₱ 8,800" are accepted (lib/moneyInput).
+  const rate = moneyNumber(row.rate);
   const periods = filled(row.periods) ? Math.trunc(Number(row.periods)) : 1;
   if (!Number.isFinite(quantity) || !Number.isFinite(rate) || !Number.isFinite(periods)) return null;
   return Math.round(quantity * rate * periods * 100) / 100;
@@ -97,7 +100,7 @@ export function previewComputation(row) {
   const quantity = Math.trunc(Number(row.quantity));
   const unit = String(row.unit_description ?? '').trim();
   const who = unit ? ` ${quantity === 1 ? unit : pluralize(unit)}` : '';
-  let text = `${quantity}${who} x ₱${money(row.rate)}`;
+  let text = `${quantity}${who} x ₱${money(moneyNumber(row.rate))}`;
   const periods = filled(row.periods) ? Math.trunc(Number(row.periods)) : null;
   if (row.rate_period === 'month' || row.rate_period === 'quarter') {
     const count = periods ?? 1;
