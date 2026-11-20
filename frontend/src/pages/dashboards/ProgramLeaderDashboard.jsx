@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { fetchProgramOverview } from '../../api/program';
-import { formatInManila } from '../../lib/datetime';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import ApprovalPanel from '../../components/program/ApprovalPanel';
@@ -18,13 +17,6 @@ function clampPct(value) {
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
-}
-
-function greeting() {
-  const hour = Number(formatInManila(new Date(), { hour: 'numeric', hourCycle: 'h23' }, '12'));
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
 }
 
 function approvalGlyph(approval) {
@@ -158,14 +150,12 @@ export default function ProgramLeaderDashboard() {
   const projectRows = [...projects]
     .sort((a, b) => (Number(b.budget) || 0) - (Number(a.budget) || 0))
     .slice(0, 6);
-  const firstName = (user?.name ?? 'there').replace(/^Dr\.?\s+/i, '').split(' ')[0];
   const isEmpty = Boolean(data) && projects.length === 0;
 
   return (
     <>
       <div className="pl-head">
         <div>
-          <div className="pl-greeting">{greeting()}, {firstName}</div>
           <h1 className="program-h1">Externally funded research</h1>
           <p className="program-sub">
             {projectCount} project{projectCount === 1 ? '' : 's'} · {peso(spent)} spent of{' '}

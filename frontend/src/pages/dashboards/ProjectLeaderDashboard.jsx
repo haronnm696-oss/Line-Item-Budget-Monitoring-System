@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
-import { formatDate, formatInManila } from '../../lib/datetime';
+import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
@@ -20,29 +19,19 @@ function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
-function greeting() {
-  const hour = Number(formatInManila(new Date(), { hour: 'numeric', hourCycle: 'h23' }, '12'));
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
 /** Project Leader Overview: one project's budget, review queue, alerts and requests (descriptive only). */
 export default function ProjectLeaderDashboard() {
-  const { user } = useAuth();
   const picker = useAssignedProject({ role: 'project-leader' });
   const url = picker.projectId ? ENDPOINTS.leaderOverview(picker.projectId) : null;
   const overview = useApiData(url);
 
   const data = overview.data;
-  const firstName = (user?.name ?? 'there').replace(/^Dr\.?\s+/i, '').split(' ')[0];
   const projectQuery = picker.projectId ? `?project=${picker.projectId}` : '';
 
   return (
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="pl-greeting">{greeting()}, {firstName}</div>
           <h1 className="program-h1">{data?.project?.title ?? picker.project?.title ?? 'Project budget'}</h1>
           {data && <ProjectMeta project={data.project} />}
         </div>

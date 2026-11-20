@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { formatInManila } from '../lib/datetime';
+import { greetingText, msUntilNextGreeting } from '../lib/greeting';
 import PageErrorBoundary from '../components/program/PageErrorBoundary';
 import NotificationBell from '../components/NotificationBell';
 
@@ -167,6 +168,39 @@ function initialsFrom(name) {
   return (first + last).toUpperCase();
 }
 
+const APP_TITLE = 'LIB Monitoring System';
+
+/** The nav item for the current path (longest matching `to`), or null. */
+function currentNavItem(navGroups, pathname) {
+  return navGroups
+    .flatMap((group) => group.items)
+    .filter((item) => pathname === item.to || pathname.startsWith(`${item.to}/`))
+    .sort((a, b) => b.to.length - a.to.length)[0] ?? null;
+}
+
+/**
+ * The greeting for the signed-in user in Manila time. It re-renders at the
+ * next 12:00 / 18:00 / 00:00 boundary, and when the tab becomes visible
+ * again (timers can stall while a laptop sleeps).
+ */
+function useGreeting(name) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setNow(new Date()), msUntilNextGreeting(now) + 1000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') setNow(new Date());
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [now]);
+
+  return greetingText(name, now);
+}
+
 function todayLabel() {
   return formatInManila(new Date(), { weekday: 'long', day: 'numeric', month: 'long' });
 }
@@ -174,18 +208,17 @@ function todayLabel() {
 /**
  * The shared shell for every role: sidebar (270px, section labels, active
  * state, gold badge counts, Help & guide, Collapse with saved state, 76px
- * rail), header (breadcrumb, Philippine date, bell, user chip and menu) and
- * a per-page error boundary.
+ * rail), header (greeting, Philippine date, bell, user chip and menu) and
+ * a per-page error boundary. The browser tab title is the current page name.
  *
  * @param {object} props
  * @param {Array} props.navGroups      [{ label?, items: [{ to, label, icon, badge? }] }]
  * @param {string} props.navLabel      aria-label of the sidebar
- * @param {string} props.breadcrumb    text at the left of the header
  * @param {Object<string, number>} props.badges  counts by item `badge` key
  * @param {(key: string, count: number) => string} props.badgeLabel
  * @param {string} props.fallbackName  name shown before the user loads
  */
-export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}, badgeLabel, fallbackName }) {
+export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel, fallbackName }) {
   const { user, roleInfo, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -193,6 +226,14 @@ export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}
   const [profileOpen, setProfileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const profileRef = useRef(null);
+  const greeting = useGreeting(user?.name);
+  const pageName = currentNavItem(navGroups, location.pathname)?.label ?? null;
+
+  useEffect(() => {
+    const previous = document.title;
+    if (pageName) document.title = `${pageName} | ${APP_TITLE}`;
+    return () => { document.title = previous; };
+  }, [pageName]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -330,7 +371,7 @@ export default function RoleShell({ navGroups, navLabel, breadcrumb, badges = {}
             {ICONS.menu}
           </button>
 
-          <span className="program-topbar-title">{breadcrumb}</span>
+          <span className="program-topbar-title" title={greeting}>{greeting}</span>
           <span className="spacer" />
 
           <span className="program-topbar-date">

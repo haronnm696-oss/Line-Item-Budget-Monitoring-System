@@ -8,7 +8,7 @@ import { apiGet } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
 import RoleShell from './RoleShell';
 import { RoleBadgesContext } from './roleBadges';
-import { ROLE_NAV, navItemFor } from './roleNav';
+import { ROLE_NAV } from './roleNav';
 
 const BADGE_LABEL = {
   submissions: (count) => `${count} waiting for your review`,
@@ -77,10 +77,8 @@ function useProjectBadges(code) {
  */
 export default function RoleLayout() {
   const { user, roleInfo } = useAuth();
-  const location = useLocation();
   const code = normalizeRole(user) ?? 'RES';
   const roleLabel = roleInfo?.label ?? 'Account';
-  const current = navItemFor(code, location.pathname);
   const badgeState = useProjectBadges(code);
 
   return (
@@ -88,7 +86,6 @@ export default function RoleLayout() {
       <RoleShell
         navGroups={ROLE_NAV[code] ?? ROLE_NAV.RES}
         navLabel={`${roleLabel} navigation`}
-        breadcrumb={current ? `${roleLabel}: ${current.label}` : `${roleLabel} — MSU–Main Campus`}
         badges={badgeState.badges}
         badgeLabel={(key, count) => (BADGE_LABEL[key] ?? ((n) => `${n}`))(count)}
         fallbackName={roleLabel}
