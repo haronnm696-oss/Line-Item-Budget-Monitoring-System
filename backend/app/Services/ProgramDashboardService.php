@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\AuditEntryPresenter;
 use App\Support\Percent;
 use App\Models\ApprovalRequest;
 use App\Models\AuditTrail;
@@ -1440,7 +1441,7 @@ class ProgramDashboardService
      */
     protected function projectActivity(Project $project): array
     {
-        return AuditTrail::with('user')
+        $entries = AuditTrail::query()
             ->where(function ($query) use ($project) {
                 $query->where(function ($own) use ($project) {
                     $own->where('model_type', 'Project')->where('model_id', $project->id);
@@ -1451,20 +1452,20 @@ class ProgramDashboardService
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->limit(10)
-            ->get()
-            ->map(fn (AuditTrail $entry) => [
-                'id' => $entry->id,
-                'action' => $entry->action,
-                'record_type' => $entry->model_type,
-                'record_id' => $entry->model_id,
-                'user' => $entry->user?->name ?? 'System',
-                'reason' => $entry->reason,
-                'summary' => $entry->new_values['title']
-                    ?? $entry->new_values['description']
-                    ?? $entry->new_values['reference_no']
-                    ?? $entry->new_values['name']
-                    ?? null,
-                'created_at' => $entry->created_at?->toIso8601String(),
+            ->get();
+
+        // Same wording as the Audit trail page ("Release added", "Line item
+        // edited"), never the stored class names.
+        return collect((new AuditEntryPresenter())->present($entries))
+            ->map(fn (array $row) => [
+                'id' => $row['id'],
+                'action' => $row['action']['code'],
+                'action_label' => $row['action']['label'],
+                'record_label' => $row['record']['label'] ?? null,
+                'record_type' => $row['record']['type'] ?? null,
+                'user' => $row['actor']['name'] ?? 'System',
+                'reason' => $row['reason'],
+                'created_at' => $row['created_at'],
             ])
             ->all();
     }

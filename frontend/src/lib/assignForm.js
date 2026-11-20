@@ -9,14 +9,29 @@
 
 export const ASSIGN_REQUIRED = 'Choose a user and a project.';
 
-export function initialAssignForm(defaultUserId = '') {
-  return { userId: defaultUserId ? String(defaultUserId) : '', projectId: '', error: '' };
+/** Only these projects take new assignments (the server checks the same). */
+export const ASSIGNABLE_STATUSES = ['Ongoing', 'Planning'];
+
+export function canAssignTo(project) {
+  return ASSIGNABLE_STATUSES.includes(project?.status);
+}
+
+/**
+ * A clean form. `defaultProjectId` preselects the project (the Team's "Add
+ * member" on a project page); `defaultUserId` the person (Users and roles).
+ */
+export function initialAssignForm(defaultUserId = '', defaultProjectId = '') {
+  return {
+    userId: defaultUserId ? String(defaultUserId) : '',
+    projectId: defaultProjectId ? String(defaultProjectId) : '',
+    error: '',
+  };
 }
 
 export function assignFormReducer(state, action) {
   switch (action.type) {
     case 'open':
-      return initialAssignForm(action.userId);
+      return initialAssignForm(action.userId, action.projectId);
     case 'change':
       return { ...state, [action.field]: action.value == null ? '' : String(action.value), error: '' };
     case 'invalid':

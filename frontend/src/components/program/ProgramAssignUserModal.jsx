@@ -1,19 +1,18 @@
 import { useReducer } from 'react';
-import { assignFormReducer, assignRoleText, assignSubmission, initialAssignForm } from '../../lib/assignForm';
-
-const ASSIGNABLE_STATUSES = ['Ongoing', 'Planning'];
+import { assignFormReducer, assignRoleText, assignSubmission, canAssignTo, initialAssignForm } from '../../lib/assignForm';
 
 /**
  * Assign to project: user and project only. The role on the project is the
  * person's account role, shown read-only. Mount it only while open, so each
- * open starts clean (see lib/assignForm.js).
+ * open starts clean (see lib/assignForm.js). `defaultProjectId` preselects the
+ * project (Team > Add member on a project page).
  */
-export default function ProgramAssignUserModal({ users = [], projects = [], busy = false, error = '', defaultUserId = '', onSave, onClose }) {
-  const [form, dispatch] = useReducer(assignFormReducer, defaultUserId, initialAssignForm);
+export default function ProgramAssignUserModal({ users = [], projects = [], busy = false, error = '', defaultUserId = '', defaultProjectId = '', onSave, onClose }) {
+  const [form, dispatch] = useReducer(assignFormReducer, null, () => initialAssignForm(defaultUserId, defaultProjectId));
 
   // Program Leaders are program-wide and never listed (the server leaves them out too).
   const activeUsers = users.filter((user) => user.is_active && user.role_slug !== 'program-leader');
-  const activeProjects = projects.filter((project) => ASSIGNABLE_STATUSES.includes(project.status));
+  const activeProjects = projects.filter(canAssignTo);
   const roleText = assignRoleText(form, activeUsers);
   const shownError = form.error || error;
 

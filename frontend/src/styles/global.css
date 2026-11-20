@@ -3385,6 +3385,12 @@ select.signin-input:disabled{
 .pu-menu-item[aria-disabled="true"]{color:#9A8F8F;cursor:not-allowed}
 .pu-menu-item.danger{color:#8E1B1B;font-weight:600}
 .pu-menu-sep{height:1px;background:#F1ECE4;margin:6px 4px}
+.pu-menu-note{display:block;font-size:12px;font-weight:400;color:#6B6060;line-height:1.3;padding-bottom:4px}
+/* Row "⋯" actions menu (components/ActionMenu.jsx RowMenu). */
+.program-btn.sm.pd-row-menu,.program-shell .program-btn.sm.pd-row-menu{min-height:44px;min-width:44px;padding:0 10px;font-size:18px;line-height:1}
+.pd-row-menu-list{min-width:200px}
+.pd-hint-link{min-height:auto;font-size:inherit;color:#6F1D2A}
+.pd-hint-link:disabled{color:#9A8F8F;cursor:progress;text-decoration:none}
 /* Report "Download" menu (components/DownloadMenu.jsx): PDF / CSV. */
 .dl-menu{min-width:180px}
 .dl-menu.is-start{left:0;right:auto}

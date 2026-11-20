@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ASSIGN_REQUIRED, assignFormReducer, assignRoleText, assignSubmission, initialAssignForm } from './assignForm.js';
+import { ASSIGN_REQUIRED, assignFormReducer, assignRoleText, assignSubmission, canAssignTo, initialAssignForm } from './assignForm.js';
 
 const users = [{ id: 7, name: 'Papaw Dianalan', role_slug: 'researcher', role_label: 'Researcher' }];
 
@@ -41,4 +41,20 @@ test('missing user or project is reported, unknown user too', () => {
   assert.equal(assignSubmission({ userId: '', projectId: '3' }, users).error, ASSIGN_REQUIRED);
   assert.equal(assignSubmission({ userId: '7', projectId: '' }, users).error, ASSIGN_REQUIRED);
   assert.match(assignSubmission({ userId: '99', projectId: '3' }, users).error, /cannot be assigned/);
+});
+
+test('Add member on a project page: the project is preselected, the user is chosen', () => {
+  let state = initialAssignForm('', 12);
+  assert.deepEqual(state, { userId: '', projectId: '12', error: '' });
+  assert.equal(assignSubmission(state, users).error, ASSIGN_REQUIRED);
+  state = assignFormReducer(state, { type: 'change', field: 'userId', value: 7 });
+  assert.deepEqual(assignSubmission(state, users), { payload: { user_id: 7, project_id: 12 } });
+  assert.deepEqual(assignFormReducer(state, { type: 'open', projectId: 12 }), { userId: '', projectId: '12', error: '' });
+});
+
+test('only Ongoing and Planning projects take new members', () => {
+  assert.equal(canAssignTo({ status: 'Ongoing' }), true);
+  assert.equal(canAssignTo({ status: 'Planning' }), true);
+  assert.equal(canAssignTo({ status: 'Completed' }), false);
+  assert.equal(canAssignTo(null), false);
 });
