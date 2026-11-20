@@ -9,6 +9,7 @@ import { RATE_PERIODS, computedAmount, hasComputation, periodsLabel, previewComp
 import { sourceLabels } from '../../lib/fundingSource';
 import { durationInWords, periodErrors } from '../../lib/projectAgreement';
 import { amountFromPercent, percentError, percentFromAmount } from '../../lib/releasePlan';
+import { itemName, withUnitDescription } from '../../lib/lineItemNames';
 import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
 import { DATE_BOUNDS, dateRangeError } from '../../lib/dateRange';
 import MoneyInput from '../MoneyInput';
@@ -331,7 +332,8 @@ function lineItemBody(form, computed) {
     cost_type: form.cost_type,
     expense_group: form.expense_group.trim() || null,
     expense_subgroup: form.expense_subgroup.trim() || null,
-    line_item_name: form.line_item_name.trim(),
+    // Item, or "Who or what" when Item was left empty (lib/lineItemNames).
+    line_item_name: itemName(form),
     quantity: number(form.quantity),
     unit_description: form.unit_description.trim() || null,
     rate: money(form.rate),
@@ -374,6 +376,11 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
     setForm({ ...form, rate_period: value, ...(value === '' ? { periods: '' } : {}) });
     setLocal({ ...local, rate_period: undefined, periods: undefined });
   };
+  // "Who or what" fills Item too while Item is untouched (lib/lineItemNames).
+  const setUnitDescription = (event) => {
+    setForm(withUnitDescription(form, event.target.value));
+    setLocal({ ...local, unit_description: undefined, line_item_name: undefined });
+  };
   // Older one-time rows may still carry a periods count; keep it visible so it can be edited.
   const showPeriods = form.rate_period !== '' || String(form.periods).trim() !== '';
   const preview = previewComputation(form);
@@ -381,7 +388,7 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
   function submit(event) {
     event.preventDefault();
     const next = {};
-    if (!form.line_item_name.trim()) next.line_item_name = 'Enter the line item name.';
+    if (!itemName(form)) next.line_item_name = 'Enter the line item name.';
     const anyComputation = ['quantity', 'rate', 'periods', 'unit_description', 'rate_period'].some((key) => String(form[key]).trim() !== '');
     if (anyComputation) {
       if (!WHOLE.test(String(form.quantity).trim()) || Number(form.quantity) < 1) next.quantity = 'Enter a whole number of at least 1.';
@@ -429,7 +436,7 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
           className="program-input"
           value={form[key]}
           disabled={busy || extra.disabled}
-          onChange={set(key)}
+          onChange={extra.onChange ?? set(key)}
           inputMode={extra.inputMode}
           list={extra.list}
           readOnly={extra.readOnly}
@@ -464,14 +471,14 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
           <datalist id="ps-li-groups">
             {EXPENSE_GROUPS.map((group) => <option key={group} value={group} />)}
           </datalist>
-          {input('line_item_name', 'Item', { full: true, hint: 'For example Project Leader or IoT devices' })}
+          {input('line_item_name', 'Item', { full: true, hint: 'For example Project Leader or IoT devices. Filled from "Who or what" until you change it.' })}
 
           <div className="program-field full">
             <span className="program-label">Compute the {labels.funder} amount <span className="ld-muted">optional</span></span>
             <p className="pu-hint">For example 1 Project Leader × ₱8,800.00 per month × 12 months. The counterpart is entered on its own and added.</p>
           </div>
           {input('quantity', 'How many', { inputMode: 'numeric', disabled: amountLocked })}
-          {input('unit_description', 'Who or what', { hint: 'e.g. Project Leader, Laptop' })}
+          {input('unit_description', 'Who or what', { hint: 'e.g. Project Leader, Laptop', onChange: setUnitDescription })}
           {input('rate', 'Amount each (₱)', { money: true, disabled: amountLocked })}
           <Field id="ps-li-rate_period" label="Paid every" error={errors.rate_period}>
             {(a11y) => (
