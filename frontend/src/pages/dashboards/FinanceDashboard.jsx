@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
-import { formatDate, formatInManila } from '../../lib/datetime';
+import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
@@ -18,20 +17,12 @@ import LateReceipts from '../../components/finance/LateReceipts';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { formatPct, peso } from '../../components/money';
 
-function greeting() {
-  const hour = Number(formatInManila(new Date(), { hour: 'numeric', hourCycle: 'h23' }, '12'));
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
 /**
  * Finance/Admin Overview: what waits for verification, what was verified
  * this month, missing receipts and Total spent. "To verify" and the sidebar
  * badge use the same server query (finance-overview / finance-badges).
  */
 export default function FinanceDashboard() {
-  const { user } = useAuth();
   const picker = useAssignedProject({ role: 'finance-admin' });
   const overview = useApiData(picker.projectId ? ENDPOINTS.financeOverview(picker.projectId) : null);
   const { get, update } = useUrlQuery();
@@ -43,7 +34,6 @@ export default function FinanceDashboard() {
 
   const data = overview.data;
   const kpis = data?.kpis;
-  const firstName = (user?.name ?? 'there').replace(/^(Dr|Engr|Prof)\.?\s+/i, '').split(' ')[0];
   const q = picker.projectId ? `?project=${picker.projectId}` : '';
   const othersOnly = kpis ? kpis.to_verify - kpis.to_verify_actionable : 0;
 
@@ -51,7 +41,6 @@ export default function FinanceDashboard() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="pl-greeting">{greeting()}, {firstName}</div>
           <h1 className="program-h1">Verification</h1>
           <p className="program-sub">
             {[data?.project.title ?? picker.project?.title, data?.project.code ?? picker.project?.code, 'only verified amounts count as spent'].filter(Boolean).join(' · ')}

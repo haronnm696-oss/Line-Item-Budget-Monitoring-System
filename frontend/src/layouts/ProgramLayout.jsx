@@ -64,7 +64,6 @@ export default function ProgramLayout() {
       <RoleShell
         navGroups={PROGRAM_NAV}
         navLabel="Program Leader navigation"
-        breadcrumb="Program: All Projects — MSU–Main Campus"
         badges={{ approvals: pendingCount, registrations: registrationCount }}
         badgeLabel={(key, count) => (BADGE_LABELS[key] ?? BADGE_LABELS.approvals)(count)}
         fallbackName="Program Leader"

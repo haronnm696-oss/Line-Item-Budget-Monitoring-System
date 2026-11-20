@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
-import { formatInManila } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProjectSelect from '../../components/leader/ProjectSelect';
@@ -20,13 +18,6 @@ import { useRecordActions } from '../../components/assistant/useRecordActions';
 import BalancingCheck from '../../components/assistant/BalancingCheck';
 import { peso } from '../../components/money';
 
-function greeting() {
-  const hour = Number(formatInManila(new Date(), { hour: 'numeric', hourCycle: 'h23' }, '12'));
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
 /**
  * Research Assistant Overview: what they encoded and who has it now, the
  * balancing query for one line item and the project's missing receipts.
@@ -34,7 +25,6 @@ function greeting() {
  * KPI and the sidebar badge use the same query.
  */
 export default function ResearchAssistantDashboard() {
-  const { user } = useAuth();
   const picker = useAssignedProject({ role: 'research-assistant' });
   const overview = useApiData(picker.projectId ? ENDPOINTS.assistantOverview(picker.projectId) : null);
   const { get, update } = useUrlQuery();
@@ -45,7 +35,6 @@ export default function ResearchAssistantDashboard() {
   const actions = useRecordActions({ projectId: picker.projectId, onChanged: reload });
 
   const data = overview.data;
-  const firstName = (user?.name ?? 'there').replace(/^(Dr|Engr|Prof)\.?\s+/i, '').split(' ')[0];
   const q = picker.projectId ? `?project=${picker.projectId}` : '';
   const done = (text) => { setDialog(null); actions.setFeedback({ tone: 'ok', text }); reload(); };
 
@@ -53,7 +42,6 @@ export default function ResearchAssistantDashboard() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="pl-greeting">{greeting()}, {firstName}</div>
           <h1 className="program-h1">Encoding and payroll</h1>
           <p className="program-sub">
             {data

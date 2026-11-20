@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
-import { formatDate, formatInManila } from '../../lib/datetime';
+import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
@@ -18,13 +17,6 @@ const REPORTS = [
   ['monthly-summary', 'Monthly financial summary', 'Expense trend and category comparison'],
 ];
 
-function greeting() {
-  const hour = Number(formatInManila(new Date(), { hour: 'numeric', hourCycle: 'h23' }, '12'));
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
 function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
@@ -36,11 +28,9 @@ function clampPct(value) {
  * Project Leader Overview). No control here changes data.
  */
 export default function ResearcherDashboard() {
-  const { user } = useAuth();
   const picker = useAssignedProject({ role: 'researcher' });
   const summary = useApiData(picker.projectId ? ENDPOINTS.budgetSummary(picker.projectId) : null);
   const data = summary.data;
-  const firstName = (user?.name ?? 'there').replace(/^(Dr|Engr|Prof)\.?\s+/i, '').split(' ')[0];
   const q = picker.projectId ? `?project=${picker.projectId}` : '';
 
   return (
@@ -48,7 +38,6 @@ export default function ResearcherDashboard() {
       <div className="pl-head">
         <div>
           <div className="pl-greeting res-greeting">
-            {greeting()}, {firstName}
             <span className="res-readonly"><span aria-hidden="true">👁</span> Read-only access</span>
           </div>
           <h1 className="program-h1">Budget information</h1>
