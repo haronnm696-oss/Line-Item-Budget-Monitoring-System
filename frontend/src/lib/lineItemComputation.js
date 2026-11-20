@@ -10,11 +10,19 @@
  * defaults to 1 and the rate period is optional.
  */
 
+/** "Paid every" options. One time is stored as no rate period (''). */
 export const RATE_PERIODS = [
-  { value: '', label: 'No period' },
-  { value: 'month', label: 'per month' },
-  { value: 'quarter', label: 'per quarter' },
+  { value: 'month', label: 'Month' },
+  { value: 'quarter', label: 'Quarter' },
+  { value: '', label: 'One time' },
 ];
+
+/** Label of the periods field, following "Paid every". */
+export function periodsLabel(ratePeriod) {
+  if (ratePeriod === 'month') return 'For how many months';
+  if (ratePeriod === 'quarter') return 'For how many quarters';
+  return 'How many times';
+}
 
 const PERIOD_WORDS = {
   month: ['/mo.', 'mo.', 'mos.'],
@@ -68,4 +76,34 @@ export function describeComputation(row) {
     text += ` x ${periods}${unitWord}`;
   }
   return text;
+}
+
+/** "Project Leader" -> "Project Leaders", "Battery" -> "Batteries"; "Staff" stays. */
+export function pluralize(word) {
+  if (!word || /(s|staff|personnel|equipment|software|support)$/i.test(word)) return word;
+  if (/(x|z|ch|sh)$/i.test(word)) return `${word}es`;
+  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
+  return `${word}s`;
+}
+
+/**
+ * The plain on-screen preview (not the Form B wording):
+ *   "1 Project Leader x ₱8,800.00 per month x 12 months = ₱105,600.00"
+ *   "2 Laptops x ₱40,000.00 = ₱80,000.00"
+ */
+export function previewComputation(row) {
+  const amount = computedAmount(row);
+  if (amount == null) return null;
+  const quantity = Math.trunc(Number(row.quantity));
+  const unit = String(row.unit_description ?? '').trim();
+  const who = unit ? ` ${quantity === 1 ? unit : pluralize(unit)}` : '';
+  let text = `${quantity}${who} x ₱${money(row.rate)}`;
+  const periods = filled(row.periods) ? Math.trunc(Number(row.periods)) : null;
+  if (row.rate_period === 'month' || row.rate_period === 'quarter') {
+    const count = periods ?? 1;
+    text += ` per ${row.rate_period} x ${count} ${row.rate_period}${count === 1 ? '' : 's'}`;
+  } else if (periods != null && periods !== 1) {
+    text += ` x ${periods} times`;
+  }
+  return `${text} = ₱${money(amount)}`;
 }

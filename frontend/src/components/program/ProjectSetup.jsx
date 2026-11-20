@@ -5,7 +5,7 @@ import { apiWrite } from '../../api/http';
 import { errorText, fieldErrors } from '../../api/leader';
 import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
-import { RATE_PERIODS, computedAmount, describeComputation, hasComputation } from '../../lib/lineItemComputation';
+import { RATE_PERIODS, computedAmount, hasComputation, periodsLabel, previewComputation } from '../../lib/lineItemComputation';
 import { sourceLabels } from '../../lib/fundingSource';
 import { durationInWords, periodErrors } from '../../lib/projectAgreement';
 
@@ -344,6 +344,15 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
   const others = Number(setup.allocated) - (editing ? Number(item.allocated) : 0);
   const left = Math.max(0, Number(setup.total_budget) - others);
   const set = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); setLocal({ ...local, [key]: undefined }); };
+  // One time has no periods field: switching to it clears the periods (blank counts as 1).
+  const setRatePeriod = (event) => {
+    const value = event.target.value;
+    setForm({ ...form, rate_period: value, ...(value === '' ? { periods: '' } : {}) });
+    setLocal({ ...local, rate_period: undefined, periods: undefined });
+  };
+  // Older one-time rows may still carry a periods count; keep it visible so it can be edited.
+  const showPeriods = form.rate_period !== '' || String(form.periods).trim() !== '';
+  const preview = previewComputation(form);
 
   function submit(event) {
     event.preventDefault();
@@ -351,10 +360,10 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
     if (!form.line_item_name.trim()) next.line_item_name = 'Enter the line item name.';
     const anyComputation = ['quantity', 'rate', 'periods', 'unit_description', 'rate_period'].some((key) => String(form[key]).trim() !== '');
     if (anyComputation) {
-      if (!WHOLE.test(String(form.quantity).trim()) || Number(form.quantity) < 1) next.quantity = 'Enter a whole quantity of at least 1.';
+      if (!WHOLE.test(String(form.quantity).trim()) || Number(form.quantity) < 1) next.quantity = 'Enter a whole number of at least 1.';
       const rateError = moneyError(form.rate);
       if (rateError) next.rate = rateError;
-      if (String(form.periods).trim() !== '' && (!WHOLE.test(String(form.periods).trim()) || Number(form.periods) < 1)) next.periods = 'Enter a whole number of periods of at least 1.';
+      if (String(form.periods).trim() !== '' && (!WHOLE.test(String(form.periods).trim()) || Number(form.periods) < 1)) next.periods = 'Enter a whole number of at least 1.';
     }
     const counterpartError = String(form.implementing_agency_amount).trim() === '' ? null : moneyError(form.implementing_agency_amount);
     if (counterpartError) next.implementing_agency_amount = counterpartError;
@@ -432,26 +441,27 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
           {input('line_item_name', 'Item', { full: true, hint: 'For example Project Leader or IoT devices' })}
 
           <div className="program-field full">
-            <span className="program-label">Computation <span className="ld-muted">optional</span></span>
-            <p className="pu-hint">Gives the {labels.funder} amount: quantity × rate × number of periods, for example 1 × ₱8,800.00 per month × 12 months. The counterpart is entered on its own and added.</p>
+            <span className="program-label">Compute the {labels.funder} amount <span className="ld-muted">optional</span></span>
+            <p className="pu-hint">For example 1 Project Leader × ₱8,800.00 per month × 12 months. The counterpart is entered on its own and added.</p>
           </div>
-          {input('quantity', 'Quantity', { inputMode: 'numeric', disabled: amountLocked })}
-          {input('unit_description', 'Unit description', { hint: 'For example Project Leader' })}
-          {input('rate', 'Rate (₱)', { inputMode: 'decimal', disabled: amountLocked })}
-          <Field id="ps-li-rate_period" label="Rate period" error={errors.rate_period}>
+          {input('quantity', 'How many', { inputMode: 'numeric', disabled: amountLocked })}
+          {input('unit_description', 'Who or what', { hint: 'e.g. Project Leader, Laptop' })}
+          {input('rate', 'Amount each (₱)', { inputMode: 'decimal', disabled: amountLocked })}
+          <Field id="ps-li-rate_period" label="Paid every" error={errors.rate_period}>
             {(a11y) => (
-              <select {...a11y} className="program-select" value={form.rate_period} disabled={busy || amountLocked} onChange={set('rate_period')}>
+              <select {...a11y} className="program-select" value={form.rate_period} disabled={busy || amountLocked} onChange={setRatePeriod}>
                 {RATE_PERIODS.map((period) => <option key={period.value} value={period.value}>{period.label}</option>)}
               </select>
             )}
           </Field>
-          {input('periods', 'Number of periods', { inputMode: 'numeric', disabled: amountLocked, hint: 'Optional; 1 when left blank' })}
+          {showPeriods && input('periods', periodsLabel(form.rate_period), { inputMode: 'numeric', disabled: amountLocked, hint: 'Optional; 1 when left blank' })}
           <div className="program-field" aria-live="polite">
-            <span className="program-label">Computed {labels.funder} amount</span>
+            <span className="program-label">{labels.funder} total</span>
             <p className="fb-computed">
-              {computed != null ? <><b>{peso(computed)}</b><br />{describeComputation(form)}</> : 'No computation: enter both amounts below.'}
+              {computed != null ? <b>{peso(computed)}</b> : 'Not computed: fill in How many and Amount each, or enter both amounts below.'}
             </p>
           </div>
+          {preview && <p className="pu-hint program-field full" aria-live="polite">{preview}</p>}
 
           {input('implementing_agency_amount', `${labels.implementing_agency} counterpart (₱)`, {
             inputMode: 'decimal', disabled: amountLocked, hint: 'Leave blank or 0 when there is none',
@@ -460,7 +470,7 @@ export function LineItemDialog({ projectId, item = null, setup, onClose, onSaved
             id="ps-li-funder_amount"
             label={`${labels.funder} (₱)`}
             error={errors.funder_amount}
-            hint={computing ? 'Set by the computation (quantity × rate × periods).' : undefined}
+            hint={computing ? 'Set by the computation above.' : undefined}
           >
             {(a11y) => (
               <input
