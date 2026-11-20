@@ -64,3 +64,5 @@ Local mail testing: set `MAIL_MAILER=log` in `backend/.env`; reset links land in
 
 - Implementation plans live in `docs/superpowers/plans/` (dated). Read the relevant one before working on a feature branch; they carry constraints such as the Program Leader UI design tokens (brand `#6F1D2A`, page `#FAF7F2`, etc.), 44px minimum control height, the focus outline style, and "status is text plus icon, never color alone".
 - Tests use SQLite in memory, so avoid MySQL-only SQL in queries that tests cover.
+- Peso fields accept commas and a leading ₱ ("3,178,376.00"). Every new peso field must be added to the money-field list `App\Support\MoneyInput::FIELDS`, which the `NormalizeMoneyInput` middleware uses to strip them before validation, and validated with `MoneyInput::RULES`. On the frontend, use `components/MoneyInput.jsx` and `lib/moneyInput.js` (`moneyError`, `moneyNumber`), never `Number(text)`.
+- Dates are limited to 2000–2100. Every new date field must use the `App\Rules\DateInRange` rule (after `'bail'`, before `'date'`/`'date_format'`). On the frontend, give the input `DATE_BOUNDS` from `lib/dateRange.js` and check it with `dateRangeError`.
