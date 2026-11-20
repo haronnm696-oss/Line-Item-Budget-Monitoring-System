@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useProgramRefresh } from '../../layouts/ProgramLayout';
 import { fetchProgramApprovals } from '../../api/program';
@@ -90,12 +90,8 @@ function DecidedRow({ approval, onOpen }) {
         <RemarkBox text={approval.review_notes} />
       </div>
       <div className="pa-decided-side">
+        {/* The audit trail link lives in the detail panel. */}
         <button type="button" className="program-btn sm" onClick={() => onOpen(approval)}>View details</button>
-        {approval.project_id != null && (
-          <Link className="pa-audit-link" to={`/program-audit?project=${approval.project_id}`}>
-            View in audit trail
-          </Link>
-        )}
       </div>
     </li>
   );

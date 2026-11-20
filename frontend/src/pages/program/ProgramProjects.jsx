@@ -3,6 +3,9 @@ import LeaderConflicts from '../../components/program/LeaderConflicts';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { downloadProgramProjectsCsv, fetchProgramProjects } from '../../api/program';
 import ProgramPill from '../../components/program/ProgramPill';
+import DownloadMenu from '../../components/DownloadMenu';
+import { reportDownloadOptions } from '../../lib/reportDownloads';
+import { projectsSummaryLine } from '../../lib/programOverview';
 import { FundersDialog, ProjectFormDialog } from '../../components/program/ProjectSetup';
 import { compactPeso, formatPct, peso } from '../../components/money';
 import { formatDateTime, formatInManila, todayInManila } from '../../lib/datetime';
@@ -384,12 +387,14 @@ export default function ProgramProjects() {
           <p className="program-sub">Externally funded research projects across every funder.</p>
         </div>
         <div className="program-head-actions">
-          <button type="button" className="program-btn" onClick={exportPdf} disabled={exportDisabled}>
-            Export PDF
-          </button>
-          <button type="button" className="program-btn" onClick={exportCsv} disabled={exportDisabled || exporting}>
-            {exporting ? 'Preparing…' : 'Export CSV'}
-          </button>
+          <DownloadMenu
+            label="Projects list"
+            disabled={exportDisabled || exporting}
+            options={reportDownloadOptions('projects').map((option) => ({
+              ...option,
+              onSelect: option.key === 'pdf' ? exportPdf : exportCsv,
+            }))}
+          />
           <button type="button" className="program-btn" onClick={() => setManagingFunders(true)}>
             Funders
           </button>
@@ -416,36 +421,9 @@ export default function ProgramProjects() {
         <div className="program-banner error" role="alert">{error}</div>
       )}
 
-      <section className="pp-summary" aria-label="Summary for the current filters">
-        <div className="pp-summary-card">
-          <div className="pp-summary-label">PROJECTS</div>
-          <div className="pp-summary-value">{summary ? summary.projects : DASH}</div>
-          <div className="pp-summary-sub">
-            {summary ? `${summary.ongoing} ongoing · ${summary.completed} completed` : DASH}
-          </div>
-        </div>
-        <div className="pp-summary-card">
-          <div className="pp-summary-label">TOTAL ALLOCATED</div>
-          <div className="pp-summary-value">{summary ? peso(summary.allocated) : DASH}</div>
-          <div className="pp-summary-sub">
-            {summary ? (summary.funder_name || 'PS and MOOE, all funders') : DASH}
-          </div>
-        </div>
-        <div className="pp-summary-card">
-          <div className="pp-summary-label">TOTAL SPENT</div>
-          <div className="pp-summary-value">{summary ? peso(summary.spent) : DASH}</div>
-          <div className="pp-summary-sub">
-            {summary ? `${formatPct(summary.spent_pct)} of allocated` : DASH}
-          </div>
-        </div>
-        <div className="pp-summary-card">
-          <div className="pp-summary-label">REMAINING</div>
-          <div className="pp-summary-value">{summary ? peso(summary.remaining) : DASH}</div>
-          <div className="pp-summary-sub">
-            {summary ? `${formatPct(summary.remaining_pct)} still available` : DASH}
-          </div>
-        </div>
-      </section>
+      <p className="pp-summary-line" aria-live="polite">
+        {summary ? projectsSummaryLine(summary) : DASH}
+      </p>
 
       <div className="program-filter-row">
         <div className="program-field">

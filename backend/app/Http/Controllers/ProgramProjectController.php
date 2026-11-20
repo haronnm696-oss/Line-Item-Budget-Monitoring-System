@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Support\Percent;
 use App\Models\Project;
 use App\Services\ProgramDashboardService;
+use App\Services\ProgramUserService;
 use App\Services\ProjectSetupService;
 use App\Support\Csv;
 use Illuminate\Http\Request;
@@ -38,10 +39,17 @@ class ProgramProjectController extends Controller
         return response(Csv::render($this->exportRows($list, $label)), 200, Csv::headers($filename));
     }
 
-    public function show(Project $project, ProjectSetupService $setup)
+    public function show(Project $project, ProjectSetupService $setup, ProgramUserService $users)
     {
         // "setup": what the Program Leader may still change (ProjectSetupService rules).
-        return response()->json($this->dashboard->projectDetail($project) + ['setup' => $setup->state($project)]);
+        // "assignable_users": the people the Team's "Add member" dialog lists
+        // (the same list as Users and roles > Assign to project).
+        // "assign_project": this project for that dialog, with its current Project Leader.
+        return response()->json($this->dashboard->projectDetail($project) + [
+            'setup' => $setup->state($project),
+            'assignable_users' => $users->assignableUsers(),
+            'assign_project' => $users->assignableProjects($project)[0] ?? null,
+        ]);
     }
 
     /**

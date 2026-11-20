@@ -11,6 +11,9 @@ import MoneyInput from '../MoneyInput';
 import { DATE_MAX, DATE_MIN } from '../../lib/dateRange';
 import LoadState from '../LoadState';
 import { peso } from '../money';
+import FileField from '../FileField';
+import { RowMenu } from '../ActionMenu';
+import { menuOptions, personnelActions } from '../../lib/projectRowActions';
 
 /**
  * The project's Personnel: the team appointed by Special Order, paid PS
@@ -21,10 +24,12 @@ import { peso } from '../money';
  *   limited  Research Assistant: name, position and period only
  * Researchers get 403 and this section renders nothing for them.
  * Bank accounts are only ever shown masked ("****9170").
+ * `teamCount` (project page): with no Team yet, the member picker says to
+ * add the person to the Team first.
  */
-export default function PersonnelSection({ projectId }) {
+export default function PersonnelSection({ projectId, teamCount }) {
   const list = useApiData(projectId ? ENDPOINTS.personnel(projectId) : null);
-  const [dialog, setDialog] = useState(null); // { kind: 'form' | 'remove' | 'order', record? }
+  const [dialog, setDialog] = useState(null); // { kind: 'form' | 'remove' | 'order', record?, url? }
   const [notice, setNotice] = useState('');
 
   // Not allowed for this role: the section is not shown at all.
@@ -35,6 +40,8 @@ export default function PersonnelSection({ projectId }) {
   const records = Array.isArray(data?.personnel) ? data.personnel : [];
   const full = access === 'edit' || access === 'view';
   const editable = access === 'edit';
+
+  const openDialog = (next) => { setNotice(''); setDialog(next); };
 
   function done(message) {
     setDialog(null);
@@ -95,15 +102,7 @@ export default function PersonnelSection({ projectId }) {
                   {full && <td className="num">{record.bank_account_masked ?? '—'}</td>}
                   {editable && (
                     <td className="pd-actions">
-                      <button type="button" className="program-btn sm" onClick={() => { setNotice(''); setDialog({ kind: 'form', record }); }}>
-                        Edit<span className="pa-sr-only"> {record.name}</span>
-                      </button>
-                      <button type="button" className="program-btn sm" onClick={() => { setNotice(''); setDialog({ kind: 'order', record }); }}>
-                        Special Order file<span className="pa-sr-only"> of {record.name}</span>
-                      </button>
-                      <button type="button" className="program-btn sm danger" onClick={() => { setNotice(''); setDialog({ kind: 'remove', record }); }}>
-                        Remove<span className="pa-sr-only"> {record.name}</span>
-                      </button>
+                      <RowMenu name={record.name ?? record.position} options={menuOptions(personnelActions(record), openDialog)} />
                     </td>
                   )}
                 </tr>
@@ -114,10 +113,10 @@ export default function PersonnelSection({ projectId }) {
       </LoadState>
 
       {dialog?.kind === 'form' && (
-        <PersonnelDialog projectId={projectId} data={data} record={dialog.record ?? null} onClose={() => setDialog(null)} onSaved={done} />
+        <PersonnelDialog projectId={projectId} data={data} teamCount={teamCount} record={dialog.record ?? null} onClose={() => setDialog(null)} onSaved={done} />
       )}
       {dialog?.kind === 'order' && (
-        <SpecialOrderDialog record={dialog.record} onClose={() => setDialog(null)} onSaved={done} />
+        <SpecialOrderDialog record={dialog.record} url={dialog.url} onClose={() => setDialog(null)} onSaved={done} />
       )}
       {dialog?.kind === 'remove' && (
         <RemoveDialog
@@ -125,7 +124,7 @@ export default function PersonnelSection({ projectId }) {
           text={dialog.record.special_order_document
             ? 'Remove the uploaded Special Order file first.'
             : 'They stay assigned to the project; payroll no longer includes them. Verified payroll is not changed.'}
-          url={ENDPOINTS.personnelRecord(dialog.record.id)}
+          url={dialog.url}
           onClose={() => setDialog(null)}
           onSaved={done}
         />
@@ -135,7 +134,7 @@ export default function PersonnelSection({ projectId }) {
 }
 
 /** Add (record null) or edit one personnel record. */
-function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
+function PersonnelDialog({ projectId, data, teamCount, record, onClose, onSaved }) {
   const creating = !record;
   const period = data?.period ?? {};
   const members = data?.members ?? [];
@@ -180,6 +179,11 @@ function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
     </Field>
   );
 
+  // No one to pick: either the Team is empty or everyone on it is listed already.
+  const noMemberHint = teamCount === 0
+    ? 'Add the person to the Team first (Team > Add member), then list them here.'
+    : 'Everyone on the Team is listed already. Add the person to the Team first (Team > Add member).';
+
   const periodHint = period.start && period.end ? `Project period: ${formatDate(period.start)} – ${formatDate(period.end)}` : undefined;
 
   return (
@@ -188,10 +192,16 @@ function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
         {error && <div className="program-banner error" role="alert">{error}</div>}
         <div className="program-form-grid">
           {creating && (
-            <Field id="pn-user_id" label="Project member" error={errors.user_id} full>
+            <Field
+              id="pn-user_id"
+              label="Project member"
+              error={errors.user_id}
+              hint={members.length ? undefined : noMemberHint}
+              full
+            >
               {(a11y) => (
                 <select {...a11y} className="program-select" value={form.user_id} disabled={busy} onChange={set('user_id')}>
-                  <option value="">Choose a member</option>
+                  <option value="">{members.length ? 'Choose a member' : 'Add the person to the Team first'}</option>
                   {members.map((member) => (
                     <option key={member.user_id} value={member.user_id}>{member.name}{member.role ? ` · ${member.role}` : ''}</option>
                   ))}
@@ -236,10 +246,12 @@ function PersonnelDialog({ projectId, data, record, onClose, onSaved }) {
 }
 
 /** Upload or remove the record's Special Order (PDF, JPG or PNG, up to 5 MB). */
-function SpecialOrderDialog({ record, onClose, onSaved }) {
+function SpecialOrderDialog({ record, url, onClose, onSaved }) {
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const endpoint = url ?? ENDPOINTS.personnelSpecialOrder(record.id);
   const current = record.special_order_document;
 
   async function run(send, message) {
@@ -261,7 +273,7 @@ function SpecialOrderDialog({ record, onClose, onSaved }) {
     if (!file) { setError('Choose a file.'); return; }
     const body = new FormData();
     body.append('file', file);
-    run(() => client.post(ENDPOINTS.personnelSpecialOrder(record.id), body), 'Special Order uploaded.');
+    run(() => client.post(endpoint, body), 'Special Order uploaded.');
   }
 
   return (
@@ -278,7 +290,7 @@ function SpecialOrderDialog({ record, onClose, onSaved }) {
                 type="button"
                 className="program-btn danger"
                 disabled={busy}
-                onClick={() => run(() => client.delete(ENDPOINTS.personnelSpecialOrder(record.id)), 'Special Order removed.')}
+                onClick={() => run(() => client.delete(endpoint), 'Special Order removed.')}
               >
                 {busy ? 'Removing…' : 'Remove file'}
               </button>
@@ -287,12 +299,17 @@ function SpecialOrderDialog({ record, onClose, onSaved }) {
         ) : (
           <>
             <div className="program-field">
-              <label htmlFor="pn-order-file">Special Order file (PDF, JPG or PNG, up to 5 MB)</label>
-              <input id="pn-order-file" className="program-input" type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(''); }} />
+              <FileField
+                id="pn-order-file"
+                label="Special Order file"
+                disabled={busy}
+                onPreparing={setPreparing}
+                onChange={(prepared, problem) => { setFile(prepared); setError(problem ?? ''); }}
+              />
             </div>
             <div className="program-modal-actions">
               <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
-              <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button>
+              <button type="submit" className="program-btn primary" disabled={busy || preparing}>{busy ? 'Uploading…' : preparing ? 'Preparing…' : 'Upload'}</button>
             </div>
           </>
         )}

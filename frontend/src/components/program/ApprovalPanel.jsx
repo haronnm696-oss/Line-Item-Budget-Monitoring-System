@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { decideApproval, fetchApprovalDetail } from '../../api/program';
 import DocumentList from '../leader/DocumentList';
 import ProgramPill from './ProgramPill';
@@ -256,6 +257,11 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
                 </li>
               ))}
             </ol>
+            {approval.project?.id != null && (
+              <Link className="pa-audit-link" to={`/program-audit?project=${approval.project.id}`}>
+                View in audit trail
+              </Link>
+            )}
 
             {Details && (
               <>

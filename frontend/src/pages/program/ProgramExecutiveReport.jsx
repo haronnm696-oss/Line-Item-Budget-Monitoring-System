@@ -47,7 +47,7 @@ export default function ProgramExecutiveReport() {
   const ready = result?.key === requestKey;
   const error = failure?.key === requestKey ? failure.message : '';
 
-  // "Print / Save as PDF" on the Reports page opens this view with ?print=1.
+  // "Download PDF" on the Reports page opens this view with ?print=1.
   // Print once, after the report has rendered, then drop the flag so a
   // reload does not print again.
   useEffect(() => {

@@ -8,6 +8,9 @@ import { formatDate } from '../../lib/datetime';
 import { PROJECT_DOCUMENT_TYPES } from '../../lib/projectAgreement';
 import { Dialog, Field, RemoveDialog } from '../program/ProjectSetup';
 import LoadState from '../LoadState';
+import FileField from '../FileField';
+import { RowMenu } from '../ActionMenu';
+import { documentActions, menuOptions } from '../../lib/projectRowActions';
 
 function sizeLabel(bytes) {
   const n = Number(bytes) || 0;
@@ -27,7 +30,7 @@ const TYPE_LABEL = Object.fromEntries(PROJECT_DOCUMENT_TYPES);
  */
 export default function ProjectDocumentsSection({ projectId }) {
   const list = useApiData(projectId ? ENDPOINTS.projectSetupDocuments(projectId) : null);
-  const [dialog, setDialog] = useState(null); // { kind: 'upload' } | { kind: 'remove', doc }
+  const [dialog, setDialog] = useState(null); // { kind: 'upload' } | { kind: 'remove', doc, url }
   const [preview, setPreview] = useState(null);
   const [notice, setNotice] = useState('');
 
@@ -88,9 +91,7 @@ export default function ProjectDocumentsSection({ projectId }) {
                       <a className="program-btn sm" href={apiUrl(doc.download_url)}>Download<span className="pa-sr-only"> {doc.file_name}</span></a>
                     )}
                     {manage && (
-                      <button type="button" className="program-btn sm danger" onClick={() => { setNotice(''); setDialog({ kind: 'remove', doc }); }}>
-                        Remove<span className="pa-sr-only"> {doc.file_name}</span>
-                      </button>
+                      <RowMenu name={doc.file_name} options={menuOptions(documentActions(doc), (next) => { setNotice(''); setDialog(next); })} />
                     )}
                   </div>
                 </li>
@@ -114,7 +115,7 @@ export default function ProjectDocumentsSection({ projectId }) {
         <RemoveDialog
           title={`Remove ${dialog.doc.file_name}`}
           text="The file is removed from the project documents. This is recorded in the audit log."
-          url={ENDPOINTS.programProjectDocument(dialog.doc.id)}
+          url={dialog.url}
           onClose={() => setDialog(null)}
           onSaved={() => done('Document removed.')}
         />
@@ -130,13 +131,14 @@ function UploadDialog({ projectId, onClose, onSaved }) {
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   async function submit(event) {
     event.preventDefault();
     const next = {};
     if (!type) next.document_type = 'Choose the document type.';
-    if (!file) next.file = 'Choose a file.';
-    else if (file.size > 5 * 1024 * 1024) next.file = 'The file is too large. The limit is 5 MB per file.';
+    if (errors.file) next.file = errors.file;
+    else if (!file) next.file = 'Choose a file.';
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -171,15 +173,20 @@ function UploadDialog({ projectId, onClose, onSaved }) {
               </select>
             )}
           </Field>
-          <Field id="pd-doc-file" label="File" error={errors.file} hint="PDF, JPG or PNG, up to 5 MB">
-            {(a11y) => (
-              <input {...a11y} className="program-input" type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setErrors({ ...errors, file: undefined }); }} />
-            )}
-          </Field>
+          <div className="program-field full">
+            <FileField
+              id="pd-doc-file"
+              label="File"
+              disabled={busy}
+              onPreparing={setPreparing}
+              onChange={(prepared, problem) => { setFile(prepared); setErrors((current) => ({ ...current, file: problem ?? undefined })); }}
+            />
+            {errors.file && <p className="program-error" id="pd-doc-file-error" role="alert">{errors.file}</p>}
+          </div>
         </div>
         <div className="program-modal-actions">
           <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button>
+          <button type="submit" className="program-btn primary" disabled={busy || preparing}>{busy ? 'Uploading…' : preparing ? 'Preparing…' : 'Upload'}</button>
         </div>
       </form>
     </Dialog>

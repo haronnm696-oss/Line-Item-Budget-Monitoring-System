@@ -134,6 +134,54 @@ class ProgramProjectsTest extends TestCase
         $this->assertContains('Dr. Aminah Macarambon', collect($detail->json('team'))->pluck('name')->all());
     }
 
+    public function test_recent_activity_uses_the_audit_trail_labels_not_class_names(): void
+    {
+        $leader = $this->programLeader();
+        $project = Project::where('code', 'MOST-RD-2026-001')->firstOrFail();
+
+        $tranche = $project->tranches()->firstOrFail();
+        $line = $project->libCategories()->firstOrFail();
+        // Recorded the way AuditTrail::log() stores them: class base names.
+        \App\Models\AuditTrail::create([
+            'user_id' => $leader->id, 'action' => 'created', 'model_type' => 'ProjectTranche', 'model_id' => $tranche->id,
+            'project_id' => $project->id, 'new_values' => ['project_id' => $project->id, 'amount' => '1000.00'],
+            'created_at' => now()->addMinute(),
+        ]);
+        \App\Models\AuditTrail::create([
+            'user_id' => $leader->id, 'action' => 'created', 'model_type' => 'LibCategory', 'model_id' => $line->id,
+            'project_id' => $project->id, 'new_values' => ['project_id' => $project->id, 'line_item_name' => $line->line_item_name],
+            'created_at' => now()->addMinutes(2),
+        ]);
+
+        $activity = collect($this->actingAs($leader)
+            ->getJson('/api/program/projects/' . $project->id)
+            ->assertOk()
+            ->json('activity'));
+
+        $this->assertNotEmpty($activity);
+        $this->assertSame(['Line item added', 'Release added'], $activity->take(2)->pluck('action_label')->all());
+        $this->assertStringStartsWith('Line item', (string) $activity[0]['record_type']);
+        $this->assertStringStartsWith('Release', (string) $activity[1]['record_type']);
+        foreach ($activity as $entry) {
+            $text = implode(' ', array_filter([$entry['action_label'], $entry['record_label'], $entry['record_type']]));
+            foreach (['ProjectTranche', 'LibCategory', 'ApprovalRequest', 'ProjectUser', 'Created ·'] as $raw) {
+                $this->assertStringNotContainsString($raw, $text);
+            }
+        }
+    }
+
+    public function test_project_detail_lists_the_people_the_add_member_dialog_offers(): void
+    {
+        $project = Project::firstOrFail();
+        $users = $this->actingAs($this->programLeader())
+            ->getJson('/api/program/projects/' . $project->id)
+            ->assertOk()
+            ->json('assignable_users');
+
+        $this->assertSame(app(\App\Services\ProgramUserService::class)->assignableUsers(), $users);
+        $this->assertNotContains('program-leader', collect($users)->pluck('role_slug')->all());
+    }
+
     public function test_project_endpoints_are_forbidden_for_other_roles(): void
     {
         $project = Project::firstOrFail();

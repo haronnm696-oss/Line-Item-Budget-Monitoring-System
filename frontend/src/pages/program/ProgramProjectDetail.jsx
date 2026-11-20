@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { fetchProgramProject } from '../../api/program';
+import { assignToProject, fetchProgramProject } from '../../api/program';
 import { ENDPOINTS } from '../../api/endpoints';
 import ProgramPill from '../../components/program/ProgramPill';
 import { LineItemDialog, ProjectFormDialog, RemoveDialog, TrancheDialog } from '../../components/program/ProjectSetup';
@@ -15,12 +15,10 @@ import { formBBlocker } from '../../lib/formBPrint';
 import { formatShare, releaseShare, releaseSummary, splitAmounts } from '../../lib/releasePlan';
 import { apiWrite } from '../../api/http';
 import { errorText } from '../../api/leader';
-
-
-function actionLabel(action) {
-  const text = String(action ?? '').replace(/_/g, ' ');
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
+import { RowMenu } from '../../components/ActionMenu';
+import ProgramAssignUserModal from '../../components/program/ProgramAssignUserModal';
+import { canAssignTo } from '../../lib/assignForm';
+import { activityTitle, lineItemActions, menuOptions, trancheActions } from '../../lib/projectRowActions';
 
 const LIQUIDATION_TONE = { Approved: 'healthy', Pending: 'watch', Rejected: 'risk', 'Not submitted': 'watch' };
 
@@ -31,7 +29,7 @@ export default function ProgramProjectDetail() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // Set-up dialogs: { kind: 'details' | 'line' | 'removeLine' | 'tranche' | 'removeTranche', item? }
+  // Set-up dialogs: { kind: 'details' | 'line' | 'removeLine' | 'tranche' | 'removeTranche' | 'assign', item?, url? }
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -39,6 +37,10 @@ export default function ProgramProjectDetail() {
   const [splitError, setSplitError] = useState('');
   const [renumberBusy, setRenumberBusy] = useState(false);
   const [renumberError, setRenumberError] = useState('');
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState('');
+  // Bumped after "Add member" so Personnel reloads its member list.
+  const [teamVersion, setTeamVersion] = useState(0);
 
   function saved(message) {
     setDialog(null);
@@ -103,6 +105,7 @@ export default function ProgramProjectDetail() {
   const funderTotal = Number(setup?.funder_total ?? 0) || 0;
   const releasePlan = releaseSummary(tranches, funderTotal);
   const splitPreview = splitAmounts(funderTotal);
+  const assignable = canAssignTo(project);
 
   async function splitReleases() {
     if (splitBusy) return;
@@ -118,6 +121,25 @@ export default function ProgramProjectDetail() {
       setSplitBusy(false);
     }
   }
+
+  /** Team > Add member: the same assignment call as Users and roles. */
+  async function addMember(payload) {
+    setAssignBusy(true);
+    setAssignError('');
+    try {
+      await assignToProject(payload);
+      setTeamVersion((value) => value + 1);
+      saved('Member added to the project.');
+    } catch (failure) {
+      setAssignError(failure?.response?.data?.errors
+        ? Object.values(failure.response.data.errors).flat()[0]
+        : failure?.response?.data?.message || 'Unable to assign the user.');
+    } finally {
+      setAssignBusy(false);
+    }
+  }
+
+  const openDialog = (next) => { setNotice(''); setDialog(next); };
 
   async function renumberReleases() {
     if (renumberBusy) return;
@@ -161,9 +183,8 @@ export default function ProgramProjectDetail() {
         </div>
         <div className="program-head-actions">
           {setup && (
-            <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'details' }); }}>Edit details</button>
+            <button type="button" className="program-btn" onClick={() => openDialog({ kind: 'details' })}>Edit details</button>
           )}
-          <Link className="program-btn" to={`/program-approvals?project=${project.id}`}>View approvals</Link>
           {formBReason ? (
             <button type="button" className="program-btn primary" disabled aria-describedby="pd-form-b-blocked">Export Form B</button>
           ) : (
@@ -202,6 +223,8 @@ export default function ProgramProjectDetail() {
         </section>
       </div>
 
+      <ProjectDocumentsSection projectId={project.id} />
+
       <section className="program-card">
         <div className="program-card-head">
           <div>
@@ -211,7 +234,7 @@ export default function ProgramProjectDetail() {
             </div>
           </div>
           {setup && (
-            <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'line' }); }}>Add line item</button>
+            <button type="button" className="program-btn" onClick={() => openDialog({ kind: 'line' })}>Add line item</button>
           )}
         </div>
         {setup && (
@@ -251,8 +274,7 @@ export default function ProgramProjectDetail() {
                     key={section.type}
                     section={section}
                     setup={setup}
-                    onEdit={(item) => { setNotice(''); setDialog({ kind: 'line', item }); }}
-                    onRemove={(item) => { setNotice(''); setDialog({ kind: 'removeLine', item }); }}
+                    onOpen={openDialog}
                   />
                 ))}
               </tbody>
@@ -275,23 +297,12 @@ export default function ProgramProjectDetail() {
           </div>
           {setup && (
             <div className="program-head-actions">
-              {setup.can_renumber_releases && (
-                <button
-                  type="button"
-                  className="program-btn"
-                  disabled={renumberBusy}
-                  onClick={renumberReleases}
-                  aria-describedby="pd-renumber-hint"
-                >
-                  {renumberBusy ? 'Renumbering…' : 'Renumber planned releases'}
-                </button>
-              )}
               {tranches.length === 0 && funderTotal > 0 && (
                 <button type="button" className="program-btn" disabled={splitBusy} onClick={splitReleases} aria-describedby="pd-split-hint">
                   {splitBusy ? 'Adding…' : 'Split 70% / 30%'}
                 </button>
               )}
-              <button type="button" className="program-btn" onClick={() => { setNotice(''); setSplitError(''); setDialog({ kind: 'tranche' }); }}>Add release</button>
+              <button type="button" className="program-btn" onClick={() => { setSplitError(''); openDialog({ kind: 'tranche' }); }}>Add release</button>
             </div>
           )}
         </div>
@@ -308,7 +319,7 @@ export default function ProgramProjectDetail() {
         {setup && setup.funder_total_source !== 'moa' && (
           <p className="pu-hint" role="note">
             <span aria-hidden="true">ⓘ </span>Enter the grant amount from the MOA for exact percentages.{' '}
-            <button type="button" className="program-btn sm" onClick={() => { setNotice(''); setDialog({ kind: 'details' }); }}>Edit details</button>
+            <button type="button" className="link-btn pd-hint-link" onClick={() => openDialog({ kind: 'details' })}>Edit details</button>
           </p>
         )}
         {setup && tranches.length === 0 && funderTotal > 0 && (
@@ -318,7 +329,11 @@ export default function ProgramProjectDetail() {
         )}
         {setup?.can_renumber_releases && (
           <p className="pu-hint" id="pd-renumber-hint">
-            Every release is still scheduled and none was ever requested. Renumber them 1, 2, … by planned date and update milestones that name an old number.
+            Every release is still scheduled and none was ever requested.{' '}
+            <button type="button" className="link-btn pd-hint-link" disabled={renumberBusy} onClick={renumberReleases}>
+              {renumberBusy ? 'Renumbering…' : 'Renumber planned releases'}
+            </button>
+            {' '}to number them 1, 2, … by planned date; milestones that name an old number are updated.
           </p>
         )}
         {tranches.length === 0 ? (
@@ -367,14 +382,7 @@ export default function ProgramProjectDetail() {
                     {setup && (
                       <td className="pd-actions">
                         {setup.editable_tranches.includes(tranche.id) ? (
-                          <>
-                            <button type="button" className="program-btn sm" onClick={() => { setNotice(''); setDialog({ kind: 'tranche', item: tranche }); }}>
-                              Edit<span className="pa-sr-only"> {tranche.name}</span>
-                            </button>
-                            <button type="button" className="program-btn sm danger" onClick={() => { setNotice(''); setDialog({ kind: 'removeTranche', item: tranche }); }}>
-                              Remove<span className="pa-sr-only"> {tranche.name}</span>
-                            </button>
-                          </>
+                          <RowMenu name={tranche.name} options={menuOptions(trancheActions(tranche, { editable: true }), openDialog)} />
                         ) : (
                           <span className="project-code">{tranche.status === 'Released' ? '🔒 Released' : '🔒 Release requested'}</span>
                         )}
@@ -388,8 +396,37 @@ export default function ProgramProjectDetail() {
         )}
       </section>
 
-      <PersonnelSection projectId={project.id} />
-      <ProjectDocumentsSection projectId={project.id} />
+      <section className="program-card">
+        <div className="program-card-head">
+          <div>
+            <div className="program-card-title">Team</div>
+            <div className="program-card-sub">People assigned to this project, in their account roles. Add someone here before listing them under Personnel.</div>
+          </div>
+          <div className="program-head-actions">
+            <Link className="program-card-link" to="/program-users">Users and roles</Link>
+            {setup && assignable && (
+              <button type="button" className="program-btn" onClick={() => { setAssignError(''); openDialog({ kind: 'assign' }); }}>Add member</button>
+            )}
+          </div>
+        </div>
+        {setup && !assignable && (
+          <p className="pu-hint" role="note"><span aria-hidden="true">ⓘ </span>Only Ongoing and Planning projects take new members.</p>
+        )}
+        {team.length === 0 ? (
+          <p className="pl-inbox-empty">No one is assigned yet.</p>
+        ) : (
+          <ul className="pd-list">
+            {team.map((member) => (
+              <li key={`${member.user_id}-${member.role_slug}`}>
+                <b>{member.name}</b>
+                <span>{member.role}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <PersonnelSection key={teamVersion} projectId={project.id} teamCount={team.length} />
 
       <section className="program-card">
         <div className="program-card-head">
@@ -431,57 +468,30 @@ export default function ProgramProjectDetail() {
         )}
       </section>
 
-      <div className="pl-row pl-row-charts">
-        <section className="program-card">
-          <div className="program-card-head">
-            <div>
-              <div className="program-card-title">Team</div>
-              <div className="program-card-sub">Roles on this project</div>
-            </div>
-            <Link className="program-card-link" to="/program-users">Users and roles</Link>
+      <section className="program-card">
+        <div className="program-card-head">
+          <div>
+            <div className="program-card-title">Recent activity</div>
+            <div className="program-card-sub">Latest 10 audit-trail entries</div>
           </div>
-          {team.length === 0 ? (
-            <p className="pl-inbox-empty">No one is assigned yet.</p>
-          ) : (
-            <ul className="pd-list">
-              {team.map((member) => (
-                <li key={`${member.user_id}-${member.role_slug}`}>
-                  <b>{member.name}</b>
-                  <span>{member.role}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="program-card">
-          <div className="program-card-head">
-            <div>
-              <div className="program-card-title">Recent activity</div>
-              <div className="program-card-sub">Latest 10 audit-trail entries</div>
-            </div>
-            <Link className="program-card-link" to={`/program-audit?project=${project.id}`}>Audit trail</Link>
-          </div>
-          {activity.length === 0 ? (
-            <p className="pl-inbox-empty">No recorded activity yet.</p>
-          ) : (
-            <ul className="pd-list">
-              {activity.map((entry) => (
-                <li key={entry.id}>
-                  <b>
-                    {actionLabel(entry.action)} · {entry.record_type}
-                    {entry.summary ? ` — ${entry.summary}` : ''}
-                  </b>
-                  <span>
-                    {entry.user} · {formatDateTime(entry.created_at)}
-                    {entry.reason ? ` · ${entry.reason}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+          <Link className="program-card-link" to={`/program-audit?project=${project.id}`}>Audit trail</Link>
+        </div>
+        {activity.length === 0 ? (
+          <p className="pl-inbox-empty">No recorded activity yet.</p>
+        ) : (
+          <ul className="pd-list">
+            {activity.map((entry) => (
+              <li key={entry.id}>
+                <b>{activityTitle(entry)}</b>
+                <span>
+                  {entry.record_type ? `${entry.record_type} · ` : ''}{entry.user} · {formatDateTime(entry.created_at)}
+                  {entry.reason ? ` · ${entry.reason}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {setup && dialog?.kind === 'details' && (
         <ProjectFormDialog mode="edit" projectId={project.id} setup={setup} onClose={() => setDialog(null)} onSaved={saved} />
@@ -492,11 +502,23 @@ export default function ProgramProjectDetail() {
       {setup && dialog?.kind === 'tranche' && (
         <TrancheDialog projectId={project.id} tranche={dialog.item ?? null} setup={setup} onClose={() => setDialog(null)} onSaved={saved} />
       )}
+      {setup && dialog?.kind === 'assign' && (
+        <ProgramAssignUserModal
+          users={data.assignable_users ?? []}
+          // assign_project carries the project's current Project Leader (greys it out for another leader).
+          projects={[data.assign_project ?? { id: project.id, title: project.title, code: project.code, status: project.status, leader: null }]}
+          defaultProjectId={project.id}
+          busy={assignBusy}
+          error={assignError}
+          onSave={addMember}
+          onClose={() => { if (!assignBusy) setDialog(null); }}
+        />
+      )}
       {dialog?.kind === 'removeLine' && (
         <RemoveDialog
           title="Remove line item"
           text={`Remove "${dialog.item.name}" (${peso(dialog.item.allocated)}) from the Line-Item Budget?`}
-          url={ENDPOINTS.programLineItem(dialog.item.id)}
+          url={dialog.url}
           onClose={() => setDialog(null)}
           onSaved={saved}
         />
@@ -505,7 +527,7 @@ export default function ProgramProjectDetail() {
         <RemoveDialog
           title="Remove release"
           text={`Remove ${dialog.item.name} (${peso(dialog.item.amount)}, planned ${formatDate(dialog.item.planned_release_date)})?`}
-          url={ENDPOINTS.programTranche(dialog.item.id)}
+          url={dialog.url}
           onClose={() => setDialog(null)}
           onSaved={saved}
         />
@@ -529,7 +551,7 @@ function TotalRow({ className, label, totals, setup }) {
 }
 
 /** One line item: name, Form B computation, the two amounts, spent, actions. */
-function ItemRow({ item, inSub, setup, onEdit, onRemove }) {
+function ItemRow({ item, inSub, setup, onOpen }) {
   const used = setup?.used_line_items.includes(item.id);
   return (
     <tr className={`fb-item${inSub ? ' in-sub' : ''}`}>
@@ -546,16 +568,8 @@ function ItemRow({ item, inSub, setup, onEdit, onRemove }) {
       </td>
       {setup && (
         <td className="pd-actions">
-          <button type="button" className="program-btn sm" onClick={() => onEdit(item)}>
-            Edit<span className="pa-sr-only"> {item.name}</span>
-          </button>
-          {used ? (
-            <span className="project-code" title="It has expenses, payroll or purchase requests">🔒 In use</span>
-          ) : (
-            <button type="button" className="program-btn sm danger" onClick={() => onRemove(item)}>
-              Remove<span className="pa-sr-only"> {item.name}</span>
-            </button>
-          )}
+          {used && <span className="project-code" title="It has expenses, payroll or purchase requests">🔒 In use </span>}
+          <RowMenu name={item.name} options={menuOptions(lineItemActions(item, { used }), onOpen)} />
         </td>
       )}
     </tr>
@@ -567,9 +581,9 @@ function ItemRow({ item, inSub, setup, onEdit, onRemove }) {
  * expense groups (and optional sub-groups), sub-totals per source at every
  * level.
  */
-function FormBSection({ section, setup, onEdit, onRemove }) {
+function FormBSection({ section, setup, onOpen }) {
   const span = setup ? 6 : 5;
-  const rowProps = { setup, onEdit, onRemove };
+  const rowProps = { setup, onOpen };
   return (
     <>
       <tr className="fb-section">
