@@ -96,9 +96,11 @@ export function CheckIcon({ className = 'signin-success__check' }) {
 
 export function AuthWordmark() {
   return (
-    <div className="signin-brand__wordmark">
-      <img src="/brand/lib-wordmark.jpg" alt="LIB Monitoring System" />
-    </div>
+    <img
+      className="signin-brand__wordmark"
+      src="/brand/lib-wordmark-white.png"
+      alt="LIB Monitoring System"
+    />
   );
 }
 
