@@ -298,10 +298,10 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
         </button>
 
         <div className="program-brand">
-          <img className="program-brand-seal" src="/images/msu-seal-outline.png" alt="MSU seal" />
+          <img className="program-brand-icon" src="/brand/lib-icon.png" alt="" />
           <div className="program-brand-text">
-            <div className="program-brand-name">LIB Monitoring</div>
-            <div className="program-brand-sub">MSU–Main Campus</div>
+            <div className="program-brand-name">LIB</div>
+            <div className="program-brand-sub">Monitoring System</div>
           </div>
         </div>
 
