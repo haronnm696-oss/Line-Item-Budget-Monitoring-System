@@ -94,22 +94,28 @@ export function CheckIcon({ className = 'signin-success__check' }) {
   );
 }
 
-export function AuthLogoRow() {
+export function AuthWordmark() {
   return (
-    <div className="signin-brand__logos">
+    <div className="signin-brand__wordmark">
+      <img src="/brand/lib-wordmark.jpg" alt="LIB Monitoring System" />
+    </div>
+  );
+}
+
+export function AuthFooterLogos() {
+  return (
+    <span className="signin-brand__footer-logos">
       <img
-        className="signin-brand__logo"
         src="/images/msu-seal-outline.png"
         alt="Mindanao State University seal"
         onError={hideBrokenImage}
       />
       <img
-        className="signin-brand__logo"
         src="/images/client-logo-outline.png"
-        alt="Client logo"
+        alt="Partner logo"
         onError={hideBrokenImage}
       />
-    </div>
+    </span>
   );
 }
 
@@ -117,8 +123,8 @@ export function AuthMobileHead() {
   return (
     <div className="signin-mobile-head">
       <img
-        src="/images/msu-seal.png"
-        alt="Mindanao State University seal"
+        src="/brand/lib-icon.png"
+        alt=""
         onError={hideBrokenImage}
       />
       <span>LIB Monitoring System</span>
@@ -128,7 +134,6 @@ export function AuthMobileHead() {
 
 export function AuthBrandPanel({
   title,
-  system = 'LIB Monitoring System',
   lead,
   steps = [],
   cta,
@@ -136,21 +141,10 @@ export function AuthBrandPanel({
 }) {
   return (
     <aside className="signin-brand">
-      <span className="signin-brand__shape signin-brand__shape--circle" aria-hidden="true" />
-      <span
-        className="signin-brand__shape signin-brand__shape--diamond signin-brand__shape--diamond-top"
-        aria-hidden="true"
-      />
-      <span
-        className="signin-brand__shape signin-brand__shape--diamond signin-brand__shape--diamond-bottom"
-        aria-hidden="true"
-      />
-
       <div className="signin-brand__inner">
-        <AuthLogoRow />
+        <AuthWordmark />
 
         <h2 className="signin-brand__title">{title}</h2>
-        <p className="signin-brand__system">{system}</p>
         <p className="signin-brand__lead">{lead}</p>
 
         {steps.length > 0 && (
@@ -171,7 +165,10 @@ export function AuthBrandPanel({
         )}
       </div>
 
-      <p className="signin-brand__footer">{footer}</p>
+      <p className="signin-brand__footer">
+        <AuthFooterLogos />
+        <span>{footer}</span>
+      </p>
     </aside>
   );
 }
