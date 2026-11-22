@@ -19,7 +19,7 @@ final class MoneyInput
     public const FIELDS = [
         'amount', 'total_approved_budget', 'funding_agency_amount', 'implementing_agency_counterpart',
         'implementing_agency_amount', 'funder_amount', 'allocated_amount', 'rate',
-        'estimated_amount', 'basic_rate', 'monthly_honorarium',
+        'estimated_amount', 'basic_rate', 'monthly_honorarium', 'unit_cost',
     ];
 
     /** Validation for an amount: a number, zero or more, at most two decimals. */

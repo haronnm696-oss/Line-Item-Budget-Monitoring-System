@@ -3740,3 +3740,30 @@ select.signin-input:disabled{
 .file-field-control:hover{border-color:#6F1D2A}
 .file-field-input:focus-visible + .file-field-control{outline:3px solid rgba(111,29,42,.4);outline-offset:2px}
 .file-field.is-disabled .file-field-control{cursor:not-allowed;opacity:.6}
+
+/* Purchase request items (MSU Purchase Request form) */
+.pr-items{margin-top:12px}
+.pr-items-caption{caption-side:top;text-align:left;font-weight:700;font-size:13.5px;padding:0 0 6px}
+.pr-items-table tfoot th,.pr-items-table tfoot td{border-top:1px solid var(--pg-card-border);border-bottom:none}
+.pr-item-list{display:flex;flex-direction:column;gap:12px;margin:0;padding:0;list-style:none}
+.pr-item{border:1px solid var(--pg-card-border);border-radius:12px;padding:12px 14px;min-width:0}
+.pr-item legend{font-weight:700;font-size:13.5px;padding:0 4px}
+.pr-item-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.pr-item-grid .full{grid-column:1 / -1}
+.pr-item-cost{display:flex;flex-direction:column;justify-content:flex-end;min-height:44px}
+.pr-item-cost output{font-weight:700;font-variant-numeric:tabular-nums;padding:10px 0}
+.pr-item-foot{display:flex;justify-content:flex-end;margin-top:8px}
+.pr-items-total{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}
+.pr-items-total output{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+@media (max-width: 640px){
+  .pr-item-grid{grid-template-columns:1fr 1fr}
+}
+/* Item status (text plus icon) and the expense dialog's item checklist */
+.pr-item-status{white-space:nowrap}
+.pr-item-status.is-paid{font-weight:650}
+.pr-tick-list ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pr-tick{display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:10px 12px;border:1px solid var(--pg-card-border);border-radius:10px;cursor:pointer}
+.pr-tick input{width:20px;height:20px;margin-top:2px;flex:none}
+.pr-tick > span{min-width:0;overflow-wrap:anywhere}
+.pr-tick.is-disabled{cursor:default;color:var(--pg-muted)}
+.pr-tick-note{display:block;font-size:12.5px;margin-top:2px}

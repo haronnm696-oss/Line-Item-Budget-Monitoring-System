@@ -37,7 +37,7 @@ export default function SubmissionTable({ items, onOpen, onResubmit, busyKey = n
                 </td>
                 <td data-label="Amount" className="num ld-amount">{item.amount != null ? peso(item.amount) : '—'}</td>
                 <td data-label="Status">
-                  <StagePill status={item.workflow_status} type={pillType} />
+                  <StagePill status={item.workflow_status} type={pillType ?? (item.type === 'purchase_request' ? 'purchase_request' : null)} fulfilment={item.fulfilment} />
                   {returned
                     ? <div className="ra-next is-returned">{returned}</div>
                     : item.next_step && <div className="ra-next">{item.next_step}</div>}

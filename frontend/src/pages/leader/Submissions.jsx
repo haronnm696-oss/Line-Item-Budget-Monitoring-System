@@ -138,6 +138,7 @@ export default function Submissions() {
             onApprove={actions.approve}
             onReturn={actions.openReturn}
             onEdit={(item) => { actions.setFeedback(null); setEditing(item); }}
+            onCancel={actions.openCancel}
             onClose={() => updateQuery({ open: '' })}
           />
         )}

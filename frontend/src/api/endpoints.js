@@ -104,12 +104,24 @@
  * Purchase requests (draft -> submitted -> endorsed, or returned; no Finance step;
  * an approved request ends as fulfilled or cancelled):
  *   GET    /api/projects/:id/purchase-requests?workflow_status=
- *   POST   /api/projects/:id/purchase-requests -> { lib_category_id, description, quantity, estimated_amount, supplier? }
+ *   POST   /api/projects/:id/purchase-requests -> { purpose, supplier?, funding_source?,
+ *            items: [{ lib_category_id, quantity, unit (pc|set|box|lot|ream|unit), description, unit_cost }] }
+ *            (estimated cost = quantity x unit cost and the total are computed by the server; honoraria lines refused;
+ *            the older { lib_category_id, description, quantity, estimated_amount } is still accepted as one "lot" item)
+ *          -> purchase_request { purpose, total, items: [{ line_item, quantity, unit, unit_cost, estimated_cost, expense_linked }],
+ *             pr_no, pr_date, sai_no, sai_date, alobs_no, alobs_date, ... }
  *   PATCH  /api/purchase-requests/:id          (draft / returned)
  *   DELETE /api/purchase-requests/:id          (own draft)
  *   POST   /api/purchase-requests/:id/submit (needs a quotation or invoice) | endorse | return { reason }
- *   POST   /api/purchase-requests/:id/cancel  -> { reason } approved and unfulfilled; Project Leader or requester
- *   Fulfil: POST/PATCH an expense with purchase_request_id (approved request, same project and line item)
+ *   POST   /api/purchase-requests/:id/cancel  -> { reason } approved with open items (also partly linked); Project Leader
+ *            or requester; releases only open items ("Cancelled (partly fulfilled)")
+ *   PATCH  /api/purchase-requests/:id/numbers -> { pr_no, pr_date, sai_no, sai_date, alobs_no, alobs_date } Finance/Admin, approved or fulfilled
+ *   Submit and approve check each line item: its items may not exceed its available amount (counting pending).
+ *   Fulfil: POST/PATCH an expense with purchase_request_id + purchase_request_item_ids (open items, all on the
+ *           expense's line item; without ids: every open item on that line item). amount <= the items' total
+ *           (lower releases the difference). Items: status open | linked | paid (+ expense_reference); request
+ *           fulfilment: none | partial | full ("Partly fulfilled", "Fulfilled"); fulfilled once no item is open.
+ *           Deleting a linked draft frees its items.
  *   Documents: GET/POST /api/purchase-requests/:id/documents (quotation | invoice | other)
  *
  * Budget requests (Project Leader -> Program Leader; shown on Program Approvals):

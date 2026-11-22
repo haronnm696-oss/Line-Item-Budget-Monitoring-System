@@ -121,9 +121,11 @@ test('free-text record fields turn off browser suggestions', () => {
     assert.match(expense, new RegExp(`id="${id}"[^>]*autoComplete="off"`), id);
   }
   const purchase = source('components/assistant/PurchaseRequestDialog.jsx');
-  for (const id of ['ra-pr-supplier', 'ra-pr-desc']) {
+  for (const id of ['ra-pr-supplier', 'ra-pr-purpose']) {
     assert.match(purchase, new RegExp(`id="${id}"[^>]*autoComplete="off"`), id);
   }
+  // Each item row's description.
+  assert.match(purchase, /id=\{id\('desc'\)\}[^>]*autoComplete="off"/);
 });
 
 test('the Researcher Overview has no Reports card; Transaction summary is full width', () => {
@@ -166,4 +168,19 @@ test('the Researcher Budget reuses the Form B table read-only, with Remaining', 
   assert.match(page, /<FormBTable formB=\{formB\} remaining \/>/);
   assert.doesNotMatch(page, /setup=|RowMenu/);
   assert.match(source('pages/program/ProgramProjectDetail.jsx'), /<FormBTable formB=\{formB\} setup=\{setup\} onOpen=\{openDialog\} \/>/);
+});
+
+test('the Project Leader cancels a purchase request from the review panel only, with a reason', () => {
+  const panel = source('components/leader/RecordPanel.jsx');
+  // Shown for a purchase request the server marks cancellable (approved or partly fulfilled).
+  assert.match(panel, /item\.type === 'purchase_request' && item\.can_cancel && onCancel &&/);
+  assert.match(panel, />Cancel request<\/button>/);
+  // The same cancel endpoint, through a dialog that requires a reason.
+  const actions = source('components/leader/useReviewActions.jsx');
+  assert.match(actions, /ENDPOINTS\.purchaseRequestStep\(item\.id, 'cancel'\), \{ reason \}/);
+  assert.match(actions, /<ConfirmDialog[\s\S]*reasonLabel="Reason"/);
+  assert.match(source('components/assistant/ConfirmDialog.jsx'), /if \(reasonLabel && !reason\.trim\(\)\)/);
+  assert.match(source('pages/leader/Submissions.jsx'), /onCancel=\{actions\.openCancel\}/);
+  // Never on list rows.
+  assert.doesNotMatch(source('components/leader/ReviewRow.jsx'), /cancel/i);
 });

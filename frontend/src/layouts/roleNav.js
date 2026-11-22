@@ -70,6 +70,7 @@ export const ROLE_NAV = {
         { to: '/verification-queue', label: 'Verification queue', icon: 'approvals', badge: 'verification' },
         { to: '/expenses', label: 'Expenses and receipts', icon: 'receipt' },
         { to: '/payroll', label: 'Payroll', icon: 'payroll' },
+        { to: '/purchase-requests', label: 'Purchase requests', icon: 'cart' },
       ],
     },
     {

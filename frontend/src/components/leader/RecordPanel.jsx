@@ -3,6 +3,7 @@ import { fetchReviewItem } from '../../api/leader';
 import ProgramPill from '../program/ProgramPill';
 import DocumentList from './DocumentList';
 import { peso } from '../money';
+import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
 import { formatDate, formatDateTime } from '../../lib/datetime';
 
 function fieldValue(field) {
@@ -16,9 +17,11 @@ function fieldValue(field) {
  * Side panel with the full record and its documents. `target` is
  * { type, id } (the record is loaded fresh, at any stage). Approve / Return
  * act through the same handlers as the list. A returned expense the leader
- * recorded offers "Edit and resubmit" (onEdit); others stay read-only.
+ * recorded offers "Edit and resubmit" (onEdit); an approved or partly
+ * fulfilled purchase request offers "Cancel request" with a reason
+ * (onCancel; here only, never on list rows); others stay read-only.
  */
-export default function RecordPanel({ projectId, target, refreshKey, busyKey, onApprove, onReturn, onEdit, onClose }) {
+export default function RecordPanel({ projectId, target, refreshKey, busyKey, onApprove, onReturn, onEdit, onCancel, onClose }) {
   const key = target ? `${target.type}-${target.id}#${refreshKey}` : '';
   const [result, setResult] = useState(null); // { key, item } | { key, error }
 
@@ -85,6 +88,9 @@ export default function RecordPanel({ projectId, target, refreshKey, busyKey, on
                 <div><dt>Project Leader decision</dt><dd>{item.reviewed_by.name} · {formatDateTime(item.reviewed_at)}</dd></div>
               )}
             </dl>
+            {Array.isArray(item.pr_items) && (
+              <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(item.workflow_status)} />
+            )}
 
             <h3 className="ld-panel-sub">Documents</h3>
             <DocumentList type={item.type} id={item.id} />
@@ -100,6 +106,11 @@ export default function RecordPanel({ projectId, target, refreshKey, busyKey, on
                 <button type="button" className="program-btn primary" disabled={busy} onClick={() => onApprove(item)}>
                   {busy ? 'Saving…' : 'Approve'}
                 </button>
+              </div>
+            )}
+            {item.type === 'purchase_request' && item.can_cancel && onCancel && (
+              <div className="ld-panel-actions">
+                <button type="button" className="program-btn danger" disabled={busy} onClick={() => onCancel(item)}>Cancel request</button>
               </div>
             )}
           </>

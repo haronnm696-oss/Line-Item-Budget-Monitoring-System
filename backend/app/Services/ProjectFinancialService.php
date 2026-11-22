@@ -326,8 +326,11 @@ class ProjectFinancialService
      *            not cancelled), plus payroll submitted or approved by the
      *            Project Leader (waiting for verification)
      *
-     * A fulfilled request stops counting and its linked expense counts
-     * instead, so the same money is never counted twice.
+     * A purchase request holds each item's estimated cost on that item's
+     * line item while the item is open. Once an expense pays an item, the
+     * item stops counting and the expense counts its own amount instead (a
+     * lower amount releases the difference), so the same money is never
+     * counted twice.
      *
      * @return array{line_items: array<int, array<string, mixed>>, totals: array<string, float>}
      */
@@ -347,7 +350,7 @@ class ProjectFinancialService
             $q->whereIn('workflow_status', self::PENDING_STAGES)
                 ->orWhere(fn ($linked) => $linked->whereNotNull('purchase_request_id')->whereIn('workflow_status', ['draft', 'returned']));
         }), 'amount');
-        $pendingRequests = $sums(PurchaseRequest::query()->where('workflow_status', PurchaseRequest::OPEN_APPROVED), 'estimated_amount');
+        $pendingRequests = self::openRequestAmounts($project->id);
         // Payroll has no funding_source column: it is the funder's share.
         $payrollSums = fn ($query) => $query->where('project_id', $project->id)
             ->selectRaw('lib_category_id, SUM(gross_pay) as total')->groupBy('lib_category_id')
@@ -440,6 +443,37 @@ class ProjectFinancialService
         $source = self::source($source);
 
         return $row['sources'][$source] + ['name' => $row['name'], 'source' => $source, 'has_counterpart' => $row['has_counterpart']];
+    }
+
+    /**
+     * Money held by approved, open purchase requests: the estimated costs
+     * of their open items (no expense yet) per "lineId:source". A linked
+     * item's money moves to its expense, which counts its own amount; when
+     * that amount is lower than the items, the difference is released, not
+     * kept pending. Cancelled requests hold nothing.
+     *
+     * @return \Illuminate\Support\Collection<string, float>
+     */
+    public static function openRequestAmounts(int $projectId, ?int $exceptRequestId = null): \Illuminate\Support\Collection
+    {
+        $totals = [];
+        PurchaseRequest::query()
+            ->where('project_id', $projectId)
+            ->where('workflow_status', PurchaseRequest::OPEN_APPROVED)
+            ->when($exceptRequestId, fn ($q) => $q->whereKeyNot($exceptRequestId))
+            ->with('items')
+            ->get()
+            ->each(function (PurchaseRequest $request) use (&$totals) {
+                foreach ($request->lineItems() as $item) {
+                    if ($item->expense_id) {
+                        continue;
+                    }
+                    $key = $item->lib_category_id . ':' . self::source($item->funding_source);
+                    $totals[$key] = round(($totals[$key] ?? 0.0) + (float) $item->estimated_cost, 2);
+                }
+            });
+
+        return collect($totals);
     }
 
     /** Unknown or empty funding source values mean the funder. */

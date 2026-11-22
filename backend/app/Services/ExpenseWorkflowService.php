@@ -73,9 +73,10 @@ class ExpenseWorkflowService
     }
 
     /**
-     * Record a draft. With purchase_request_id, the expense is linked to that
-     * approved purchase request (same project and line item), which becomes
-     * fulfilled: one audit entry for the expense and one for the request.
+     * Record a draft. With purchase_request_id (and purchase_request_item_ids,
+     * the ticked items, all on the expense's line item), the expense pays
+     * those items of the approved request; the request is fulfilled once no
+     * item is open. One audit entry for the expense and one for the request.
      */
     public function create(Project $project, array $data, User $actor): Expense
     {
@@ -94,7 +95,7 @@ class ExpenseWorkflowService
             ]));
 
             AuditLogger::write('created', $expense, [], $this->snapshot($expense), $actor);
-            $request = $linkId ? $this->purchaseRequests->fulfil(PurchaseRequest::findOrFail($linkId), $expense, $actor) : null;
+            $request = $linkId ? $this->purchaseRequests->fulfil(PurchaseRequest::findOrFail($linkId), $expense, $actor, $data['purchase_request_item_ids'] ?? null) : null;
 
             return [$expense->fresh(), $request];
         });
@@ -137,10 +138,16 @@ class ExpenseWorkflowService
                     : $this->fundingSource($lineItem, $requested, $newLink ?: $current);
             }
 
+            // Already linked: the amount stays at most the items it pays.
+            $itemsTotal = $current && array_key_exists('amount', $data) ? PurchaseRequestService::linkedItemsTotal($locked) : 0.0;
+            if ($itemsTotal > 0) {
+                $this->purchaseRequests->requireWithinItems((float) $data['amount'], $itemsTotal);
+            }
+
             $old = $this->snapshot($locked);
             $locked->update($this->only($data) + ($newLink ? ['purchase_request_id' => $newLink] : []));
             AuditLogger::write('updated', $locked, $old, $this->snapshot($locked->fresh()), $actor);
-            $request = $newLink ? $this->purchaseRequests->fulfil(PurchaseRequest::findOrFail($newLink), $locked->fresh(), $actor) : null;
+            $request = $newLink ? $this->purchaseRequests->fulfil(PurchaseRequest::findOrFail($newLink), $locked->fresh(), $actor, $data['purchase_request_item_ids'] ?? null) : null;
 
             return [$locked->fresh(), $request];
         });
@@ -259,7 +266,10 @@ class ExpenseWorkflowService
     private function fundingSource($lineItemId, ?string $requested, $purchaseRequestId = null): string
     {
         if ($purchaseRequestId && $request = PurchaseRequest::find($purchaseRequestId)) {
-            return ProjectFinancialService::source($request->funding_source);
+            // The source of the request's items on this line item.
+            $item = $request->lineItems()->first(fn ($row) => (int) $row->lib_category_id === (int) $lineItemId);
+
+            return ProjectFinancialService::source($item?->funding_source ?? $request->funding_source);
         }
         $item = $lineItemId ? LibCategory::find($lineItemId) : null;
 
