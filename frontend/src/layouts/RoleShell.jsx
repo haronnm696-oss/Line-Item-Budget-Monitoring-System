@@ -217,8 +217,10 @@ function todayLabel() {
  * @param {Object<string, number>} props.badges  counts by item `badge` key
  * @param {(key: string, count: number) => string} props.badgeLabel
  * @param {string} props.fallbackName  name shown before the user loads
+ * @param {(to: string) => string} [props.navTo]  rewrites sidebar links (keeps ?project=)
+ * @param {React.ReactNode} [props.topBarExtra]  shown in the header (the project picker)
  */
-export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel, fallbackName }) {
+export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel, fallbackName, navTo, topBarExtra = null }) {
   const { user, roleInfo, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -315,7 +317,7 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
                 return (
                   <NavLink
                     key={item.to}
-                    to={item.to}
+                    to={navTo ? navTo(item.to) : item.to}
                     className={({ isActive }) => (isActive ? 'active' : '')}
                     title={collapsed ? item.label : undefined}
                     aria-label={collapsed ? item.label : undefined}
@@ -373,6 +375,8 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
 
           <span className="program-topbar-title" title={greeting}>{greeting}</span>
           <span className="spacer" />
+
+          {topBarExtra}
 
           <span className="program-topbar-date">
             <span className="program-live-dot" aria-hidden="true" />

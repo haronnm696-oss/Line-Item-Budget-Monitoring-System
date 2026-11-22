@@ -268,7 +268,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
           <div className="program-form-grid">
             <div className="program-field">
               <label htmlFor="ld-liq-title">Title <span className="ld-muted">optional</span></label>
-              <input id="ld-liq-title" className="program-input" value={title} maxLength={255} onChange={set('title')} disabled={busy} />
+              <input id="ld-liq-title" className="program-input" autoComplete="off" value={title} maxLength={255} onChange={set('title')} disabled={busy} />
             </div>
             <div className="program-field">
               <label htmlFor="ld-liq-amount">Amount liquidated (₱)</label>
@@ -348,6 +348,7 @@ export default function BudgetRequestDialog({ projectId, initial = {}, request =
           <label htmlFor="ld-justification">Justification <span className="ld-required">required</span></label>
           <textarea
             id="ld-justification"
+            autoComplete="off"
             className="program-textarea"
             rows={4}
             maxLength={2000}

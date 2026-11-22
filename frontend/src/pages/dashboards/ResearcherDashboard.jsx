@@ -8,7 +8,6 @@ import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import { formatPct, peso } from '../../components/money';
 
 const REPORTS = [
@@ -45,7 +44,6 @@ export default function ResearcherDashboard() {
             {[data?.project.title ?? picker.project?.title, data?.project.code ?? picker.project?.code, 'verified data only'].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <div className="pl-head-actions"><ProjectSelect picker={picker} id="res-overview-project" /></div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>

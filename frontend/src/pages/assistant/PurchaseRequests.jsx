@@ -6,7 +6,6 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { SUBMISSION_TABS, parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import PurchaseRequestDialog from '../../components/assistant/PurchaseRequestDialog';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
@@ -50,7 +49,6 @@ export default function PurchaseRequests() {
         </div>
         {projectId && (
           <div className="pl-head-actions">
-            <ProjectSelect picker={picker} id="ra-pr-project" />
             <div className="program-field">
               <label htmlFor="ra-pr-status">Status</label>
               <select id="ra-pr-status" className="program-select" value={status} onChange={(event) => update({ status: event.target.value })}>

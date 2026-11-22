@@ -40,6 +40,7 @@ export default function ReturnDialog({ item, busy, error, onClose, onConfirm }) 
           <label htmlFor="ld-return-reason">Reason <span className="ld-required">required</span></label>
           <textarea
             id="ld-return-reason"
+            autoComplete="off"
             className="program-textarea"
             rows={4}
             value={reason}

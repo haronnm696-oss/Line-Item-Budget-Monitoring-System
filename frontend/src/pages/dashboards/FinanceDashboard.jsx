@@ -10,7 +10,6 @@ import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import LateReceipts from '../../components/finance/LateReceipts';
@@ -48,7 +47,6 @@ export default function FinanceDashboard() {
         </div>
         {picker.projectId && (
           <div className="pl-head-actions">
-            <ProjectSelect picker={picker} id="fin-overview-project" />
             <button type="button" className="program-btn primary" onClick={() => { actions.setFeedback(null); setRecording(true); }}>Record expense</button>
           </div>
         )}

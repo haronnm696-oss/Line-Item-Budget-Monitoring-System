@@ -1842,7 +1842,11 @@ select.signin-input:disabled{
   flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:15px;font-weight:600;color:var(--pg2-ink);
 }
-.program-shell .program-topbar > :not(.program-topbar-title):not(.spacer){flex-shrink:0}
+.program-shell .program-topbar > :not(.program-topbar-title):not(.spacer):not(.topbar-project){flex-shrink:0}
+/* The one Project picker of the role pages (layouts/TopBarProjectPicker.jsx). */
+.topbar-project{display:flex;align-items:center;gap:8px;flex:0 1 320px;min-width:0}
+.topbar-project label{font-size:12.5px;font-weight:600;color:var(--pg2-muted);white-space:nowrap}
+.topbar-project .program-select{min-height:44px;min-width:0;width:100%;text-overflow:ellipsis}
 .program-topbar-date{
   display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
   font-size:12.5px;color:var(--pg2-muted);padding:0 8px 0 4px;
@@ -2432,6 +2436,7 @@ select.signin-input:disabled{
   .program-shell .program-topbar{padding:10px 14px}
   .program-topbar-date{display:none}
   .program-topbar-title{font-size:14px}
+  .topbar-project label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
   .program-user-chip .program-user-chip-text{display:none}
   .program-user-chip{padding:4px}
   .pl-head-actions{width:100%}
@@ -3712,3 +3717,17 @@ select.signin-input:disabled{
 .leader-conflicts li{margin:2px 0;line-height:1.6}
 .leader-conflicts a{font-weight:600;color:inherit;text-decoration:underline;text-underline-offset:2px}
 .pu-conflict{margin-top:4px;font-size:12.5px;font-weight:650;color:var(--pg-watch)}
+
+/* FileField (components/FileField.jsx): the browser's file control is hidden
+   behind a styled button; the hidden input keeps focus and the label. */
+.file-field{position:relative}
+.file-field-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.file-field-control{
+  display:flex;align-items:center;gap:12px;min-height:44px;padding:6px 8px;cursor:pointer;
+  border:1px dashed var(--pg2-border, #E4DCD0);border-radius:10px;background:#fff;
+}
+.file-field-button{pointer-events:none;flex:0 0 auto}
+.file-field-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--pg2-muted, #6B625A)}
+.file-field-control:hover{border-color:#6F1D2A}
+.file-field-input:focus-visible + .file-field-control{outline:3px solid rgba(111,29,42,.4);outline-offset:2px}
+.file-field.is-disabled .file-field-control{cursor:not-allowed;opacity:.6}
