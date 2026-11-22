@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Mail\Transport\BrevoTransport;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Payroll;
@@ -32,6 +33,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // MAIL_MAILER=brevo sends through Brevo's HTTPS API.
+        $this->app['mail.manager']->extend('brevo', function (array $config) {
+            return new BrevoTransport($config['key'] ?? null, (int) ($config['timeout'] ?? 10));
+        });
+
         if ($this->app->environment('production')) {
             URL::forceScheme('https');
         }

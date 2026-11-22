@@ -45,6 +45,14 @@ return [
             'auth_mode' => null,
         ],
 
+        // HTTPS API (port 443). Use this on hosts that block SMTP ports,
+        // such as Render's free tier. See App\Mail\Transport\BrevoTransport.
+        'brevo' => [
+            'transport' => 'brevo',
+            'key' => env('BREVO_API_KEY'),
+            'timeout' => env('BREVO_TIMEOUT', 10),
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],

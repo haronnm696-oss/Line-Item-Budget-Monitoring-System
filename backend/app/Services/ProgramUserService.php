@@ -252,9 +252,27 @@ class ProgramUserService
 
         $setupUrl = $this->createPasswordSetupLink($user);
 
-        Notification::send($user, new AccountSetupNotification($user, $setupUrl));
+        // The account is saved already; a mailer failure is logged, never thrown.
+        $this->setupEmailSent = true;
+        try {
+            Notification::send($user, new AccountSetupNotification($user, $setupUrl));
+        } catch (\Throwable $e) {
+            $this->setupEmailSent = false;
+            \Illuminate\Support\Facades\Log::warning('Account setup email could not be sent.', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         return $user->fresh()->load('primaryRole');
+    }
+
+    /** @var bool Whether the last addUser() call delivered the setup email. */
+    protected $setupEmailSent = true;
+
+    public function setupEmailSent(): bool
+    {
+        return $this->setupEmailSent;
     }
 
     public const PER_PAGE = 25;

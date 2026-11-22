@@ -258,9 +258,11 @@ export default function ProgramUsers() {
     setAddBusy(true);
     setAddError('');
     try {
-      await createProgramUser(payload);
+      const result = await createProgramUser(payload);
       setAddOpen(false);
-      showToast('User created. A password setup link was emailed.');
+      showToast(result?.setup_email_sent === false
+        ? (result.message || 'User created, but the setup email could not be sent.')
+        : 'User created. A password setup link was emailed.');
       refresh();
     } catch (error) {
       setAddError(messageFor(error, 'Unable to create the user.'));

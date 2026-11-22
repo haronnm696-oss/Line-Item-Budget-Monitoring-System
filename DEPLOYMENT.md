@@ -117,30 +117,39 @@ DOCUMENTS_DISK=database
 # "Implementing Agency" blank. Funder names come from the funders list.
 IMPLEMENTING_AGENCY=MSU
 
-# Email (password reset, registration review, approval notifications)
-# through Brevo SMTP relay.
+# Email (password reset, registration review, account setup, approvals)
+# through Brevo's HTTPS API.
 FRONTEND_URL=https://<your-app>.vercel.app
-MAIL_MAILER=smtp
-MAIL_HOST=smtp-relay.brevo.com
-MAIL_PORT=587
-MAIL_USERNAME=<Brevo SMTP login>
-MAIL_PASSWORD=<Brevo SMTP key>
-MAIL_ENCRYPTION=tls
+MAIL_MAILER=brevo
+BREVO_API_KEY=<Brevo API key>
 MAIL_FROM_ADDRESS=<a sender verified in Brevo>
 MAIL_FROM_NAME="LIB Monitoring System"
 ```
 
-Brevo: create an SMTP key under **SMTP & API → SMTP**, use the SMTP login
-shown there as `MAIL_USERNAME`, and verify the sender address (or domain)
-under **Senders, Domains & Dedicated IPs** before using it as
-`MAIL_FROM_ADDRESS`. Mail from an unverified sender is rejected.
+**SMTP does not work on Render's free tier**: Render blocks outbound SMTP
+ports 25, 465 and 587, so `MAIL_MAILER=smtp` fails there. `MAIL_MAILER=brevo`
+sends over HTTPS (`POST https://api.brevo.com/v3/smtp/email`) instead; the
+`MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD`/`MAIL_ENCRYPTION`
+variables are not used and can be removed from Render.
+
+Brevo: create an **API key** (not an SMTP key) under **SMTP & API → API Keys**
+and set it as `BREVO_API_KEY`. The sender email must be verified in Brevo
+under **Senders, Domains & Dedicated IPs** before you use it as
+`MAIL_FROM_ADDRESS`; Brevo rejects mail from an unverified sender. Config is
+cached at deploy time, so redeploy after changing these variables.
+
+If Brevo refuses a message, the app logs `Brevo rejected the mail.` with
+Brevo's status and response (never the API key) in the Render logs; the
+request itself still succeeds (forgot password keeps its neutral message,
+approvals still finish).
 
 ### Testing password-reset mail locally
 
 Set `MAIL_MAILER=log` in `backend/.env`, request a reset, then open
 `backend/storage/logs/laravel.log` and copy the `/reset-password?token=...`
-link. This is local-only: log mode writes the reset link to disk, so use SMTP
-in production and never commit real mail credentials.
+link. This is local-only: log mode writes the reset link to disk, so use
+`MAIL_MAILER=brevo` in production and never commit real mail credentials.
+`MAIL_MAILER=smtp` (for example Mailhog) still works locally.
 
 Generate `APP_KEY` locally:
 
@@ -263,7 +272,7 @@ Settings in use besides the database, session and CORS values in section 2:
 
 | Variable | Value | Notes |
 |---|---|---|
-| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Brevo SMTP relay (section 2) | Password reset, registration review and notification emails. `FRONTEND_URL` builds the links in them. |
+| `MAIL_MAILER`, `BREVO_API_KEY`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | `brevo`, Brevo API key, verified sender (section 2) | Password reset, registration review and notification emails. `FRONTEND_URL` builds the links in them. |
 | `IMPLEMENTING_AGENCY` | `MSU` (default) | Printed on R&D Form B when a project's own Implementing Agency field is blank. |
 | `DOCUMENTS_DISK` | `database` | Documents are stored in `document_contents`, so they survive Render's ephemeral filesystem. |
 | `RUN_DEMO_ASSIGN` | `1` only for the release that needs it | Runs the idempotent `DemoProjectAssignmentsSeeder` on boot. |
@@ -335,7 +344,7 @@ start. Confirm that the next boot log has no `[demo-assign]` or
   console before redeploying. `max_connections` is capped at 76, so keep the
   worker count low (the shipped `mpm_prefork.conf` uses 15 workers).
 - For local testing, `MAIL_MAILER=log` writes the reset link to
-  `storage/logs/laravel.log`. Production should use the SMTP settings above.
+  `storage/logs/laravel.log`. Production should use `MAIL_MAILER=brevo` (SMTP is blocked on Render's free tier).
 - Render's filesystem is ephemeral. Uploaded documents are safe because
   `DOCUMENTS_DISK=database` keeps them in MySQL; anything written to
   `storage/` on the container (logs, cached files) is lost on redeploy.

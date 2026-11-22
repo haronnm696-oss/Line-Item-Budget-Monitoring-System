@@ -4,7 +4,7 @@ Reset your password
 
 We received a request to reset the password for your LIB Monitoring System account.
 
-Reset password: {{ $resetUrl }}
+Reset password: {!! $resetUrl !!}
 
 This link expires in {{ $expiresInMinutes }} minutes and can be used only once.
 
