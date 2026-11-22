@@ -253,6 +253,8 @@ class PurchaseRequestController extends Controller
             'alobs_date' => $row->alobs_date?->toDateString(),
             'workflow_status' => $row->workflow_status,
             'workflow_label' => PurchaseRequestService::label($row),
+            // full | partial | none: how far the items are paid (Partly fulfilled, Cancelled (partly fulfilled)).
+            'fulfilment' => $row->fulfilment(),
             'return_reason' => $row->return_reason,
             'documents_count' => (int) ($row->documents_count ?? $row->documents()->count()),
             'requested_by' => $person($row->requestedBy),

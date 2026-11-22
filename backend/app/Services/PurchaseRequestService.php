@@ -30,10 +30,15 @@ use Illuminate\Validation\ValidationException;
  * approved (or fulfilled) request with setNumbers().
  *
  * An approved request then ends as:
- *   fulfilled  for every line item of its items an expense of that line item
- *              is linked to it (ExpenseWorkflowService calls fulfil(), one
- *              expense per line item); deleting a linked draft expense
- *              reopens that line item (release())
+ *   fulfilled  every item has an expense: each expense pays ticked items on
+ *              its own line item (ExpenseWorkflowService calls fulfil());
+ *              deleting a linked draft expense frees its items (release())
+ *   cancelled  by the Project Leader or the requester, with a reason, also
+ *              when partly linked: only open items are released
+ *
+ * Items are Open, Linked (pending) or Paid (their expense is verified); the
+ * label is "Partly fulfilled" while some items have an expense and not all
+ * are paid, "Fulfilled" when all are paid (label()).
  *   cancelled  by the Project Leader or the requester, with a reason
  *
  * One audit entry per step. The Project Leader is notified on submit,
@@ -65,14 +70,36 @@ class PurchaseRequestService
 
     private const ENCODERS = ['research-assistant', 'finance-admin'];
 
-    /** The stage label of one request. */
+    public const PARTLY_FULFILLED = 'Partly fulfilled';
+    public const CANCELLED_PARTLY = 'Cancelled (partly fulfilled)';
+
+    /**
+     * The stage label of one request. After approval it follows the items
+     * (PurchaseRequest::fulfilment()): "Fulfilled" when every item is paid,
+     * "Partly fulfilled" while some items have an expense (linked or paid)
+     * and not all are paid, "Cancelled (partly fulfilled)" for a cancelled
+     * request whose items kept their expenses.
+     */
     public static function label(PurchaseRequest $request): string
     {
-        if ($request->workflow_status === 'endorsed' && $request->pl_reviewed_by === null) {
+        $status = $request->workflow_status;
+        if (in_array($status, ['endorsed', 'fulfilled', 'cancelled'], true)) {
+            $fulfilment = $request->fulfilment();
+            if ($status === 'cancelled') {
+                return $fulfilment === 'none' ? self::LABELS['cancelled'] : self::CANCELLED_PARTLY;
+            }
+            if ($fulfilment === 'full') {
+                return self::LABELS['fulfilled'];
+            }
+            if ($fulfilment === 'partial') {
+                return self::PARTLY_FULFILLED;
+            }
+        }
+        if ($status === 'endorsed' && $request->pl_reviewed_by === null) {
             return self::NO_LEADER_STEP;
         }
 
-        return self::LABELS[$request->workflow_status] ?? (string) $request->workflow_status;
+        return self::LABELS[$status] ?? (string) $status;
     }
     private const EDITABLE = ['draft', 'returned'];
 
@@ -256,16 +283,24 @@ class PurchaseRequestService
     // ---------------------------------------------------------------- after approval
 
     /**
-     * Link an expense to an approved request and mark the request fulfilled,
-     * with one audit entry. Runs inside the caller's transaction; the
-     * caller sends notifyFulfilled() after the commit.
+     * Link an expense to items of an approved request: $itemIds are the
+     * ticked items (all open, all on the expense's line item). Without
+     * $itemIds every open item on the expense's line item is taken (the
+     * older API). The expense amount may not exceed the ticked items' total;
+     * a lower amount (the actual receipt) releases the difference. The
+     * request becomes fulfilled once no item is open. One audit entry. Runs
+     * inside the caller's transaction; the caller sends notifyFulfilled()
+     * after the commit.
+     *
+     * @param  array<int, int>|null  $itemIds
      */
-    public function fulfil(PurchaseRequest $request, Expense $expense, User $actor): PurchaseRequest
+    public function fulfil(PurchaseRequest $request, Expense $expense, User $actor, ?array $itemIds = null): PurchaseRequest
     {
         $locked = $this->lockRecord($request);
         $lines = $locked->lineItemIds();
+        $line = (int) $expense->lib_category_id;
 
-        if ((int) $locked->project_id !== (int) $expense->project_id || ! in_array((int) $expense->lib_category_id, $lines, true)) {
+        if ((int) $locked->project_id !== (int) $expense->project_id || ! in_array($line, $lines, true)) {
             throw ValidationException::withMessages([
                 'purchase_request_id' => ['Link an approved purchase request of the same project and line item.'],
             ]);
@@ -276,28 +311,86 @@ class PurchaseRequestService
                 'purchase_request_id' => ["Only an approved purchase request can be linked; this one is {$label}."],
             ]);
         }
-        $others = Expense::query()->where('purchase_request_id', $locked->id)->whereKeyNot($expense->id);
-        if ((clone $others)->where('lib_category_id', $expense->lib_category_id)->exists()) {
+
+        $items = $locked->storedItems()->load('libCategory');
+        $chosen = $itemIds === null
+            ? $items->filter(fn ($item) => ! $item->expense_id && (int) $item->lib_category_id === $line)
+            : $this->tickedItems($items, $itemIds, $line);
+        if ($chosen->isEmpty()) {
             throw ValidationException::withMessages([
                 'purchase_request_id' => [count($lines) > 1
                     ? "This purchase request's items on this line item are already linked to another expense."
                     : 'This purchase request is already linked to another expense.'],
             ]);
         }
+        $this->requireWithinItems((float) $expense->amount, (float) $chosen->sum('estimated_cost'));
 
-        // Fulfilled once every line item of its items has a linked expense.
-        $covered = (clone $others)->pluck('lib_category_id')->map(fn ($id) => (int) $id)->push((int) $expense->lib_category_id)->unique()->all();
-        if (array_diff($lines, $covered) !== []) {
-            AuditLogger::write('linked', $locked, ['expense_id' => null], ['expense_id' => $expense->id, 'lib_category_id' => (int) $expense->lib_category_id], $actor, 'An expense was linked for one line item; the other line items are still open.');
+        PurchaseRequestItem::query()->whereKey($chosen->modelKeys())->update(['expense_id' => $expense->id]);
+        $linked = ['expense_id' => $expense->id, 'items' => $chosen->pluck('description')->implode('; ')];
+
+        if ($items->contains(fn ($item) => ! $item->expense_id && ! $chosen->contains('id', $item->id))) {
+            AuditLogger::write('linked', $locked, ['expense_id' => null], $linked, $actor, 'An expense was linked to some items; the other items are still open.');
 
             return $locked->fresh();
         }
 
         $old = $locked->only(['workflow_status', 'fulfilled_at', 'fulfilled_by']);
         $locked->update(['workflow_status' => 'fulfilled', 'fulfilled_at' => now(), 'fulfilled_by' => $actor->id]);
-        AuditLogger::write('fulfilled', $locked, $old + ['expense_id' => null], $locked->fresh()->only(array_keys($old)) + ['expense_id' => $expense->id], $actor);
+        AuditLogger::write('fulfilled', $locked, $old + ['expense_id' => null], $locked->fresh()->only(array_keys($old)) + $linked, $actor);
 
         return $locked->fresh();
+    }
+
+    /**
+     * The expense amount of a linked expense may not exceed the total of the
+     * items it pays (it may be lower: the actual receipt amount).
+     */
+    public function requireWithinItems(float $amount, float $itemsTotal): void
+    {
+        if (round($amount, 2) > round($itemsTotal, 2)) {
+            throw ValidationException::withMessages(['amount' => [sprintf(
+                'The amount (₱%s) is more than the ₱%s of the purchase request items it pays. Enter the receipt amount, at most the items\' total.',
+                number_format($amount, 2),
+                number_format($itemsTotal, 2)
+            )]]);
+        }
+    }
+
+    /** Total estimated cost of the items an expense pays. */
+    public static function linkedItemsTotal(Expense $expense): float
+    {
+        return round((float) PurchaseRequestItem::query()->where('expense_id', $expense->id)->sum('estimated_cost'), 2);
+    }
+
+    /**
+     * The ticked items: all of this request, all open, all on one line item,
+     * and that line item is the expense's.
+     */
+    private function tickedItems(Collection $items, array $itemIds, int $line): Collection
+    {
+        $ids = array_values(array_unique(array_map('intval', $itemIds)));
+        $chosen = $items->filter(fn ($item) => in_array((int) $item->id, $ids, true))->values();
+        if ($ids === [] || $chosen->count() !== count($ids)) {
+            throw ValidationException::withMessages(['purchase_request_item_ids' => ['Tick items of this purchase request.']]);
+        }
+        $taken = $chosen->first(fn ($item) => $item->expense_id);
+        if ($taken) {
+            throw ValidationException::withMessages(['purchase_request_item_ids' => ["“{$taken->description}” is already linked to an expense."]]);
+        }
+        $chosenLines = $chosen->pluck('lib_category_id')->map(fn ($id) => (int) $id)->unique();
+        if ($chosenLines->count() > 1) {
+            $other = $chosen->first(fn ($item) => (int) $item->lib_category_id !== (int) $chosen->first()->lib_category_id);
+            throw ValidationException::withMessages(['purchase_request_item_ids' => [
+                'All ticked items must be on one line item. Record a separate expense for ' . ($other->libCategory?->line_item_name ?? 'the other line item') . '.',
+            ]]);
+        }
+        if ($chosenLines->first() !== $line) {
+            throw ValidationException::withMessages(['lib_category_id' => [
+                'The ticked items are charged to ' . ($chosen->first()->libCategory?->line_item_name ?? 'another line item') . '; record the expense on that line item.',
+            ]]);
+        }
+
+        return $chosen;
     }
 
     public function notifyFulfilled(PurchaseRequest $request, Expense $expense, User $actor): void
@@ -306,20 +399,20 @@ class PurchaseRequestService
     }
 
     /**
-     * The linked draft / returned expense was deleted: the request is open
-     * again (approved, unfulfilled), with one audit entry. Runs inside the
-     * caller's transaction.
+     * The linked draft / returned expense was deleted: its items are open
+     * again (and, on an approved or fulfilled request, held as pending once
+     * more; a cancelled request holds nothing). A fulfilled request is open
+     * again. One audit entry. Runs inside the caller's transaction.
      */
     public function release(PurchaseRequest $request, Expense $expense, User $actor): void
     {
         $locked = $this->lockRecord($request);
-        if ($locked->workflow_status === PurchaseRequest::OPEN_APPROVED) {
-            // Partly linked: that line item is open again.
-            AuditLogger::write('unlinked', $locked, ['expense_id' => $expense->id], ['expense_id' => null], $actor, 'The linked expense was deleted.');
-
-            return;
-        }
+        $freed = PurchaseRequestItem::query()->where('expense_id', $expense->id)->update(['expense_id' => null]);
         if ($locked->workflow_status !== 'fulfilled') {
+            if ($freed > 0) {
+                AuditLogger::write('unlinked', $locked, ['expense_id' => $expense->id], ['expense_id' => null], $actor, 'The linked expense was deleted; its items are open again.');
+            }
+
             return;
         }
 
@@ -328,7 +421,11 @@ class PurchaseRequestService
         AuditLogger::write('reopened', $locked, $old + ['expense_id' => $expense->id], $locked->fresh()->only(array_keys($old)) + ['expense_id' => null], $actor, 'The linked expense was deleted.');
     }
 
-    /** Cancel an approved, unfulfilled request (Project Leader or requester; reason required). */
+    /**
+     * Cancel an approved request that still has open items (Project Leader
+     * or requester; reason required). Only its open items are released;
+     * linked items stay with their expenses ("Cancelled (partly fulfilled)").
+     */
     public function cancel(PurchaseRequest $request, string $reason, User $actor): PurchaseRequest
     {
         $isLeader = $request->project && $actor->hasRoleOn($request->project, 'project-leader');
@@ -338,11 +435,6 @@ class PurchaseRequestService
         }
         $this->requireState($request, [PurchaseRequest::OPEN_APPROVED], 'cancelled');
         $reason = $this->requireReason($reason, 'A reason is required to cancel a purchase request.');
-        if ($request->expenses()->exists()) {
-            throw ValidationException::withMessages([
-                'workflow_status' => ['An expense is already linked to this purchase request, so it cannot be cancelled.'],
-            ]);
-        }
 
         $request = $this->moveRecord($request, 'cancelled', $actor, 'cancelled', [PurchaseRequest::OPEN_APPROVED], 'cancelled', [
             'cancelled_at' => now(),
@@ -566,7 +658,8 @@ class PurchaseRequestService
             'leader_submitted' => ['Purchase request by the Project Leader', "{$request->requestedBy?->name} (Project Leader) made a purchase request: {$what}. It skips the Project Leader approval; you verify the expense recorded for it."],
             'returned' => ['Purchase request returned to you', "{$actor->name} returned your purchase request: {$request->description}.{$because}"],
             'fulfilled' => ['Purchase request fulfilled', "{$actor->name} recorded an expense (₱" . number_format((float) $expense?->amount, 2) . ") that fulfils the purchase request: {$request->description}."],
-            'cancelled' => ['Purchase request cancelled', "{$actor->name} cancelled the approved purchase request: {$request->description}.{$because}"],
+            'cancelled' => ['Purchase request cancelled', "{$actor->name} cancelled the approved purchase request: {$request->description}."
+                . ($request->fulfilment() === 'none' ? '' : ' Its open items are released; items already linked stay with their expenses.') . $because],
         };
 
         $this->notifyUsers($recipients, new WorkflowNotification([

@@ -327,9 +327,9 @@ class ProjectFinancialService
      *            Project Leader (waiting for verification)
      *
      * A purchase request holds each item's estimated cost on that item's
-     * line item. Once an expense is linked for a line item, that line item's
-     * share stops counting and the expense counts instead (a fulfilled
-     * request has every line item linked), so the same money is never
+     * line item while the item is open. Once an expense pays an item, the
+     * item stops counting and the expense counts its own amount instead (a
+     * lower amount releases the difference), so the same money is never
      * counted twice.
      *
      * @return array{line_items: array<int, array<string, mixed>>, totals: array<string, float>}
@@ -446,9 +446,11 @@ class ProjectFinancialService
     }
 
     /**
-     * Money held by approved, open purchase requests: item estimated costs
-     * per "lineId:source", leaving out the line items of a request that
-     * already have a linked expense (that expense counts instead).
+     * Money held by approved, open purchase requests: the estimated costs
+     * of their open items (no expense yet) per "lineId:source". A linked
+     * item's money moves to its expense, which counts its own amount; when
+     * that amount is lower than the items, the difference is released, not
+     * kept pending. Cancelled requests hold nothing.
      *
      * @return \Illuminate\Support\Collection<string, float>
      */
@@ -459,15 +461,15 @@ class ProjectFinancialService
             ->where('project_id', $projectId)
             ->where('workflow_status', PurchaseRequest::OPEN_APPROVED)
             ->when($exceptRequestId, fn ($q) => $q->whereKeyNot($exceptRequestId))
-            ->with(['items', 'expenses:id,purchase_request_id,lib_category_id'])
+            ->with('items')
             ->get()
             ->each(function (PurchaseRequest $request) use (&$totals) {
-                $linked = $request->expenses->pluck('lib_category_id')->map(fn ($id) => (int) $id)->all();
-                foreach ($request->amountsByLine() as $key => $row) {
-                    if (in_array($row['lib_category_id'], $linked, true)) {
+                foreach ($request->lineItems() as $item) {
+                    if ($item->expense_id) {
                         continue;
                     }
-                    $totals[$key] = round(($totals[$key] ?? 0.0) + $row['amount'], 2);
+                    $key = $item->lib_category_id . ':' . self::source($item->funding_source);
+                    $totals[$key] = round(($totals[$key] ?? 0.0) + (float) $item->estimated_cost, 2);
                 }
             });
 

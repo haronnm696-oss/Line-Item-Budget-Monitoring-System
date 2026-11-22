@@ -158,6 +158,44 @@ class PurchaseRequest extends Model implements HasDocuments
         return $this->lineItems()->pluck('lib_category_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
+    /**
+     * The stored items, creating the single "lot" item first for a request
+     * stored without items, so an expense can be linked to a real row.
+     *
+     * @return Collection<int, PurchaseRequestItem>
+     */
+    public function storedItems(): Collection
+    {
+        if (! $this->items()->exists()) {
+            foreach ($this->lineItems() as $item) {
+                $item->save();
+            }
+        }
+        $this->unsetRelation('items');
+
+        return $this->items()->get();
+    }
+
+    /**
+     * How far the items are paid for:
+     *   full     every item is paid (its expense is verified)
+     *   partial  some items have an expense (linked or paid), not all paid
+     *   none     no item has an expense
+     */
+    public function fulfilment(): string
+    {
+        $items = $this->lineItems();
+        if ($items instanceof \Illuminate\Database\Eloquent\Collection) {
+            $items->loadMissing('expense');
+        }
+        $statuses = $items->map(fn (PurchaseRequestItem $item) => $item->status());
+        if ($statuses->isNotEmpty() && $statuses->every(fn ($status) => $status === 'paid')) {
+            return 'full';
+        }
+
+        return $statuses->contains(fn ($status) => $status !== 'open') ? 'partial' : 'none';
+    }
+
     public function documents(): MorphMany
     {
         return $this->morphMany(Document::class, 'documentable');

@@ -11,8 +11,9 @@ const NUMBERS = [['pr', 'PR'], ['sai', 'SAI'], ['alobs', 'ALOBS']];
 
 /**
  * Purchase requests of one project (Program Leader's project page, read
- * only): purpose, stage, total, PR / SAI / ALOBS numbers and, per request,
- * the item table (each item charged to its own line item).
+ * only): purpose, stage (Partly fulfilled, Fulfilled, …), total, PR / SAI /
+ * ALOBS numbers and, per request, the item table with each item's status
+ * (Open, Linked (pending), Paid).
  */
 export default function PurchaseRequestsSection({ projectId }) {
   const list = useApiData(projectId ? ENDPOINTS.purchaseRequests(projectId) : null);
@@ -51,14 +52,16 @@ export default function PurchaseRequestsSection({ projectId }) {
                     </div>
                   </div>
                   <div className="pl-head-actions">
-                    <StagePill status={row.workflow_status} type="purchase_request" />
+                    <StagePill status={row.workflow_status} type="purchase_request" fulfilment={row.fulfilment} />
                     <b className="ld-amount">{peso(row.total ?? row.estimated_amount)}</b>
                     <button type="button" className="program-btn" aria-expanded={open.has(row.id)} onClick={() => toggle(row.id)}>
                       {open.has(row.id) ? 'Hide items' : 'Show items'}
                     </button>
                   </div>
                 </div>
-                {open.has(row.id) && <PurchaseRequestItemsTable items={row.items} total={row.total} />}
+                {open.has(row.id) && (
+                  <PurchaseRequestItemsTable items={row.items} total={row.total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(row.workflow_status)} />
+                )}
               </li>
             );
           })}

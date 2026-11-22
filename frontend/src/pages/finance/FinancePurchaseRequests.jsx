@@ -91,7 +91,7 @@ export default function FinancePurchaseRequests() {
                     </div>
                   </div>
                   <div className="pl-head-actions">
-                    <StagePill status={row.workflow_status} type="purchase_request" />
+                    <StagePill status={row.workflow_status} type="purchase_request" fulfilment={row.fulfilment} />
                     <b className="ld-amount">{peso(row.total ?? row.estimated_amount)}</b>
                   </div>
                 </div>

@@ -3758,3 +3758,12 @@ select.signin-input:disabled{
 @media (max-width: 640px){
   .pr-item-grid{grid-template-columns:1fr 1fr}
 }
+/* Item status (text plus icon) and the expense dialog's item checklist */
+.pr-item-status{white-space:nowrap}
+.pr-item-status.is-paid{font-weight:650}
+.pr-tick-list ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.pr-tick{display:flex;align-items:flex-start;gap:10px;min-height:44px;padding:10px 12px;border:1px solid var(--pg-card-border);border-radius:10px;cursor:pointer}
+.pr-tick input{width:20px;height:20px;margin-top:2px;flex:none}
+.pr-tick > span{min-width:0;overflow-wrap:anywhere}
+.pr-tick.is-disabled{cursor:default;color:var(--pg-muted)}
+.pr-tick-note{display:block;font-size:12.5px;margin-top:2px}

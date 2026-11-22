@@ -124,6 +124,9 @@ class ExpenseController extends Controller
             'payee' => ['nullable', 'string', 'max:255'],
             // An approved purchase request of this project that the expense fulfils.
             'purchase_request_id' => ['nullable', 'integer', Rule::exists((new PurchaseRequest())->getTable(), 'id')->where('project_id', $project->id)->whereNull('deleted_at')],
+            // The request's items this expense pays (all on its line item); without it, every open item on that line item.
+            'purchase_request_item_ids' => ['nullable', 'array', 'min:1', 'max:100'],
+            'purchase_request_item_ids.*' => ['integer', 'distinct'],
         ], [
             'lib_category_id.exists' => 'Choose a line item of this project.',
             'purchase_request_id.exists' => 'Choose a purchase request of this project.',
@@ -140,6 +143,7 @@ class ExpenseController extends Controller
             'project_id' => $expense->project_id,
             'lib_category_id' => $expense->lib_category_id,
             'purchase_request_id' => $expense->purchase_request_id,
+            'purchase_request_item_ids' => \App\Models\PurchaseRequestItem::query()->where('expense_id', $expense->id)->orderBy('sort_order')->pluck('id')->all(),
             'line_item' => $expense->libCategory?->line_item_name,
             'funding_source' => $expense->funding_source ?: LibCategory::SOURCE_FUNDER,
             'description' => $expense->description,

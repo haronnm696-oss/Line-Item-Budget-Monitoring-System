@@ -8,6 +8,7 @@ use App\Models\Expense;
 use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestItem;
 use App\Support\PurchaseRequestItems;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -268,6 +269,9 @@ class ResearchAssistantService
         $mine = (int) $expense->recorded_by === (int) $user->id;
         $receipts = $documents->where('document_type', Document::TYPE_RECEIPT)->count();
         $editable = in_array($expense->workflow_status, ['draft', 'returned'], true);
+        // The purchase request items this expense pays.
+        $paidItems = PurchaseRequestItem::query()->where('expense_id', $expense->id)->orderBy('sort_order')->orderBy('id')->get();
+        $itemsText = $paidItems->map(fn ($item) => $item->quantity . ' ' . $item->unit . ' ' . $item->description . ' (₱' . number_format((float) $item->estimated_cost, 2) . ')')->implode('; ');
 
         return [
             'details' => trim(implode(' · ', array_filter([$expense->libCategory?->line_item_name, $expense->payee]))),
@@ -291,6 +295,7 @@ class ResearchAssistantService
                 ['label' => 'Reference no.', 'value' => $expense->reference_no],
                 ['label' => 'Receipts', 'value' => (string) $receipts],
                 ['label' => 'Purchase request', 'value' => $expense->purchaseRequest ? 'PR-' . $expense->purchaseRequest->id . ' · ' . $expense->purchaseRequest->description : null],
+                ['label' => 'Pays items', 'value' => $itemsText ?: null],
                 ['label' => 'Project Leader', 'value' => $expense->plReviewedBy?->name],
                 ['label' => 'Verified by', 'value' => $expense->workflow_status === 'verified' ? $expense->verifiedBy?->name : null],
             ],
@@ -308,6 +313,10 @@ class ResearchAssistantService
                 'payee' => $expense->payee,
                 'reference_no' => $expense->reference_no,
                 'purchase_request_id' => $expense->purchase_request_id,
+                'purchase_request_item_ids' => $paidItems->pluck('id')->all(),
+                // The amount may not exceed this (0: no items, no cap).
+                'purchase_request_items_total' => round((float) $paidItems->sum('estimated_cost'), 2),
+                'purchase_request_items_text' => $itemsText ?: null,
             ] : null,
         ];
     }
@@ -369,15 +378,19 @@ class ResearchAssistantService
             'pr_total' => round((float) $request->estimated_amount, 2),
             'amount' => round((float) $request->estimated_amount, 2),
             'workflow_label' => PurchaseRequestService::label($request),
+            'fulfilment' => $request->fulfilment(),
             'next_step' => match ($request->workflow_status) {
                 'draft' => $supporting > 0 ? 'Submit when ready' : 'Attach a quotation or invoice, then submit',
                 'submitted' => 'Waiting for the Project Leader',
-                'endorsed' => $count > 1 && count(array_unique(array_column($items, 'lib_category_id'))) > 1
-                    ? 'Approved. Record one expense per line item and link each to this request'
-                    : 'Approved. Record the expense and link it to this request',
+                'endorsed' => collect($items)->contains('status', '!=', 'open')
+                    ? 'Partly fulfilled. Record an expense for the open items and tick them'
+                    : 'Approved. Record the expense and tick the items it pays',
                 'returned' => 'Correct it and submit again',
-                'fulfilled' => 'Fulfilled by recorded expenses',
-                'cancelled' => 'Cancelled' . ($request->cancel_reason ? ': “' . $request->cancel_reason . '”' : ''),
+                'fulfilled' => collect($items)->every(fn ($item) => $item['status'] === 'paid')
+                    ? 'Fulfilled: every item is paid'
+                    : 'Every item has an expense; waiting for Finance/Admin to verify them',
+                'cancelled' => ($request->fulfilment() === 'none' ? 'Cancelled' : 'Cancelled; items already linked stay with their expenses')
+                    . ($request->cancel_reason ? ': “' . $request->cancel_reason . '”' : ''),
                 default => null,
             },
             'submitted_by' => ['id' => $request->requestedBy?->id, 'name' => $request->requestedBy?->name],
@@ -393,7 +406,7 @@ class ResearchAssistantService
             'can_edit' => $mine && $editable,
             'can_delete' => $mine && $request->workflow_status === 'draft',
             'can_submit' => $mine && $editable && $supporting > 0,
-            'can_cancel' => $mine && $open && $request->expenses->isEmpty(),
+            'can_cancel' => $mine && $open,
             'can_attach_receipt' => false,
             'edit' => $mine ? [
                 'funding_source' => $request->funding_source ?: 'funder',

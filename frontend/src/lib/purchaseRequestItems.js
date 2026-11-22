@@ -81,42 +81,83 @@ export function itemsToForm(items) {
   return rows.length > 0 ? rows : [emptyItem()];
 }
 
+// ------------------------------------------------------------------ linking an expense
+// An expense pays ticked items of one approved request, all on one line
+// item. Items are open (no expense), linked (expense not verified yet) or
+// paid (expense verified); only open items can be ticked.
+
+/** The request's items; an older request without items reads as one item. */
+export function requestItems(request) {
+  if (Array.isArray(request?.items) && request.items.length > 0) return request.items;
+  if (!request) return [];
+  return [{
+    id: null, lib_category_id: request.lib_category_id, line_item: request.line_item, quantity: request.quantity, unit: 'lot',
+    description: request.description, estimated_cost: request.estimated_amount, funding_source: request.funding_source, status: 'open',
+  }];
+}
+
+export function isOpenItem(item) {
+  return (item.status ?? (item.expense_linked ? 'linked' : 'open')) === 'open';
+}
+
+/** Approved requests that still have an open item. */
+export function linkableRequests(requests) {
+  return (requests ?? []).filter((request) => requestItems(request).some(isOpenItem));
+}
+
+/** Items to tick first: every open item when they share one line item, else none. */
+export function defaultTicks(request) {
+  const open = requestItems(request).filter(isOpenItem);
+  const lines = new Set(open.map((item) => String(item.lib_category_id)));
+  return lines.size === 1 ? open.map((item) => item.id).filter((id) => id != null) : [];
+}
+
 /**
- * Approved requests as link choices for an expense: one per request and
- * line item that has no linked expense yet. Each choice looks like a
- * request (id, lib_category_id, estimated_amount, supplier, description,
- * funding_source) for that line item only, plus `key` ("id:lineId").
+ * Each item with whether it can be ticked: open items on another line item
+ * than the ticked ones are disabled with "Record a separate expense for
+ * <line item>"; linked and paid items are disabled with their status.
  */
-export function linkOptions(requests) {
-  const options = [];
-  for (const request of requests ?? []) {
-    const items = Array.isArray(request.items) && request.items.length > 0
-      ? request.items
-      : [{ lib_category_id: request.lib_category_id, line_item: request.line_item, estimated_cost: request.estimated_amount, funding_source: request.funding_source }];
-    const lines = new Map();
-    for (const item of items) {
-      if (item.expense_linked) continue;
-      const key = String(item.lib_category_id);
-      const line = lines.get(key) ?? { cents: 0, item, count: 0 };
-      line.cents += cents(item.estimated_cost);
-      line.count += 1;
-      lines.set(key, line);
+export function tickRows(request, ticked) {
+  const items = requestItems(request);
+  const chosen = items.filter((item) => item.id != null && ticked.includes(item.id));
+  const line = chosen.length > 0 ? String(chosen[0].lib_category_id) : null;
+  return items.map((item) => {
+    const checked = item.id != null && ticked.includes(item.id);
+    if (!isOpenItem(item)) {
+      const label = item.status_label ?? (item.status === 'paid' ? 'Paid' : 'Linked (pending)');
+      return { item, checked: false, disabled: true, note: item.expense_reference ? `${label} · ${item.expense_reference}` : label };
     }
-    const lineCount = new Set(items.map((item) => String(item.lib_category_id))).size;
-    for (const [lineId, line] of lines) {
-      options.push({
-        key: `${request.id}:${lineId}`,
-        id: request.id,
-        lib_category_id: Number(lineId),
-        line_item: line.item.line_item ?? request.line_item,
-        estimated_amount: line.cents / 100,
-        funding_source: line.item.funding_source || request.funding_source || 'funder',
-        supplier: request.supplier ?? null,
-        description: request.purpose ?? request.description ?? '',
-        items_on_line: line.count,
-        several_lines: lineCount > 1,
-      });
+    if (line !== null && String(item.lib_category_id) !== line) {
+      return { item, checked: false, disabled: true, note: `Record a separate expense for ${item.line_item ?? 'this line item'}` };
     }
-  }
-  return options;
+    // An older request without stored items links as a whole (always ticked).
+    if (item.id == null) return { item, checked: true, disabled: true, note: null };
+    return { item, checked, disabled: false, note: null };
+  });
+}
+
+/**
+ * The ticked items as a link: { id, lib_category_id, line_item,
+ * estimated_amount (sum, the most the expense may be), funding_source,
+ * supplier, description } — the shape prefillFromRequest takes. Null when
+ * nothing is ticked. item_ids is null for an older request without stored
+ * items (the server then takes its open items on that line item).
+ */
+export function tickedLink(request, ticked) {
+  const items = requestItems(request);
+  const whole = items.length > 0 && items.every((item) => item.id == null);
+  const chosen = whole
+    ? items.filter(isOpenItem)
+    : items.filter((item) => item.id != null && ticked.includes(item.id) && isOpenItem(item));
+  if (!request || chosen.length === 0) return null;
+  return {
+    id: request.id,
+    item_ids: whole ? null : chosen.map((item) => item.id),
+    lib_category_id: Number(chosen[0].lib_category_id),
+    line_item: chosen[0].line_item ?? request.line_item,
+    estimated_amount: chosen.reduce((sum, item) => sum + cents(item.estimated_cost), 0) / 100,
+    funding_source: chosen[0].funding_source || request.funding_source || 'funder',
+    supplier: request.supplier ?? null,
+    description: request.purpose ?? request.description ?? '',
+  };
 }

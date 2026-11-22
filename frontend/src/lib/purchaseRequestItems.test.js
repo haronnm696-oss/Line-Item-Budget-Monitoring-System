@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  UNITS, emptyItem, itemCost, itemErrors, itemsPayload, itemsToForm, itemsTotal, linkOptions, totalsByLine,
+  UNITS, defaultTicks, emptyItem, itemCost, itemErrors, itemsPayload, itemsToForm, itemsTotal, linkableRequests, tickRows, tickedLink, totalsByLine,
 } from './purchaseRequestItems.js';
 
 const example = [
@@ -48,20 +48,43 @@ test('payload and form rows convert both ways', () => {
   assert.ok(UNITS.includes(emptyItem().unit));
 });
 
-test('link options: one per request and open line item', () => {
-  const requests = [{
-    id: 9, purpose: 'Lab set-up', supplier: 'ABC', funding_source: 'funder',
-    items: [
-      { lib_category_id: 1, line_item: 'Equipment', estimated_cost: 80000, funding_source: 'funder', expense_linked: true },
-      { lib_category_id: 2, line_item: 'Supplies', estimated_cost: 12000, funding_source: 'funder' },
-      { lib_category_id: 2, line_item: 'Supplies', estimated_cost: 500.5, funding_source: 'funder' },
-    ],
-  }, { id: 10, description: 'Old', lib_category_id: 3, line_item: 'Travel', estimated_amount: 4500, funding_source: 'implementing_agency' }];
-  const options = linkOptions(requests);
-  assert.deepEqual(options.map((o) => o.key), ['9:2', '10:3']);
-  assert.equal(options[0].estimated_amount, 12500.5);
-  assert.equal(options[0].description, 'Lab set-up');
-  assert.equal(options[0].several_lines, true);
-  assert.equal(options[1].funding_source, 'implementing_agency');
-  assert.equal(options[1].several_lines, false);
+const approved = {
+  id: 9, purpose: 'Lab set-up', supplier: 'ABC', funding_source: 'funder',
+  items: [
+    { id: 1, lib_category_id: 1, line_item: 'Equipment', estimated_cost: 80000, funding_source: 'funder', status: 'paid', status_label: 'Paid', expense_reference: 'OR-1' },
+    { id: 2, lib_category_id: 1, line_item: 'Equipment', estimated_cost: 20000, funding_source: 'funder', status: 'open' },
+    { id: 3, lib_category_id: 2, line_item: 'Supplies', estimated_cost: 12000, funding_source: 'funder', status: 'open' },
+    { id: 4, lib_category_id: 2, line_item: 'Supplies', estimated_cost: 500.5, funding_source: 'funder', status: 'open' },
+  ],
+};
+
+test('only requests with an open item can be linked', () => {
+  const done = { id: 10, items: [{ id: 5, lib_category_id: 1, status: 'linked' }] };
+  assert.deepEqual(linkableRequests([approved, done]).map((r) => r.id), [9]);
+});
+
+test('ticking: other line items are disabled, linked and paid items show their status', () => {
+  const rows = tickRows(approved, [3]);
+  assert.deepEqual(rows.map((r) => [r.item.id, r.checked, r.disabled]), [[1, false, true], [2, false, true], [3, true, false], [4, false, false]]);
+  assert.equal(rows[0].note, 'Paid · OR-1');
+  assert.equal(rows[1].note, 'Record a separate expense for Equipment');
+  // Nothing ticked: every open item can be ticked.
+  assert.deepEqual(tickRows(approved, []).map((r) => r.disabled), [true, false, false, false]);
+  // Open items on two line items: nothing ticked first; on one line item: all of them.
+  assert.deepEqual(defaultTicks(approved), []);
+  assert.deepEqual(defaultTicks({ items: approved.items.slice(0, 2) }), [2]);
+});
+
+test('the ticked items prefill the line item and the amount (their sum, the cap)', () => {
+  const link = tickedLink(approved, [3, 4]);
+  assert.equal(link.lib_category_id, 2);
+  assert.equal(link.estimated_amount, 12500.5);
+  assert.deepEqual(link.item_ids, [3, 4]);
+  assert.equal(link.supplier, 'ABC');
+  assert.equal(link.description, 'Lab set-up');
+  assert.equal(tickedLink(approved, []), null);
+  assert.equal(tickedLink(approved, [1]), null); // paid items never count
+  // An older request without stored items links as a whole.
+  const old = tickedLink({ id: 11, description: 'Old', lib_category_id: 3, estimated_amount: 4500, funding_source: 'implementing_agency' }, []);
+  assert.deepEqual([old.item_ids, old.estimated_amount, old.funding_source], [null, 4500, 'implementing_agency']);
 });

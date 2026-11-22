@@ -169,3 +169,18 @@ test('the Researcher Budget reuses the Form B table read-only, with Remaining', 
   assert.doesNotMatch(page, /setup=|RowMenu/);
   assert.match(source('pages/program/ProgramProjectDetail.jsx'), /<FormBTable formB=\{formB\} setup=\{setup\} onOpen=\{openDialog\} \/>/);
 });
+
+test('the Project Leader cancels a purchase request from the review panel only, with a reason', () => {
+  const panel = source('components/leader/RecordPanel.jsx');
+  // Shown for a purchase request the server marks cancellable (approved or partly fulfilled).
+  assert.match(panel, /item\.type === 'purchase_request' && item\.can_cancel && onCancel &&/);
+  assert.match(panel, />Cancel request<\/button>/);
+  // The same cancel endpoint, through a dialog that requires a reason.
+  const actions = source('components/leader/useReviewActions.jsx');
+  assert.match(actions, /ENDPOINTS\.purchaseRequestStep\(item\.id, 'cancel'\), \{ reason \}/);
+  assert.match(actions, /<ConfirmDialog[\s\S]*reasonLabel="Reason"/);
+  assert.match(source('components/assistant/ConfirmDialog.jsx'), /if \(reasonLabel && !reason\.trim\(\)\)/);
+  assert.match(source('pages/leader/Submissions.jsx'), /onCancel=\{actions\.openCancel\}/);
+  // Never on list rows.
+  assert.doesNotMatch(source('components/leader/ReviewRow.jsx'), /cancel/i);
+});

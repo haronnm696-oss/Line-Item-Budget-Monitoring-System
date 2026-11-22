@@ -66,7 +66,7 @@ export default function AssistantRecordPanel({ projectId, target, refreshKey, ac
         {item && (
           <>
             <div className="ld-panel-status">
-              <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} />
+              <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} fulfilment={item.fulfilment} />
               {item.amount != null && <b className="ld-amount">{peso(item.amount)}</b>}
             </div>
             {returned
@@ -80,7 +80,9 @@ export default function AssistantRecordPanel({ projectId, target, refreshKey, ac
                 <div key={field.label}><dt>{field.label}</dt><dd>{fieldValue(field)}</dd></div>
               ))}
             </dl>
-            {Array.isArray(item.pr_items) && <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} />}
+            {Array.isArray(item.pr_items) && (
+              <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(item.workflow_status)} />
+            )}
 
             <h3 className="ld-panel-sub">Documents</h3>
             <DocumentList key={`${item.key}#${refreshKey}`} type={item.type} id={item.id} />

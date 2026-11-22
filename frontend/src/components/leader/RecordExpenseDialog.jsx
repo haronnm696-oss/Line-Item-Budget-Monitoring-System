@@ -15,7 +15,7 @@ import {
 } from '../../lib/expenseForm';
 import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
 import MoneyInput from '../MoneyInput';
-import { linkOptions } from '../../lib/purchaseRequestItems';
+import { defaultTicks, linkableRequests, tickRows, tickedLink } from '../../lib/purchaseRequestItems';
 import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
 import { DATE_BOUNDS, dateRangeError } from '../../lib/dateRange';
 
@@ -73,8 +73,12 @@ async function uploadReceipt(expenseId, file) {
  * failed attempt is deleted on close.
  *
  * Research Assistant (`assistant`): the same steps, plus "Save as draft"
- * (no submit) and an optional link to an approved purchase request of the
- * same line item (linking fulfils it). The submit goes to the Project
+ * (no submit) and an optional link to an approved purchase request: the
+ * user ticks the open items this expense pays (all on one line item; items
+ * on other line items are disabled with "Record a separate expense for
+ * …"). Line item, amount (the ticked items' total, which may be lowered to
+ * the receipt amount but never raised), payee and description are
+ * prefilled. The request is fulfilled once no item is open. The submit goes to the Project
  * Leader. A draft left by a failed attempt is kept (it is listed under
  * Drafts) unless "Discard draft" is chosen.
  *
@@ -90,9 +94,11 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   // Honoraria lines (personnel linked) are paid through Payroll, never as an expense.
   const lineItems = expenseLineItems(allLineItems);
   const honorariaLines = honorariaLineItems(allLineItems);
-  // One choice per approved request and line item still waiting for its expense.
-  const requests = linkOptions(Array.isArray(approved.data?.purchase_requests) ? approved.data.purchase_requests : []);
+  // Approved requests that still have an open item.
+  const requests = linkableRequests(Array.isArray(approved.data?.purchase_requests) ? approved.data.purchase_requests : []);
   const [form, setForm] = useState(editing ? toForm(expense.edit) : { ...EMPTY, expense_date: todayInManila() });
+  // The items of the chosen request this expense pays (ids), all on one line item.
+  const [ticked, setTicked] = useState([]);
   const [receipt, setReceipt] = useState(null);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
@@ -124,8 +130,12 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
 
   const alreadyLinked = editing && Boolean(expense.edit?.purchase_request_id);
   const chosen = lineItems.find((item) => String(item.id) === form.lib_category_id);
-  const linkedRequest = form.purchase_request_id ? requests.find((request) => request.key === `${form.purchase_request_id}:${form.lib_category_id}`) : undefined;
-  // A linked request's estimate (or an already linked expense) is held in
+  const chosenRequest = form.purchase_request_id ? requests.find((request) => String(request.id) === form.purchase_request_id) : undefined;
+  // The ticked items as one link (line item, their total, source, payee), or undefined.
+  const linkedRequest = chosenRequest ? tickedLink(chosenRequest, ticked) ?? undefined : undefined;
+  // The most the amount may be: the ticked items' total (or the items an already linked expense pays).
+  const itemsCap = alreadyLinked ? Number(expense.edit.purchase_request_items_total) || 0 : Number(linkedRequest?.estimated_amount) || 0;
+  // The ticked items' estimate (or an already linked expense) is held in
   // "pending"; it is freed by this expense, so it counts as available here.
   const heldForThis = alreadyLinked ? Number(expense.edit.amount) || 0 : Number(linkedRequest?.estimated_amount) || 0;
   const labels = balancing.data?.labels;
@@ -140,8 +150,11 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   const set = (key) => (event) => {
     const value = event.target.value;
     const next = { ...form, [key]: value };
-    // A linked request stays on its own line item.
-    if (key === 'lib_category_id' && linkedRequest && String(linkedRequest.lib_category_id) !== value) next.purchase_request_id = '';
+    // The ticked items stay on their own line item: another line item unlinks them.
+    if (key === 'lib_category_id' && linkedRequest && String(linkedRequest.lib_category_id) !== value) {
+      next.purchase_request_id = '';
+      setTicked([]);
+    }
     if (key === 'lib_category_id' && assistant) rememberLineItemId(browserStorage(), user?.id, projectId, value);
     // No counterpart on the new line item: back to the funder.
     if (key === 'lib_category_id') {
@@ -150,13 +163,31 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
     setForm(next);
   };
 
+  /**
+   * The form after the link changes: line item, amount (the ticked items'
+   * total), payee and description follow the ticked items (fields the user
+   * typed are kept, see prefillFromRequest).
+   */
+  function linkForm(request, nextTicks) {
+    const nextLink = request ? tickedLink(request, nextTicks) : null;
+    const next = prefillFromRequest(form, nextLink, linkedRequest ?? null);
+    next.purchase_request_id = request ? String(request.id) : '';
+    // A linked expense draws from its items' source.
+    if (nextLink) next.funding_source = nextLink.funding_source || FUNDER;
+    return next;
+  }
+
   function chooseRequest(event) {
-    const key = event.target.value;
-    const request = requests.find((row) => row.key === key);
-    const next = prefillFromRequest(form, request ?? null, linkedRequest ?? null);
-    // A linked expense draws from its purchase request's source.
-    if (request) next.funding_source = request.funding_source || FUNDER;
-    setForm(next);
+    const request = requests.find((row) => String(row.id) === event.target.value) ?? null;
+    const nextTicks = request ? defaultTicks(request) : [];
+    setTicked(nextTicks);
+    setForm(linkForm(request, nextTicks));
+  }
+
+  function toggleItem(itemId) {
+    const nextTicks = ticked.includes(itemId) ? ticked.filter((id) => id !== itemId) : [...ticked, itemId];
+    setTicked(nextTicks);
+    setForm(linkForm(chosenRequest, nextTicks));
   }
 
   function validate(submitting) {
@@ -165,11 +196,18 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
     if (!form.description.trim()) next.description = 'Describe the expense.';
     const amountError = moneyError(form.amount, { positive: true });
     if (amountError) next.amount = GENERIC_MONEY.includes(amountError) ? 'Enter an amount greater than zero.' : amountError;
+    else if (itemsCap > 0 && moneyNumber(form.amount) > itemsCap) next.amount = `Enter the receipt amount, at most the items’ ${peso(itemsCap)}.`;
+    if (chosenRequest && !linkedRequest) next.purchase_request_item_ids = 'Tick the items this expense pays.';
     if (!form.expense_date) next.expense_date = 'Enter the expense date.';
     else if (dateRangeError(form.expense_date)) next.expense_date = dateRangeError(form.expense_date);
     const hasReceipt = receipt || saved?.uploaded || (editing && keptReceipts.length > 0);
     if (submitting && !hasReceipt) next.file = editing ? 'Keep a receipt or attach a new one (PDF, JPG or PNG).' : 'Attach the receipt (PDF, JPG or PNG).';
     return next;
+  }
+
+  /** The ticked item ids for a new link (none for an older request without stored items). */
+  function itemIds() {
+    return linkedRequest?.item_ids ? { purchase_request_item_ids: linkedRequest.item_ids } : {};
   }
 
   async function run(submitting) {
@@ -182,12 +220,13 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
     let step = saved;
     try {
       if (!step) {
-        const data = await apiWrite('post', ENDPOINTS.expenses(projectId), payload(form));
+        const data = await apiWrite('post', ENDPOINTS.expenses(projectId), { ...payload(form), ...itemIds() });
         step = { id: data.expense.id, patched: true, removed: [], uploaded: false };
         setSaved(step);
       }
       if (editing && !step.patched) {
         const changes = payload(form, toForm(expense.edit));
+        if (changes.purchase_request_id) Object.assign(changes, itemIds());
         if (Object.keys(changes).length > 0) await apiWrite('patch', ENDPOINTS.expense(step.id), changes);
         step = { ...step, patched: true };
         setSaved(step);
@@ -296,22 +335,52 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
             <div className="program-field full">
               <label htmlFor="ld-exp-pr">Link to approved purchase request <span className="ld-muted">optional</span></label>
               {alreadyLinked ? (
-                <p className="ld-muted" id="ld-exp-pr">Linked to PR-{expense.edit.purchase_request_id}. The line item stays the same.</p>
+                <p className="ld-muted" id="ld-exp-pr">
+                  Linked to PR-{expense.edit.purchase_request_id}{expense.edit.purchase_request_items_text ? `: ${expense.edit.purchase_request_items_text}` : ''}. The line item and items stay the same.
+                </p>
               ) : (
-                <select id="ld-exp-pr" className="program-select" value={linkedRequest?.key ?? ''} onChange={chooseRequest} disabled={locked || approved.status !== 'ready'}>
+                <select id="ld-exp-pr" className="program-select" value={chosenRequest ? String(chosenRequest.id) : ''} onChange={chooseRequest} disabled={locked || approved.status !== 'ready'}>
                   <option value="">
-                    {approved.status === 'error' ? 'Could not load the purchase requests' : approved.status !== 'ready' ? 'Loading…' : requestOptions.length === 0 ? 'No approved purchase request' : 'Not linked'}
+                    {approved.status === 'error' ? 'Could not load the purchase requests' : approved.status !== 'ready' ? 'Loading…' : requestOptions.length === 0 ? 'No approved purchase request with open items' : 'Not linked'}
                   </option>
                   {requestOptions.map((request) => (
-                    <option key={request.key} value={request.key}>
-                      PR-{request.id} · {request.description} — {peso(request.estimated_amount)} ({request.line_item}{request.several_lines ? ', part of a request on several line items' : ''})
+                    <option key={request.id} value={request.id}>
+                      PR-{request.id} · {request.purpose ?? request.description} — {peso(request.total ?? request.estimated_amount)}
                     </option>
                   ))}
                 </select>
               )}
-              {linkedRequest && <div className="ld-hint">{linkedRequest.several_lines ? 'Saving links this expense to the request’s items on this line item; the request is fulfilled once every line item has its expense.' : 'Saving links this expense; the request becomes fulfilled.'}</div>}
               {err('purchase_request_id')}
             </div>
+          )}
+          {assistant && chosenRequest && !alreadyLinked && (
+            <fieldset className="program-field full pr-tick-list">
+              <legend className="program-label">Items this expense pays</legend>
+              <div className="ld-hint">Tick items on one line item. Items on other line items need their own expense.</div>
+              <ul>
+                {tickRows(chosenRequest, ticked).map(({ item, checked, disabled, note }, index) => {
+                  const id = `ld-exp-item-${item.id ?? `old-${index}`}`;
+                  return (
+                    <li key={id}>
+                      <label htmlFor={id} className={`pr-tick${disabled ? ' is-disabled' : ''}`}>
+                        <input id={id} type="checkbox" checked={checked} disabled={locked || disabled} onChange={() => item.id != null && toggleItem(item.id)} />
+                        <span>
+                          <b>{item.quantity} {item.unit} · {item.description}</b> — {peso(item.estimated_cost)}
+                          <span className="ld-muted"> · {item.line_item ?? '—'}</span>
+                          {note && <span className="pr-tick-note">{note}</span>}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+              {linkedRequest && (
+                <div className="ld-hint" role="status">
+                  {linkedRequest.item_ids?.length ?? 1} {(linkedRequest.item_ids?.length ?? 1) === 1 ? 'item' : 'items'} on {linkedRequest.line_item}: {peso(linkedRequest.estimated_amount)}. The amount can be lower (the actual receipt), never higher.
+                </div>
+              )}
+              {err('purchase_request_item_ids')}
+            </fieldset>
           )}
           <div className="program-field full">
             <label htmlFor="ld-exp-line">Line item</label>
@@ -368,6 +437,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
           <div className="program-field">
             <label htmlFor="ld-exp-amount">Amount (₱)</label>
             <MoneyInput id="ld-exp-amount" value={form.amount} onChange={set('amount')} disabled={locked} />
+            {itemsCap > 0 && <div className="ld-hint">At most {peso(itemsCap)}, the linked items&apos; total. A lower amount releases the difference.</div>}
             {err('amount')}
           </div>
           <div className="program-field">

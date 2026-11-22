@@ -113,11 +113,15 @@
  *   PATCH  /api/purchase-requests/:id          (draft / returned)
  *   DELETE /api/purchase-requests/:id          (own draft)
  *   POST   /api/purchase-requests/:id/submit (needs a quotation or invoice) | endorse | return { reason }
- *   POST   /api/purchase-requests/:id/cancel  -> { reason } approved and unfulfilled; Project Leader or requester
+ *   POST   /api/purchase-requests/:id/cancel  -> { reason } approved with open items (also partly linked); Project Leader
+ *            or requester; releases only open items ("Cancelled (partly fulfilled)")
  *   PATCH  /api/purchase-requests/:id/numbers -> { pr_no, pr_date, sai_no, sai_date, alobs_no, alobs_date } Finance/Admin, approved or fulfilled
  *   Submit and approve check each line item: its items may not exceed its available amount (counting pending).
- *   Fulfil: POST/PATCH an expense with purchase_request_id (approved request, one of its items' line items);
- *           one expense per line item; fulfilled once every line item has its expense
+ *   Fulfil: POST/PATCH an expense with purchase_request_id + purchase_request_item_ids (open items, all on the
+ *           expense's line item; without ids: every open item on that line item). amount <= the items' total
+ *           (lower releases the difference). Items: status open | linked | paid (+ expense_reference); request
+ *           fulfilment: none | partial | full ("Partly fulfilled", "Fulfilled"); fulfilled once no item is open.
+ *           Deleting a linked draft frees its items.
  *   Documents: GET/POST /api/purchase-requests/:id/documents (quotation | invoice | other)
  *
  * Budget requests (Project Leader -> Program Leader; shown on Program Approvals):

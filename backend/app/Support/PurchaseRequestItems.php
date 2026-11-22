@@ -14,18 +14,22 @@ use App\Models\PurchaseRequestItem;
 final class PurchaseRequestItems
 {
     /**
-     * Each item with its line item, and whether an expense is already linked
-     * for that line item.
+     * Each item with its line item and status: open, linked (its expense is
+     * not verified yet) or paid, with the expense reference.
      *
      * @return array<int, array<string, mixed>>
      */
     public static function rows(PurchaseRequest $request): array
     {
-        $linked = ($request->relationLoaded('expenses') ? $request->expenses : $request->expenses()->get())
-            ->pluck('lib_category_id')->map(fn ($id) => (int) $id)->all();
+        $items = $request->lineItems();
+        if ($items instanceof \Illuminate\Database\Eloquent\Collection) {
+            $items->loadMissing(['libCategory', 'expense']);
+        }
 
-        return $request->lineItems()->map(function (PurchaseRequestItem $item) use ($linked) {
+        return $items->map(function (PurchaseRequestItem $item) {
             $item->loadMissing('libCategory');
+            $status = $item->status();
+            $expense = $item->expense_id ? $item->expense : null;
 
             return [
                 'id' => $item->id,
@@ -38,7 +42,11 @@ final class PurchaseRequestItems
                 'description' => $item->description,
                 'unit_cost' => round((float) $item->unit_cost, 2),
                 'estimated_cost' => round((float) $item->estimated_cost, 2),
-                'expense_linked' => in_array((int) $item->lib_category_id, $linked, true),
+                'status' => $status,
+                'status_label' => PurchaseRequestItem::STATUS_LABELS[$status],
+                'expense_id' => $expense?->id,
+                'expense_reference' => $expense ? ($expense->reference_no ?: 'EXP-' . $expense->id) : null,
+                'expense_linked' => $status !== 'open',
             ];
         })->values()->all();
     }

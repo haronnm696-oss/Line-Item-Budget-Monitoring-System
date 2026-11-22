@@ -195,10 +195,8 @@ class PurchaseRequestItemsTest extends TestCase
         $this->assertEquals(12000.0, $lines[$this->lineItem->id]['pending_purchase_requests']);
 
         $record($this->equipment, 1000)->assertStatus(422)->assertJsonPath('errors.purchase_request_id.0', "This purchase request's items on this line item are already linked to another expense.");
-        $this->actingAs($this->projectLeader)->postJson("/api/purchase-requests/{$request->id}/cancel", ['reason' => 'x'])
-            ->assertStatus(422)->assertJsonValidationErrors(['workflow_status']);
+        // (A partly linked request can be cancelled: PurchaseRequestItemLinkTest.)
 
-        $this->actingAs($this->assistant);
         $record($this->lineItem, 12000)->assertCreated();
         $record($this->travel, 13500)->assertCreated();
         $this->assertSame('fulfilled', $request->fresh()->workflow_status);

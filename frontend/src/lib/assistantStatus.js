@@ -18,7 +18,22 @@ const PURCHASE_REQUEST_STAGE = {
   submitted: ['Waiting for Project Leader', 'watch', '◷'],
 };
 
-export function stagePill(status, type = null) {
+/**
+ * After approval a purchase request follows its items (`fulfilment` from the
+ * API: full | partial | none): Partly fulfilled while some items have an
+ * expense and not all are paid, Fulfilled when all are paid, and Cancelled
+ * (partly fulfilled) when a cancelled request kept linked items.
+ */
+const PARTLY_FULFILLED = ['Partly fulfilled', 'watch', '◑'];
+const CANCELLED_PARTLY = ['Cancelled (partly fulfilled)', 'neutral', '⊘'];
+
+export function stagePill(status, type = null, fulfilment = null) {
+  if (type === 'purchase_request' && fulfilment && fulfilment !== 'none') {
+    const pill = status === 'cancelled'
+      ? CANCELLED_PARTLY
+      : ['endorsed', 'fulfilled'].includes(status) ? (fulfilment === 'full' ? STAGE.fulfilled : PARTLY_FULFILLED) : null;
+    if (pill) return { label: pill[0], tone: pill[1], icon: pill[2] };
+  }
   const table = type === 'purchase_request' ? PURCHASE_REQUEST_STAGE : STAGE;
   const [label, tone, icon] = table[status] ?? [String(status ?? '—'), 'neutral', '•'];
   return { label, tone, icon };

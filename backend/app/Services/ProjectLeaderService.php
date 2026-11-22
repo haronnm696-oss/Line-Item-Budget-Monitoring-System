@@ -278,6 +278,7 @@ class ProjectLeaderService
             'pr_total' => round((float) $request->estimated_amount, 2),
             'amount' => round((float) $request->estimated_amount, 2),
             'workflow_label' => PurchaseRequestService::label($request),
+            'fulfilment' => $request->fulfilment(),
             'submitted_by' => $person($request->requestedBy),
             'fields' => array_merge([
                 ['label' => 'Purpose / remarks', 'value' => $request->description],
@@ -288,6 +289,10 @@ class ProjectLeaderService
             ]),
             'can_review' => $request->workflow_status === 'submitted' && ! $mine,
             'waiting_text' => $request->workflow_status === 'submitted' && $mine ? 'You made this request, so it skips your approval.' : null,
+            // Approved or partly fulfilled (open items left): the Project Leader
+            // may cancel it with a reason (PurchaseRequestService::cancel rules).
+            'can_cancel' => $request->workflow_status === PurchaseRequest::OPEN_APPROVED
+                && $request->project && $user->hasRoleOn($request->project, 'project-leader'),
             'can_edit' => false,
             'edit' => null,
         ];
