@@ -9,6 +9,7 @@ import { useUrlQuery } from '../../lib/useUrlQuery';
 import { RECORD_PAGE } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
 
 const DOCUMENT_TYPES = [
@@ -64,9 +65,7 @@ export default function Documents() {
         <div>
           <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Documents</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Receipts, quotations, invoices and payroll files of the project
-          </p>
+          <ProjectLine picker={picker} detail="Receipts, quotations, invoices and payroll files of the project" />
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
@@ -40,9 +41,7 @@ export default function ResearcherDashboard() {
             <span className="res-readonly"><span aria-hidden="true">👁</span> Read-only access</span>
           </div>
           <h1 className="program-h1">Budget information</h1>
-          <p className="program-sub">
-            {[data?.project.title ?? picker.project?.title, data?.project.code ?? picker.project?.code, 'verified data only'].filter(Boolean).join(' · ')}
-          </p>
+          <ProjectLine picker={picker} project={data?.project ?? picker.project} detail="verified data only" />
         </div>
       </div>
 

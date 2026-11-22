@@ -18,18 +18,63 @@ function sourceFiles(dir = SRC) {
 
 const rel = (path) => path.slice(SRC.length).replace(/\\/g, '/');
 
-test('no page has its own Project picker; the top bar has the one picker', () => {
-  for (const file of sourceFiles(join(SRC, 'pages'))) {
-    const text = readFileSync(file, 'utf8');
-    assert.doesNotMatch(text, /ProjectSelect/, `${rel(file)} still has a per-page Project picker`);
-  }
+test('the top bar has no project picker', () => {
+  const shell = source('layouts/RoleShell.jsx');
+  const header = shell.slice(shell.indexOf('<header className="program-topbar">'), shell.indexOf('</header>'));
+  assert.ok(header.length > 0);
+  assert.doesNotMatch(header, /<select|Project|topBarExtra/);
   const layout = source('layouts/RoleLayout.jsx');
-  assert.match(layout, /<TopBarProjectPicker/);
-  assert.match(layout, /showProjectPicker\(code, picked\.projects\)/);
-  assert.match(layout, /topBarExtra=\{current\.showPicker/);
-  // Sidebar links carry ?project= so the choice follows the user.
+  assert.doesNotMatch(layout, /TopBarProjectPicker|topBarExtra/);
+  assert.doesNotMatch(source('styles/global.css'), /topbar-project/);
+  for (const file of sourceFiles()) {
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /TopBarProjectPicker|ProjectSelect/, rel(file));
+  }
+  // Sidebar links still carry ?project= so the choice follows the user.
   assert.match(layout, /navTo=\{current\.withPicker \? \(to\) => withProject\(to, current\.projectId\)/);
-  assert.match(source('layouts/RoleShell.jsx'), /\{topBarExtra\}/);
+});
+
+// Every page of the Research Assistant, Finance/Admin and Researcher menus
+// whose title has a project line (Reports has its own Project field for the report).
+const ROLE_PAGES = [
+  'pages/dashboards/ResearchAssistantDashboard.jsx',
+  'pages/assistant/AssistantExpenses.jsx',
+  'pages/assistant/PurchaseRequests.jsx',
+  'pages/assistant/AssistantPayroll.jsx',
+  'pages/assistant/Documents.jsx',
+  'pages/assistant/MySubmissions.jsx',
+  'pages/assistant/BalancingQuery.jsx',
+  'pages/dashboards/FinanceDashboard.jsx',
+  'pages/finance/VerificationQueue.jsx',
+  'pages/finance/FinanceExpenses.jsx',
+  'pages/finance/FinancePayroll.jsx',
+  'pages/leader/Transactions.jsx',
+  'pages/dashboards/ResearcherDashboard.jsx',
+  'pages/researcher/ResearcherBudget.jsx',
+];
+
+test('every role page shows the shared project line, not its own', () => {
+  for (const path of ROLE_PAGES) {
+    const page = source(path);
+    assert.match(page, /import ProjectLine from '\.\.\/\.\.\/components\/ProjectLine';/, path);
+    const head = page.slice(page.indexOf('<div className="pl-head">'), page.indexOf('<LoadState'));
+    assert.match(head, /<ProjectLine\s+picker=\{picker\}/, path);
+    assert.doesNotMatch(head, /className="program-sub"/, `${path} writes its own project line`);
+  }
+});
+
+test('"Switch project" is one ActionMenu on the project line, shown only with more than one project', () => {
+  const line = source('components/ProjectLine.jsx');
+  assert.match(line, /const canSwitch = showProjectSwitch\(normalizeRole\(user\), picker\.projects\);/);
+  assert.match(line, /\{canSwitch && \(\s*<ActionMenu/);
+  assert.match(line, /Switch project <span aria-hidden="true">▾<\/span>/);
+  // "<code> · <title>", current one checked; the title is truncated in CSS.
+  assert.match(line, /<b>\{item\.code\}<\/b> · <span className="project-switch-title">\{item\.title\}<\/span>/);
+  assert.match(line, /checked: String\(item\.id\) === String\(picker\.projectId\)/);
+  assert.match(line, /chooseProject\(\{ userId: user\?\.id, role: picker\.role, projectId, search: location\.search \}\)/);
+  assert.match(source('styles/global.css'), /\.project-switch-option\{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\}/);
+  const menu = source('components/ActionMenu.jsx');
+  assert.match(menu, /role=\{radio \? 'menuitemradio' : 'menuitem'\}/);
+  assert.match(menu, /aria-checked=\{radio \? Boolean\(option\.checked\) : undefined\}/);
 });
 
 test('the Research Assistant Overview has no header action buttons', () => {

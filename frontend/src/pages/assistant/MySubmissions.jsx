@@ -6,6 +6,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { SUBMISSION_TABS, SUBMISSION_TYPES, parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
@@ -48,9 +49,7 @@ export default function MySubmissions() {
         <div>
           <div className="program-eyebrow">Track · Research Assistant</div>
           <h1 className="program-h1">My submissions</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Every record you encoded, and who has it now
-          </p>
+          <ProjectLine picker={picker} detail="Every record you encoded, and who has it now" />
         </div>
       </div>
 

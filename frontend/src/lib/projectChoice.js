@@ -1,7 +1,8 @@
 // The project a user is working on, shared by every page of their role.
-// The top-bar picker (layouts/TopBarProjectPicker.jsx) is the one place to
-// change it; the choice is kept in the ?project= link and remembered per
-// user and role, so it carries across pages. Storage can be blocked
+// The "Switch project" button at the end of each page's project line
+// (components/ProjectLine.jsx) is the one place to change it; the choice is
+// kept in the ?project= link and remembered per user and role, so it
+// carries across pages. Storage can be blocked
 // (private mode, site settings): reads then return null and writes are
 // ignored, and the ?project= link still works.
 
@@ -47,14 +48,23 @@ export function requestedProject(fromUrl, remembered) {
   return fromUrl || remembered || null;
 }
 
-/** Roles whose pages share the top-bar picker. The Project Leader leads one project and has none. */
-export function hasTopBarPicker(code) {
+/** Roles that can switch projects. The Project Leader leads one project and cannot. */
+export function canSwitchProject(code) {
   return code === 'RA' || code === 'FIN' || code === 'RES';
 }
 
-/** Show the picker only when the user has more than one project. */
-export function showProjectPicker(code, projects) {
-  return hasTopBarPicker(code) && Array.isArray(projects) && projects.length > 1;
+/** Show "Switch project" only when the user has more than one project. */
+export function showProjectSwitch(code, projects) {
+  return canSwitchProject(code) && Array.isArray(projects) && projects.length > 1;
+}
+
+/**
+ * Choosing a project: remembers it for this user and role, and returns the
+ * new search string (?project= set, ?open= dropped) for the current page.
+ */
+export function chooseProject({ userId, role, projectId, search, store }) {
+  writeProjectChoice(userId, role, projectId, store);
+  return searchWithProject(search, projectId);
 }
 
 /** A link that keeps the project: "/expenses" -> "/expenses?project=3". */
@@ -67,12 +77,16 @@ export function withProject(to, projectId) {
 }
 
 /**
- * The search string after choosing a project: sets ?project= and drops
- * ?open= (an open record belongs to the old project); other filters stay.
+ * The search string after choosing a project: sets ?project= and drops what
+ * belongs to the old project (?open= record and the older ?expense= /
+ * ?request= links, ?line_item=, ?page=); other filters (tab, type, status,
+ * dates, month) stay.
  */
+const OLD_PROJECT_PARAMS = ['open', 'expense', 'request', 'line_item', 'page'];
+
 export function searchWithProject(search, projectId) {
   const params = new URLSearchParams(search);
   params.set('project', String(projectId));
-  params.delete('open');
+  OLD_PROJECT_PARAMS.forEach((key) => params.delete(key));
   return `?${params.toString()}`;
 }

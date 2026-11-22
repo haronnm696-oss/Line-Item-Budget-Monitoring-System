@@ -6,6 +6,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { SUBMISSION_TABS, parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
@@ -45,9 +46,7 @@ export default function AssistantExpenses() {
         <div>
           <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Expenses and receipts</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Only verified expenses count as spent; each one needs a receipt
-          </p>
+          <ProjectLine picker={picker} detail="Only verified expenses count as spent; each one needs a receipt" />
         </div>
         {projectId && (
           <div className="pl-head-actions">

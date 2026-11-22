@@ -13,6 +13,7 @@ import { downloadPayrollRegisterCsv, fetchPayrollRegister } from '../../api/repo
 import { printHtmlDocument, saveBlob } from '../../lib/download';
 import { registerDocumentHtml } from '../../lib/payrollRegister';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import DocumentList from '../../components/leader/DocumentList';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import StagePill from '../../components/assistant/StagePill';
@@ -129,9 +130,7 @@ export default function AssistantPayroll() {
         <div>
           <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Payroll</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Monthly honorarium x months effective, from Personnel; no deductions or allowances. Spent = verified expenses and verified payroll
-          </p>
+          <ProjectLine picker={picker} detail="Monthly honorarium x months effective, from Personnel; no deductions or allowances. Spent = verified expenses and verified payroll" />
         </div>
         {projectId && (
           <div className="pl-head-actions">

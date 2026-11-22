@@ -7,6 +7,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import StagePill from '../../components/assistant/StagePill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
@@ -39,9 +40,7 @@ export default function FinancePayroll() {
         <div>
           <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Payroll</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}One batch per pay period; no deductions or allowances. Spent = verified expenses and verified payroll
-          </p>
+          <ProjectLine picker={picker} detail="One batch per pay period; no deductions or allowances. Spent = verified expenses and verified payroll" />
         </div>
         {picker.projectId && (
           <div className="pl-head-actions">

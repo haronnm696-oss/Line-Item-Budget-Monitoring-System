@@ -6,6 +6,7 @@ import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../lib/roles';
@@ -23,8 +24,8 @@ const FILTERS = ['from', 'to', 'line_item', 'category'];
  */
 export default function Transactions() {
   const picker = useAssignedProject();
-  // Only the Project Leader records here. They lead one project and have no
-  // picker; Finance/Admin and Researchers choose the project in the top bar.
+  // Only the Project Leader records here. They lead one project and cannot
+  // switch; Finance/Admin and Researchers switch from the project line.
   const isLeader = normalizeRole(useAuth().user) === 'PL';
   const [searchParams, setSearchParams] = useSearchParams();
   const [docsFor, setDocsFor] = useState(null);
@@ -64,10 +65,7 @@ export default function Transactions() {
         <div>
           <div className="program-eyebrow">Project</div>
           <h1 className="program-h1">Transactions</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}
-            Spent = verified expenses and verified payroll, newest first
-          </p>
+          <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll, newest first" />
         </div>
         {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
         {isLeader && picker.projectId && (

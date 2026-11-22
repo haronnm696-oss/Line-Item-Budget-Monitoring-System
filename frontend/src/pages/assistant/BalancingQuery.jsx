@@ -5,6 +5,7 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import { peso } from '../../components/money';
 
 const GROUPS = [
@@ -40,9 +41,7 @@ export default function BalancingQuery() {
         <div>
           <div className="program-eyebrow">Track · Research Assistant</div>
           <h1 className="program-h1">Balancing query</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Available = Allocated − Spent − Pending. Spent = verified expenses and verified payroll.
-          </p>
+          <ProjectLine picker={picker} detail="Available = Allocated − Spent − Pending. Spent = verified expenses and verified payroll." />
         </div>
       </div>
 

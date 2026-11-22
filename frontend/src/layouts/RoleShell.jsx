@@ -218,9 +218,8 @@ function todayLabel() {
  * @param {(key: string, count: number) => string} props.badgeLabel
  * @param {string} props.fallbackName  name shown before the user loads
  * @param {(to: string) => string} [props.navTo]  rewrites sidebar links (keeps ?project=)
- * @param {React.ReactNode} [props.topBarExtra]  shown in the header (the project picker)
  */
-export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel, fallbackName, navTo, topBarExtra = null }) {
+export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel, fallbackName, navTo }) {
   const { user, roleInfo, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -375,8 +374,6 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
 
           <span className="program-topbar-title" title={greeting}>{greeting}</span>
           <span className="spacer" />
-
-          {topBarExtra}
 
           <span className="program-topbar-date">
             <span className="program-live-dot" aria-hidden="true" />

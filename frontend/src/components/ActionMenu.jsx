@@ -5,8 +5,11 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
  * outside closes it and focus returns to the button; arrow keys, Home and
  * End move between items.
  *
- * options: [{ key, label, onSelect, danger?, disabled?, note? }]. A disabled
- * option stays in the menu (aria-disabled) with its `note` saying why.
+ * options: [{ key, label, onSelect, danger?, disabled?, note?, checked?, title? }].
+ * A disabled option stays in the menu (aria-disabled) with its `note` saying
+ * why. When any option has `checked` (true/false), the items are a choose-one
+ * list (menuitemradio, aria-checked) and the checked one shows a ✓. `title`
+ * is the hover text (e.g. a full name shown truncated).
  *
  * `fixed` places the menu with position: fixed under the button, so it is
  * not clipped by a scrolling table (.program-scroll); it flips above the
@@ -45,7 +48,8 @@ export default function ActionMenu({
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    menuRef.current?.querySelector('[role="menuitem"]:not([aria-disabled="true"])')?.focus();
+    const menu = menuRef.current;
+    (menu?.querySelector('[aria-checked="true"]') ?? menu?.querySelector('[role^="menuitem"]:not([aria-disabled="true"])'))?.focus();
 
     function onPointer(event) {
       if (!menuRef.current?.contains(event.target) && !buttonRef.current?.contains(event.target)) {
@@ -78,7 +82,7 @@ export default function ActionMenu({
   }
 
   function onMenuKeyDown(event) {
-    const items = [...(menuRef.current?.querySelectorAll('[role="menuitem"]') ?? [])];
+    const items = [...(menuRef.current?.querySelectorAll('[role^="menuitem"]') ?? [])];
     const index = items.indexOf(document.activeElement);
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -100,6 +104,8 @@ export default function ActionMenu({
     setOpen(false);
     option.onSelect();
   }
+
+  const radio = options.some((option) => typeof option.checked === 'boolean');
 
   const fixedStyle = fixed
     ? { position: 'fixed', right: 'auto', top: place?.top ?? 0, left: place?.left ?? 0, visibility: place ? 'visible' : 'hidden' }
@@ -134,12 +140,14 @@ export default function ActionMenu({
             <button
               key={option.key}
               type="button"
-              role="menuitem"
-              className={`pu-menu-item${option.danger ? ' danger' : ''}`}
+              role={radio ? 'menuitemradio' : 'menuitem'}
+              className={`pu-menu-item${option.danger ? ' danger' : ''}${radio ? ' is-radio' : ''}`}
+              aria-checked={radio ? Boolean(option.checked) : undefined}
               aria-disabled={option.disabled || undefined}
-              title={option.disabled ? option.note : undefined}
+              title={option.disabled ? option.note : option.title}
               onClick={() => choose(option)}
             >
+              {radio && <span className="pu-menu-check" aria-hidden="true">{option.checked ? '✓' : ''}</span>}
               <span>
                 {option.label}
                 {option.disabled && option.note && <span className="pu-menu-note">{option.note}</span>}

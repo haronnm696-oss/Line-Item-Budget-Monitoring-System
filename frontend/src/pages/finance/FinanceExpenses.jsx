@@ -7,6 +7,7 @@ import { useUrlQuery } from '../../lib/useUrlQuery';
 import { canResubmit, parseOpen } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import StagePill from '../../components/assistant/StagePill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
@@ -51,9 +52,7 @@ export default function FinanceExpenses() {
         <div>
           <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Expenses and receipts</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Expenses you record go to the Project Leader, then another Finance/Admin verifies them
-          </p>
+          <ProjectLine picker={picker} detail="Expenses you record go to the Project Leader, then another Finance/Admin verifies them" />
         </div>
         {projectId && (
           <div className="pl-head-actions">
