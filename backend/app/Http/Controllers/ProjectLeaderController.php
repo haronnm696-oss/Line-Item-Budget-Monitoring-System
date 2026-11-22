@@ -66,7 +66,7 @@ class ProjectLeaderController extends Controller
         return response()->json(['item' => $this->leader->show($project, $request->user(), $type, $id)]);
     }
 
-    /** GET /api/projects/{project}/transactions?from=&to=&line_item=&category=PS|MOOE&page= (project members) */
+    /** GET /api/projects/{project}/transactions?from=&to=&line_item=&category=PS|MOOE&receipt=missing&page= (project members) */
     public function transactions(Request $request, Project $project)
     {
         $data = $request->validate([
@@ -74,6 +74,8 @@ class ProjectLeaderController extends Controller
             'to' => ['bail', 'nullable', new DateInRange(), 'date', 'after_or_equal:from'],
             'line_item' => ['nullable', 'integer', Rule::exists((new LibCategory())->getTable(), 'id')->where('project_id', $project->id)],
             'category' => ['nullable', Rule::in(['PS', 'MOOE'])],
+            // Verified expenses without a receipt (ProjectFinancialService::missingReceipt); no payroll.
+            'receipt' => ['nullable', Rule::in(['missing'])],
             'page' => ['nullable', 'integer', 'min:1'],
         ], [
             'to.after_or_equal' => 'The end date must be on or after the start date.',

@@ -5,7 +5,7 @@ import client from '../../api/client';
 import { performWrite } from '../../lib/apiResult';
 import { useApiData } from '../../lib/useApiData';
 import { formatDate } from '../../lib/datetime';
-import { periodText, personnelForm, validatePersonnel } from '../../lib/personnel';
+import { periodText, personnelForm, specialOrderLabel, specialOrderPreview, validatePersonnel } from '../../lib/personnel';
 import { Dialog, Field, RemoveDialog, useSave } from '../program/ProjectSetup';
 import MoneyInput from '../MoneyInput';
 import { DATE_MAX, DATE_MIN } from '../../lib/dateRange';
@@ -31,6 +31,7 @@ export default function PersonnelSection({ projectId, teamCount }) {
   const list = useApiData(projectId ? ENDPOINTS.personnel(projectId) : null);
   const [dialog, setDialog] = useState(null); // { kind: 'form' | 'remove' | 'order', record?, url? }
   const [notice, setNotice] = useState('');
+  const [previewing, setPreviewing] = useState(null); // a record whose Special Order is shown
 
   // Not allowed for this role: the section is not shown at all.
   if (list.status === 'error' && list.error?.status === 403) return null;
@@ -93,7 +94,12 @@ export default function PersonnelSection({ projectId, teamCount }) {
                     <td>
                       <div>{record.special_order_no || <span className="project-code">⚠ Not entered</span>}</div>
                       {record.special_order_document
-                        ? <a className="project-code" href={apiUrl(ENDPOINTS.documentDownload(record.special_order_document.id))}>📄 {record.special_order_document.file_name}</a>
+                        ? (
+                          <button type="button" className="ld-link" title={record.special_order_document.file_name}
+                            onClick={() => setPreviewing(record)}>
+                            <span aria-hidden="true">📄</span> {specialOrderLabel(record.special_order_document)}
+                          </button>
+                        )
                         : <span className="project-code">No file</span>}
                     </td>
                   )}
@@ -112,6 +118,9 @@ export default function PersonnelSection({ projectId, teamCount }) {
         </div>
       </LoadState>
 
+      {previewing?.special_order_document && (
+        <SpecialOrderPreview record={previewing} onClose={() => setPreviewing(null)} />
+      )}
       {dialog?.kind === 'form' && (
         <PersonnelDialog projectId={projectId} data={data} teamCount={teamCount} record={dialog.record ?? null} onClose={() => setDialog(null)} onSaved={done} />
       )}
@@ -241,6 +250,31 @@ function PersonnelDialog({ projectId, data, teamCount, record, onClose, onSaved 
           <button type="submit" className="program-btn primary" disabled={busy}>{busy ? 'Saving…' : creating ? 'Add personnel' : 'Save'}</button>
         </div>
       </form>
+    </Dialog>
+  );
+}
+
+/** Preview of a Special Order (image inline, PDF in a frame), with Download. */
+function SpecialOrderPreview({ record, onClose }) {
+  const doc = record.special_order_document;
+  const url = apiUrl(ENDPOINTS.documentDownload(doc.id));
+  const kind = specialOrderPreview(doc);
+  return (
+    <Dialog title={`${specialOrderLabel(doc)} · ${record.name ?? record.position}`} labelId="pn-so-preview-title" busy={false} onClose={onClose}>
+      <p className="project-code">{record.special_order_no || 'Special Order number not entered'} · {doc.file_name}</p>
+      {kind ? (
+        <div className="ld-preview">
+          {kind === 'image'
+            ? <img src={`${url}?inline=1`} alt={`Special Order of ${record.name ?? record.position}`} />
+            : <iframe src={`${url}?inline=1`} title={`Special Order of ${record.name ?? record.position}`} />}
+        </div>
+      ) : (
+        <p className="ld-muted">No preview for this file type.</p>
+      )}
+      <div className="program-modal-actions">
+        <a className="program-btn" href={url}>Download</a>
+        <button type="button" className="program-btn primary" onClick={onClose}>Close</button>
+      </div>
     </Dialog>
   );
 }

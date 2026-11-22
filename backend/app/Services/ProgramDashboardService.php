@@ -530,6 +530,12 @@ class ProgramDashboardService
                 ->where('documentable_id', ($approval->payload ?? [])['payroll_batch_id'] ?? 0)
                 ->count();
         }
+        if (ExpenseWorkflowService::isEscalation($approval)) {
+            $count += Document::query()
+                ->where('documentable_type', (new Expense())->getMorphClass())
+                ->where('documentable_id', ($approval->payload ?? [])['expense_id'] ?? 0)
+                ->count();
+        }
 
         return $count;
     }
@@ -558,7 +564,7 @@ class ProgramDashboardService
             abort(409, 'This approval request has already been reviewed.');
         }
 
-        $batch = AuditLogger::transaction(function () use ($approval, $decision, $remarks, $actor) {
+        $moved = AuditLogger::transaction(function () use ($approval, $decision, $remarks, $actor) {
             $locked = ApprovalRequest::query()
                 ->with(['liquidation'])
                 ->lockForUpdate()
@@ -586,6 +592,10 @@ class ProgramDashboardService
             // generic one below.
             if (PayrollService::isEscalation($locked)) {
                 return app(PayrollService::class)->decideEscalation($locked, $decision, $remarks, $actor);
+            }
+            // An expense no Finance/Admin may verify: the same, on the expense.
+            if (ExpenseWorkflowService::isEscalation($locked)) {
+                return app(ExpenseWorkflowService::class)->decideEscalation($locked, $decision, $remarks, $actor);
             }
 
             $this->applyDecision($locked, $decision, $remarks, $actor);
@@ -622,8 +632,10 @@ class ProgramDashboardService
 
         // Tell the people concerned once the decision is committed (a failed
         // notification never undoes it).
-        if ($batch) {
-            app(PayrollService::class)->notifyEscalationDecision($approval->fresh(), $batch, $actor);
+        if ($moved instanceof PayrollBatch) {
+            app(PayrollService::class)->notifyEscalationDecision($approval->fresh(), $moved, $actor);
+        } elseif ($moved instanceof Expense) {
+            app(ExpenseWorkflowService::class)->notifyEscalationDecision($approval->fresh(), $moved, $actor);
         } else {
             app(BudgetRequestService::class)->notifyDecision($approval->fresh(), $actor);
         }

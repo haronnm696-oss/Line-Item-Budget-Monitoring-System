@@ -423,7 +423,10 @@ class ProjectLeaderService
      * Every spent row (transactionRows() shape, plus `kind` expense / payroll),
      * newest first, with the Transactions filters applied.
      *
-     * @param array{from?: string, to?: string, line_item?: int, category?: string} $filters
+     * receipt=missing keeps only verified expenses without a receipt (the
+     * "Missing receipts" KPI); payroll has no receipts, so it is left out.
+     *
+     * @param array{from?: string, to?: string, line_item?: int, category?: string, receipt?: string} $filters
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
     public function spentRows(Project $project, array $filters = [])
@@ -432,15 +435,17 @@ class ProjectLeaderService
         $to = $filters['to'] ?? null;
         $lineItem = $filters['line_item'] ?? null;
         $type = $filters['category'] ?? null;
+        $missingReceipt = ($filters['receipt'] ?? null) === 'missing';
 
         $expenses = $this->spentQuery($project)
+            ->when($missingReceipt, fn ($q) => ProjectFinancialService::missingReceipt($q))
             ->when($from, fn ($q) => $q->whereDate('expense_date', '>=', $from))
             ->when($to, fn ($q) => $q->whereDate('expense_date', '<=', $to))
             ->when($lineItem, fn ($q) => $q->where('lib_category_id', $lineItem))
             ->when($type, fn ($q) => $q->whereHas('libCategory', fn ($c) => $c->where('category_type', $type)))
             ->get();
 
-        $payroll = ProjectFinancialService::payrollEntries([(int) $project->id])
+        $payroll = ($missingReceipt ? collect() : ProjectFinancialService::payrollEntries([(int) $project->id]))
             ->filter(fn (array $p) => (! $from || $p['date'] >= $from) && (! $to || $p['date'] <= $to)
                 && (! $lineItem || (int) $p['lib_category_id'] === (int) $lineItem)
                 && (! $type || $p['type'] === $type))

@@ -16,6 +16,8 @@ class ApprovalRequest extends Model implements HasDocuments
         'budget_realignment' => 'Budget Realignment',
         'payroll' => 'Payroll',
         'liquidation' => 'Liquidation',
+        // An expense no Finance/Admin of the project may verify (escalated).
+        'expense' => 'Expense verification',
     ];
 
     protected $fillable = [

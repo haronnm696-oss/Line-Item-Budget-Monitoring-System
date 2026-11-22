@@ -121,7 +121,7 @@ class LeaderStepRoutingTest extends TestCase
         $other = $this->expenseIn('submitted', $this->assistant); // a normal one: stays with the Project Leader
 
         $this->artisan('workflow:reroute-leader-steps')
-            ->expectsOutput('Dry run. Expenses: 1, purchase requests: 1. Payroll batches are checked only with --apply.')
+            ->expectsOutput('Dry run. Expenses: 1, purchase requests: 1, expenses to the Program Leader to verify: 0. Payroll batches are checked only with --apply.')
             ->assertSuccessful();
         $this->assertSame('submitted', $expense->fresh()->workflow_status);
 

@@ -14,6 +14,7 @@ const TYPES = [
   ['realignment', 'Realignment'],
   ['liquidation', 'Liquidation'],
   ['payroll', 'Payroll'],
+  ['expense', 'Expense verification'],
 ];
 
 const TABS = [
@@ -45,6 +46,8 @@ const TYPE_PILL = {
   payroll: 'Payroll',
   budget_realignment: 'Realignment',
   liquidation: 'Liquidation',
+  // Expenses no Finance/Admin of the project may verify (they recorded or approved it).
+  expense: 'Expense verification',
 };
 
 function messageFor(error, fallback) {

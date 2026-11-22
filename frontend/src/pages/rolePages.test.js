@@ -45,7 +45,6 @@ const ROLE_PAGES = [
   'pages/assistant/BalancingQuery.jsx',
   'pages/dashboards/FinanceDashboard.jsx',
   'pages/finance/VerificationQueue.jsx',
-  'pages/finance/FinanceExpenses.jsx',
   'pages/finance/FinancePayroll.jsx',
   'pages/leader/Transactions.jsx',
   'pages/dashboards/ResearcherDashboard.jsx',
@@ -141,7 +140,7 @@ test('the Researcher Overview has no Reports card; Transaction summary is full w
 const RESEARCHER_PAGES = [
   ['pages/dashboards/ResearcherDashboard.jsx', /<PageTitle eyebrow=\{RESEARCHER_EYEBROW\} title="[^"]+" readOnly \/>/],
   ['pages/researcher/ResearcherBudget.jsx', /<PageTitle eyebrow=\{RESEARCHER_EYEBROW\} title="Budget" readOnly \/>/],
-  ['pages/leader/Transactions.jsx', /<PageTitle eyebrow=\{transactionsEyebrow\(roleCode\)\} title="Transactions" readOnly=\{readOnly\} \/>/],
+  ['pages/leader/Transactions.jsx', /<PageTitle eyebrow=\{transactionsEyebrow\(roleCode\)\} title=\{transactionsTitle\(roleCode\)\} readOnly=\{readOnly\} \/>/],
   ['pages/Reports.jsx', /<PageTitle eyebrow=\{reportsEyebrow\(roleCode\)\} title="Reports" readOnly=\{isReadOnlyRole\(roleCode\)\} \/>/],
 ];
 

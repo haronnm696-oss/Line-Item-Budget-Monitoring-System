@@ -10,19 +10,23 @@ import ProjectLine from '../../components/ProjectLine';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../lib/roles';
-import { isReadOnlyRole, transactionsEyebrow } from '../../lib/pageHead';
+import { isReadOnlyRole, transactionsEyebrow, transactionsTitle } from '../../lib/pageHead';
 import PageTitle from '../../components/PageTitle';
 import DocumentList from '../../components/leader/DocumentList';
+import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
 
-const FILTERS = ['from', 'to', 'line_item', 'category'];
+const FILTERS = ['from', 'to', 'line_item', 'category', 'receipt'];
 
 /**
  * Transactions: what Total spent adds up, newest first, 25 per page, with
  * date range, line item and category filters in the URL. Spent = verified
  * expenses and verified payroll (one payroll row per batch and line item,
  * `kind: 'payroll'`; its documents are the batch's payroll files).
+ * "Missing receipt" (?receipt=missing) keeps only verified expenses without
+ * a receipt: the Finance Overview's "Missing receipts" KPI opens it, and
+ * Finance/Admin can ask for the receipt (Notify RA) from each row.
  */
 export default function Transactions() {
   const picker = useAssignedProject();
@@ -30,6 +34,7 @@ export default function Transactions() {
   // switch; Finance/Admin and Researchers switch from the project line.
   const roleCode = normalizeRole(useAuth().user);
   const isLeader = roleCode === 'PL';
+  const isFinance = roleCode === 'FIN';
   // Researchers read only and never open payroll files (pay per person;
   // the API refuses them too).
   const readOnly = isReadOnlyRole(roleCode);
@@ -44,6 +49,8 @@ export default function Transactions() {
   if (page > 1) query.set('page', String(page));
   const url = picker.projectId ? `${ENDPOINTS.transactions(picker.projectId)}${query.toString() ? `?${query}` : ''}` : null;
   const result = useApiData(url);
+  const actions = useVerifyActions({ projectId: picker.projectId, onChanged: result.retry });
+  const missingOnly = searchParams.get('receipt') === 'missing';
 
   const rows = Array.isArray(result.data?.transactions) ? result.data.transactions : [];
   const meta = result.data?.meta;
@@ -69,7 +76,7 @@ export default function Transactions() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <PageTitle eyebrow={transactionsEyebrow(roleCode)} title="Transactions" readOnly={readOnly} />
+          <PageTitle eyebrow={transactionsEyebrow(roleCode)} title={transactionsTitle(roleCode)} readOnly={readOnly} />
           <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll, newest first" />
         </div>
         {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
@@ -82,8 +89,8 @@ export default function Transactions() {
         )}
       </div>
 
-      {feedback && (
-        <div className={`program-banner ${feedback.tone}`} role="status" aria-live="polite">{feedback.text}</div>
+      {(feedback ?? actions.feedback) && (
+        <div className={`program-banner ${(feedback ?? actions.feedback).tone}`} role="status" aria-live="polite">{(feedback ?? actions.feedback).text}</div>
       )}
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
@@ -113,15 +120,22 @@ export default function Transactions() {
                 .map((item) => <option key={item.id} value={item.id}>{item.type} · {item.name}</option>)}
             </select>
           </div>
+          <div className="program-field">
+            <label htmlFor="tx-receipt">Receipt</label>
+            <select id="tx-receipt" className="program-select" value={missingOnly ? 'missing' : ''} onChange={(e) => update({ receipt: e.target.value })}>
+              <option value="">All transactions</option>
+              <option value="missing">Missing receipt</option>
+            </select>
+          </div>
           {hasFilters && (
-            <button type="button" className="program-btn" onClick={() => update({ from: '', to: '', line_item: '', category: '' })}>Clear filters</button>
+            <button type="button" className="program-btn" onClick={() => update({ from: '', to: '', line_item: '', category: '', receipt: '' })}>Clear filters</button>
           )}
         </div>
 
         {validationError ? (
           <div className="program-banner error" role="alert">{validationError}</div>
         ) : (
-          <LoadState state={result} loadingText="Loading transactions…" emptyText={hasFilters ? 'No verified expenses or payroll match these filters.' : 'No verified expenses or payroll yet.'} isEmpty={rows.length === 0}>
+          <LoadState state={result} loadingText="Loading transactions…" emptyText={missingOnly ? '✓ Every verified expense matching these filters has a receipt.' : (hasFilters ? 'No verified expenses or payroll match these filters.' : 'No verified expenses or payroll yet.')} isEmpty={rows.length === 0}>
             <section className="program-card">
               <div className="program-card-head">
                 <div>
@@ -160,7 +174,16 @@ export default function Transactions() {
                               {row.documents_count > 0 ? `${row.documents_count} document${row.documents_count === 1 ? '' : 's'}` : 'View documents'}
                             </button>
                           )}
-                          {row.kind !== 'payroll' && row.receipts_count === 0 && <div className="project-code">No receipt</div>}
+                          {row.kind !== 'payroll' && row.receipts_count === 0 && (
+                            <>
+                              <div className="project-code"><span aria-hidden="true">!</span> No receipt</div>
+                              {isFinance && (
+                                <button type="button" className="program-btn sm" disabled={actions.busyKey === `notify-${row.id}`} onClick={() => actions.notifyRa(row)}>
+                                  {actions.busyKey === `notify-${row.id}` ? 'Sending…' : 'Notify RA'}
+                                </button>
+                              )}
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}

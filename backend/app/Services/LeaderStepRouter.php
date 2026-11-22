@@ -18,6 +18,8 @@ use App\Models\User;
  *   expense           recorded by the Project Leader -> Finance/Admin
  *   purchase request  made by the Project Leader     -> no leader step
  *   payroll batch     pays / was prepared by the PL  -> Program Leader
+ *   approved expense  no Finance/Admin may verify it -> Program Leader
+ *                     (recorded by the only Finance/Admin: older data)
  *
  * Each move writes one audit entry ("rerouted") and notifies the next
  * reviewer. Runs after an account role change or a project-role Fix, and
@@ -34,11 +36,11 @@ class LeaderStepRouter
 
     /**
      * @param array<int, int>|null $projectIds limit to these projects (null = all)
-     * @return array{expense: int, purchase_request: int, payroll: int}
+     * @return array{expense: int, purchase_request: int, payroll: int, expense_verify: int}
      */
     public function reroute(User $actor, ?array $projectIds = null, bool $dryRun = false): array
     {
-        $counts = ['expense' => 0, 'purchase_request' => 0, 'payroll' => 0];
+        $counts = ['expense' => 0, 'purchase_request' => 0, 'payroll' => 0, 'expense_verify' => 0];
         $scope = fn ($query) => $projectIds === null ? $query : $query->whereIn('project_id', $projectIds);
 
         foreach ($scope(Expense::query()->where('workflow_status', 'submitted'))->get() as $expense) {
@@ -50,6 +52,18 @@ class LeaderStepRouter
         foreach ($scope(PurchaseRequest::query()->where('workflow_status', 'submitted'))->get() as $request) {
             if ($dryRun ? $this->leads($request->project_id, $request->requested_by) : $this->purchaseRequests->skipLeaderStep($request, $actor)) {
                 $counts['purchase_request']++;
+            }
+        }
+
+        // Approved expenses nobody on Finance/Admin may verify: to the Program Leader.
+        foreach ($scope(Expense::query()->where('workflow_status', 'endorsed'))->get() as $expense) {
+            if ($expense->pendingEscalation() !== null || $this->expenses->eligibleVerifiers($expense)->isNotEmpty()) {
+                continue;
+            }
+            if ($dryRun) {
+                $counts['expense_verify']++;
+            } elseif ($this->expenses->escalateVerifyIfNeeded($expense, $actor)->pendingEscalation() !== null) {
+                $counts['expense_verify']++;
             }
         }
 

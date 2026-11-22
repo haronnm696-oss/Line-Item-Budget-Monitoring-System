@@ -82,3 +82,27 @@ export function periodText(from, to, formatDate) {
   if (!from && !to) return '—';
   return `${from ? formatDate(from) : '…'} – ${to ? formatDate(to) : '…'}`;
 }
+
+/**
+ * The Personnel table shows the Special Order file as "Special Order (PDF)"
+ * or "(JPG)" / "(PNG)" instead of its raw file name. The type comes from the
+ * MIME type, or the file name's extension when that is missing.
+ */
+export function specialOrderLabel(document) {
+  if (!document) return '';
+  const mime = String(document.mime ?? '').toLowerCase();
+  const ext = String(document.file_name ?? '').split('.').pop().toLowerCase();
+  let kind = '';
+  if (mime === 'application/pdf' || ext === 'pdf') kind = 'PDF';
+  else if (mime === 'image/jpeg' || ext === 'jpg' || ext === 'jpeg') kind = 'JPG';
+  else if (mime === 'image/png' || ext === 'png') kind = 'PNG';
+  return kind ? `Special Order (${kind})` : 'Special Order';
+}
+
+/** How to preview the Special Order: 'image', 'pdf', or null (download only). */
+export function specialOrderPreview(document) {
+  const label = specialOrderLabel(document);
+  if (label.endsWith('(PDF)')) return 'pdf';
+  if (label.endsWith('(JPG)') || label.endsWith('(PNG)')) return 'image';
+  return null;
+}

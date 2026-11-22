@@ -184,7 +184,7 @@ class PersonnelService
             'effective_to' => $record->effective_to?->toDateString(),
             'monthly_honorarium' => round((float) $record->monthly_honorarium, 2),
             'bank_account_masked' => $record->maskedBankAccount(),
-            'special_order_document' => $order ? ['id' => $order->id, 'file_name' => $order->file_name] : null,
+            'special_order_document' => $order ? ['id' => $order->id, 'file_name' => $order->file_name, 'mime' => $order->mime] : null,
         ];
     }
 

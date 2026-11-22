@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ApprovalRequest;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Project;
@@ -53,12 +54,25 @@ class ExpenseWorkflowService
     /** Label of an endorsed expense that a Project Leader recorded (no approval step). */
     public const WAITING_VERIFICATION = 'Waiting for Finance/Admin verification';
 
-    private const ENCODERS = ['research-assistant', 'finance-admin'];
+    /**
+     * Who records expenses: the Research Assistant (and the Project Leader,
+     * on their own project). Finance/Admin verifies and does not encode; an
+     * older expense a Finance/Admin recorded can still be edited, resubmitted
+     * or deleted by that same person (requireEncoder()).
+     */
+    private const ENCODER = 'research-assistant';
+    private const FINANCE = 'finance-admin';
     private const LEADER = 'project-leader';
+
+    /** Label of an approved expense the Program Leader verifies (no Finance/Admin may). */
+    public const WAITING_PROGRAM_LEADER = 'Waiting for the Program Leader to verify (no other Finance/Admin can)';
 
     /** The stage label of one expense. */
     public static function label(Expense $expense): string
     {
+        if ($expense->workflow_status === 'endorsed' && $expense->pendingEscalation() !== null) {
+            return self::WAITING_PROGRAM_LEADER;
+        }
         if ($expense->workflow_status === 'endorsed' && $expense->pl_reviewed_by === null) {
             return self::WAITING_VERIFICATION;
         }
@@ -80,7 +94,8 @@ class ExpenseWorkflowService
      */
     public function create(Project $project, array $data, User $actor): Expense
     {
-        $this->requireRole($project, $actor, array_merge(self::ENCODERS, [self::LEADER]), 'Only a Research Assistant, Finance/Admin staff or the Project Leader of this project can record expenses.');
+        // Finance/Admin verifies against the documents; it does not encode.
+        $this->requireRole($project, $actor, [self::ENCODER, self::LEADER], 'Only a Research Assistant or the Project Leader of this project can record expenses. Finance/Admin verifies them.');
         $linkId = $data['purchase_request_id'] ?? null;
         $this->requireNotHonoraria($project->id, $data['lib_category_id'] ?? null);
 
@@ -207,7 +222,8 @@ class ExpenseWorkflowService
         ]);
 
         if ($byLeader) {
-            $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense, 'leader_submitted', $actor);
+            $expense = $this->escalateVerifyIfNeeded($expense, $actor);
+            $this->notifyVerifiers($expense, 'leader_submitted', $actor);
         } else {
             $this->notify($this->projectMembers($expense->project_id, 'project-leader'), $expense, 'submitted', $actor);
         }
@@ -277,23 +293,27 @@ class ExpenseWorkflowService
     }
 
     /**
-     * Research Assistant / Finance/Admin of the project, or the Project
-     * Leader for an expense they recorded. Returns true for the Project
-     * Leader path.
+     * A Research Assistant of the project; or the Project Leader, or a
+     * Finance/Admin (older data), for an expense they recorded. Returns true
+     * for the Project Leader path.
      */
     private function requireEncoder(Expense $expense, User $actor, string $verb): bool
     {
         $project = $expense->project;
-        if ($project && ! $actor->hasRoleOn($project, self::ENCODERS) && $actor->hasRoleOn($project, self::LEADER)) {
+        if ($project && $actor->hasRoleOn($project, self::ENCODER)) {
+            return false;
+        }
+        $leader = $project && $actor->hasRoleOn($project, self::LEADER);
+        if ($leader || ($project && $actor->hasRoleOn($project, self::FINANCE))) {
             if ((int) $expense->recorded_by !== (int) $actor->id) {
-                abort(403, "A Project Leader can only {$verb} expenses they recorded.");
+                abort(403, $leader
+                    ? "A Project Leader can only {$verb} expenses they recorded."
+                    : "Finance/Admin can only {$verb} an expense they recorded. Finance/Admin verifies expenses; the Research Assistant records them.");
             }
 
-            return true;
+            return $leader;
         }
-        $this->requireRole($expense->project, $actor, self::ENCODERS, "Only a Research Assistant or Finance/Admin staff of this project can {$verb} expenses.");
-
-        return false;
+        abort(403, "Only a Research Assistant or the Project Leader of this project can {$verb} expenses.");
     }
 
     /**
@@ -311,7 +331,7 @@ class ExpenseWorkflowService
             'pl_reviewed_by' => null,
             'pl_reviewed_at' => null,
         ], 'Recorded by the Project Leader, so it goes to Finance/Admin without a Project Leader approval.');
-        $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense->fresh(), 'leader_submitted', $actor);
+        $this->notifyVerifiers($this->escalateVerifyIfNeeded($expense->fresh(), $actor), 'leader_submitted', $actor);
 
         return true;
     }
@@ -326,8 +346,8 @@ class ExpenseWorkflowService
             'pl_reviewed_by' => $actor->id,
             'pl_reviewed_at' => now(),
         ]);
-
-        $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense, 'endorsed', $actor);
+        $expense = $this->escalateVerifyIfNeeded($expense, $actor);
+        $this->notifyVerifiers($expense, 'endorsed', $actor);
 
         return $expense;
     }
@@ -353,6 +373,7 @@ class ExpenseWorkflowService
     public function verify(Expense $expense, User $actor): Expense
     {
         $this->requireRole($expense->project, $actor, ['finance-admin'], 'Only Finance/Admin staff of this project can verify expenses.');
+        $this->requireNotEscalated($expense);
         $this->requireNotMaker($expense, $actor, 'You cannot verify or reject an expense you recorded.');
         $this->requireNotEndorser($expense, $actor);
         $this->requireState($expense, ['endorsed'], 'verified');
@@ -371,6 +392,7 @@ class ExpenseWorkflowService
     public function reject(Expense $expense, string $reason, User $actor): Expense
     {
         $this->requireRole($expense->project, $actor, ['finance-admin'], 'Only Finance/Admin staff of this project can reject expenses.');
+        $this->requireNotEscalated($expense);
         $this->requireNotMaker($expense, $actor, 'You cannot verify or reject an expense you recorded.');
         $this->requireNotEndorser($expense, $actor);
         $this->requireState($expense, ['endorsed'], 'rejected');
@@ -396,6 +418,125 @@ class ExpenseWorkflowService
     public function notifyLateReceipt(Expense $expense, User $actor): void
     {
         $this->notify($this->projectMembers($expense->project_id, 'finance-admin'), $expense, 'late_receipt', $actor);
+    }
+
+    // ---------------------------------------------------------------- Program Leader escalation
+
+    /**
+     * Finance/Admin of the project who may verify this expense: not its
+     * recorder, not the person who approved it.
+     */
+    public function eligibleVerifiers(Expense $expense): Collection
+    {
+        $excluded = array_filter([(int) $expense->recorded_by, (int) $expense->pl_reviewed_by]);
+
+        return $this->projectMembers($expense->project_id, self::FINANCE)
+            ->reject(fn (User $user) => in_array((int) $user->id, $excluded, true))
+            ->values();
+    }
+
+    /** True when an approval request is an expense's verify step escalated to the Program Leader. */
+    public static function isEscalation(ApprovalRequest $approval): bool
+    {
+        return $approval->type === 'expense' && ! empty(($approval->payload ?? [])['expense_id']);
+    }
+
+    /**
+     * Approved, but no Finance/Admin of the project may verify it (the only
+     * Finance/Admin recorded it, as with older expenses, or approved it): the
+     * verify step goes to the Program Leader as a pending "expense" approval
+     * request. The recorder is the requester, so a Program Leader who
+     * recorded it cannot decide it. Returns the expense (fresh), unchanged
+     * when this does not apply.
+     */
+    public function escalateVerifyIfNeeded(Expense $expense, User $actor): Expense
+    {
+        if ($expense->workflow_status !== 'endorsed' || $expense->pendingEscalation() !== null
+            || $this->eligibleVerifiers($expense)->isNotEmpty() || $this->eligibleProgramVerifiers($expense)->isEmpty()) {
+            return $expense;
+        }
+
+        $why = 'No other Finance/Admin of this project can verify this expense (they recorded or approved it), so the Program Leader verifies it.';
+        $approval = ApprovalRequest::create([
+            'project_id' => $expense->project_id,
+            'type' => 'expense',
+            'title' => 'Expense ' . ($expense->reference_no ?: 'EXP-' . $expense->id) . ': verify',
+            'description' => $why,
+            'justification' => $why,
+            'amount' => round((float) $expense->amount, 2),
+            'payload' => ['expense_id' => $expense->id, 'step' => 'verify'],
+            'requested_by' => $expense->recorded_by ?: $actor->id,
+            'status' => 'pending',
+        ]);
+        $expense->forceFill(['approval_request_id' => $approval->id])->save();
+
+        return $expense->fresh();
+    }
+
+    /**
+     * The Program Leader's decision on an escalated verify step (inside
+     * ProgramDashboardService::decide()'s transaction). One audit entry, on
+     * the expense: approved -> verified; returned -> back to the recorder.
+     */
+    public function decideEscalation(ApprovalRequest $approval, string $decision, ?string $remarks, User $actor): Expense
+    {
+        $expense = Expense::query()->whereKey(($approval->payload ?? [])['expense_id'] ?? 0)->lockForUpdate()->first();
+        if (! $expense || (int) $expense->approval_request_id !== (int) $approval->id || $expense->workflow_status !== 'endorsed') {
+            abort(409, 'This expense is no longer waiting for this decision.');
+        }
+        $this->requireNotMaker($expense, $actor, 'You cannot verify or reject an expense you recorded.');
+        $this->requireNotEndorser($expense, $actor);
+
+        if ($decision === 'approved') {
+            return $this->move($expense, 'verified', $actor, 'verified', ['endorsed'], [
+                'verified_by' => $actor->id,
+                'verified_at' => now(),
+                'remarks' => 'Verified by ' . $actor->name . ' (Program Leader).',
+            ], $remarks);
+        }
+
+        return $this->move($expense, 'returned', $actor, 'rejected', ['endorsed'], [
+            'return_reason' => $remarks,
+            'remarks' => $remarks,
+            'verified_by' => $actor->id,
+            'verified_at' => now(),
+        ], $remarks);
+    }
+
+    /** Notifications for an escalated decision, after it is committed. */
+    public function notifyEscalationDecision(ApprovalRequest $approval, Expense $expense, User $actor): void
+    {
+        $expense = $expense->fresh();
+        $approved = $approval->status === 'approved';
+        $this->notify($this->recorder($expense), $expense, $approved ? 'verified' : 'rejected', $actor, $approved ? null : $approval->review_notes);
+    }
+
+    /** Program Leaders who could verify: active, not the recorder, not the approver. */
+    private function eligibleProgramVerifiers(Expense $expense): Collection
+    {
+        $excluded = array_filter([(int) $expense->recorded_by, (int) $expense->pl_reviewed_by]);
+
+        return User::query()->where('is_active', true)
+            ->whereHas('primaryRole', fn ($q) => $q->where('slug', 'program-leader'))
+            ->get()
+            ->reject(fn (User $user) => in_array((int) $user->id, $excluded, true))
+            ->values();
+    }
+
+    /** Waiting for verification: tell the eligible Finance/Admin, or the Program Leaders when escalated. */
+    private function notifyVerifiers(Expense $expense, string $event, User $actor): void
+    {
+        $recipients = $expense->pendingEscalation() !== null
+            ? $this->eligibleProgramVerifiers($expense)
+            : $this->eligibleVerifiers($expense);
+        $this->notify($recipients, $expense, $event, $actor);
+    }
+
+    private function requireNotEscalated(Expense $expense): void
+    {
+        if ($expense->pendingEscalation() !== null) {
+            abort(403, 'No other Finance/Admin can verify this expense, so it is waiting for the Program Leader.');
+        }
     }
 
     // ---------------------------------------------------------------- helpers
@@ -433,7 +574,7 @@ class ExpenseWorkflowService
         $this->requireNotSame($expense->pl_reviewed_by, $actor, 'You approved this expense as Project Leader; another person must verify it.');
     }
 
-    /** Fields a Research Assistant or Finance/Admin may set on a draft. */
+    /** Fields the recorder may set on a draft. */
     private function only(array $data): array
     {
         return array_intersect_key($data, array_flip([

@@ -7,7 +7,9 @@ const LINK = '/expenses?project=4&expense=17';
 
 test('a role that may open the link goes straight to it', () => {
   assert.equal(notificationTarget('RA', LINK), LINK);
-  assert.equal(notificationTarget('FIN', LINK), LINK);
+  // Finance/Admin has no Expenses page (it verifies, it does not encode):
+  // the Verification queue of the same project.
+  assert.equal(notificationTarget('FIN', LINK), '/verification-queue?project=4');
 });
 
 test('other roles go to their review page with the same project', () => {
@@ -37,8 +39,10 @@ test('a Project Leader opens the record each notification is about', () => {
     notificationTarget('PL', '/my-requests?project=4', { type: 'approval', id: 21 }, 4),
     '/my-requests?project=4&request=21'
   );
-  // A record type the role has no panel for keeps the notification's own link.
-  assert.equal(notificationTarget('FIN', LINK, { type: 'approval', id: 17 }, 4), LINK);
+  // A record type the role has no panel for keeps the notification's own
+  // link when the role may open it, else its review page.
+  assert.equal(notificationTarget('RA', '/payroll?project=4', { type: 'approval', id: 17 }, 4), '/payroll?project=4');
+  assert.equal(notificationTarget('FIN', LINK, { type: 'approval', id: 17 }, 4), '/verification-queue?project=4');
 });
 
 test('badge text is capped', () => {

@@ -35,6 +35,7 @@ class Expense extends Model implements HasDocuments
         'reference_no', 'payee', 'description', 'amount', 'expense_date',
         'attachment_path', 'status', 'remarks', 'verified_at',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at', 'return_reason',
+        'approval_request_id',
     ];
 
     protected $casts = [
@@ -65,6 +66,20 @@ class Expense extends Model implements HasDocuments
     public function libCategory()
     {
         return $this->belongsTo(LibCategory::class);
+    }
+
+    /** The latest escalation of the verify step to the Program Leader. */
+    public function approvalRequest()
+    {
+        return $this->belongsTo(ApprovalRequest::class);
+    }
+
+    /** The pending escalation, when the Program Leader verifies this expense. */
+    public function pendingEscalation(): ?ApprovalRequest
+    {
+        $approval = $this->approval_request_id ? $this->approvalRequest : null;
+
+        return $approval && $approval->isPending() ? $approval : null;
     }
 
     public function recordedBy()
@@ -105,11 +120,13 @@ class Expense extends Model implements HasDocuments
             // A verified expense without a receipt (a missing receipt) may
             // still get its receipt; nothing else changes on it.
             'types' => $this->awaitsLateReceipt() ? [Document::TYPE_RECEIPT] : Document::TYPES,
-            'uploader_roles' => ['research-assistant', 'finance-admin'],
-            // A Project Leader may attach to an expense they recorded.
-            'recorder_roles' => ['project-leader'],
+            'uploader_roles' => ['research-assistant'],
+            // A Project Leader may attach to an expense they recorded; so may
+            // Finance/Admin, to an older expense they recorded (they verify,
+            // they no longer encode).
+            'recorder_roles' => ['project-leader', 'finance-admin'],
             'recorder_id' => $this->recorded_by,
-            'uploader_message' => 'Only a Research Assistant, Finance/Admin staff or the Project Leader who recorded this expense can attach documents.',
+            'uploader_message' => 'Only a Research Assistant, or the Project Leader or Finance/Admin who recorded this expense, can attach documents.',
             'open' => in_array($this->workflow_status, ['draft', 'returned'], true) || $this->awaitsLateReceipt(),
             'closed_message' => 'Documents can be attached only while the expense is a draft or returned (or a verified expense still missing its receipt).',
             'locked' => $this->workflow_status === 'verified',
