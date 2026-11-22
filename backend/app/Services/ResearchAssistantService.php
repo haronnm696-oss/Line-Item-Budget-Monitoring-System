@@ -8,6 +8,7 @@ use App\Models\Expense;
 use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
+use App\Support\PurchaseRequestItems;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -351,47 +352,54 @@ class ResearchAssistantService
 
     private function purchaseRequestItem(PurchaseRequest $request, User $user, Collection $documents): array
     {
-        $request->loadMissing(['libCategory', 'requestedBy', 'plReviewedBy', 'expense']);
+        $request->loadMissing(['libCategory', 'requestedBy', 'plReviewedBy', 'expenses', 'items.libCategory']);
         $mine = (int) $request->requested_by === (int) $user->id;
         $editable = in_array($request->workflow_status, ['draft', 'returned'], true);
         $supporting = $documents->whereIn('document_type', ['quotation', 'invoice'])->count();
+        $items = PurchaseRequestItems::rows($request);
+        $count = count($items);
+        $lineSummary = PurchaseRequestItems::lineSummary($request);
+        $linked = $request->expenses->map(fn ($expense) => ($expense->reference_no ?: 'EXP-' . $expense->id) . ' · ' . $expense->description)->implode('; ');
+        $open = $request->workflow_status === PurchaseRequest::OPEN_APPROVED;
 
         return [
-            'details' => trim(implode(' · ', array_filter([$request->libCategory?->line_item_name, 'Qty ' . $request->quantity]))),
-            'line_item' => $request->libCategory?->line_item_name,
+            'details' => trim(implode(' · ', array_filter([$lineSummary, $count . ' ' . ($count === 1 ? 'item' : 'items')]))),
+            'line_item' => $lineSummary,
+            'pr_items' => $items,
+            'pr_total' => round((float) $request->estimated_amount, 2),
             'amount' => round((float) $request->estimated_amount, 2),
             'workflow_label' => PurchaseRequestService::label($request),
             'next_step' => match ($request->workflow_status) {
                 'draft' => $supporting > 0 ? 'Submit when ready' : 'Attach a quotation or invoice, then submit',
                 'submitted' => 'Waiting for the Project Leader',
-                'endorsed' => 'Approved. Record the expense and link it to this request',
+                'endorsed' => $count > 1 && count(array_unique(array_column($items, 'lib_category_id'))) > 1
+                    ? 'Approved. Record one expense per line item and link each to this request'
+                    : 'Approved. Record the expense and link it to this request',
                 'returned' => 'Correct it and submit again',
-                'fulfilled' => 'Fulfilled by a recorded expense',
+                'fulfilled' => 'Fulfilled by recorded expenses',
                 'cancelled' => 'Cancelled' . ($request->cancel_reason ? ': “' . $request->cancel_reason . '”' : ''),
                 default => null,
             },
             'submitted_by' => ['id' => $request->requestedBy?->id, 'name' => $request->requestedBy?->name],
-            'fields' => [
-                ['label' => 'Line item', 'value' => $request->libCategory?->line_item_name],
-                ['label' => 'Quantity', 'value' => (string) $request->quantity],
-                ['label' => 'Estimated amount', 'value' => round((float) $request->estimated_amount, 2), 'kind' => 'money'],
+            'fields' => array_merge([
+                ['label' => 'Purpose / remarks', 'value' => $request->description],
+                ['label' => 'Total', 'value' => round((float) $request->estimated_amount, 2), 'kind' => 'money'],
                 ['label' => 'Supplier / payee', 'value' => $request->supplier],
+            ], PurchaseRequestItems::numberFields($request), [
                 ['label' => 'Project Leader', 'value' => $request->plReviewedBy?->name],
-                ['label' => 'Linked expense', 'value' => $request->expense ? ($request->expense->reference_no ?: 'EXP-' . $request->expense->id) . ' · ' . $request->expense->description : null],
+                ['label' => $request->expenses->count() > 1 ? 'Linked expenses' : 'Linked expense', 'value' => $linked ?: null],
                 ['label' => 'Cancel reason', 'value' => $request->cancel_reason],
-            ],
+            ]),
             'can_edit' => $mine && $editable,
             'can_delete' => $mine && $request->workflow_status === 'draft',
             'can_submit' => $mine && $editable && $supporting > 0,
-            'can_cancel' => $mine && $request->workflow_status === PurchaseRequest::OPEN_APPROVED,
+            'can_cancel' => $mine && $open && $request->expenses->isEmpty(),
             'can_attach_receipt' => false,
             'edit' => $mine ? [
-                'lib_category_id' => $request->lib_category_id,
                 'funding_source' => $request->funding_source ?: 'funder',
-                'description' => $request->description,
-                'quantity' => $request->quantity,
-                'estimated_amount' => round((float) $request->estimated_amount, 2),
+                'purpose' => $request->description,
                 'supplier' => $request->supplier,
+                'items' => array_map(fn ($item) => array_intersect_key($item, array_flip(['lib_category_id', 'quantity', 'unit', 'description', 'unit_cost'])), $items),
             ] : null,
         ];
     }

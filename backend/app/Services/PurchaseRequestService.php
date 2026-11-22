@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\Expense;
 use App\Models\Project;
+use App\Models\LibCategory;
 use App\Models\PurchaseRequest;
+use App\Models\PurchaseRequestItem;
 use App\Models\User;
 use App\Notifications\WorkflowNotification;
 use App\Services\Concerns\RunsWorkflow;
@@ -16,10 +18,22 @@ use Illuminate\Validation\ValidationException;
  * Project Leader") or returned (back to draft-like editing). No Finance
  * step. A submit needs a quotation or invoice document.
  *
+ * A request has one or more items (MSU Purchase Request form), each charged
+ * to its own line item: MOOE or a PS line without personnel (honoraria lines
+ * are paid through Payroll only). Estimated cost = quantity x unit cost,
+ * computed here; the request total is the sum. On submit and on approval
+ * the items charged to each line item may not exceed its available amount
+ * (the same rule as expenses, counting pending). An approved request holds
+ * its items' amounts as pending on each line item.
+ *
+ * Finance/Admin fills in the PR, SAI and ALOBS numbers and dates of an
+ * approved (or fulfilled) request with setNumbers().
+ *
  * An approved request then ends as:
- *   fulfilled  an expense of the same project and line item is linked to it
- *              (ExpenseWorkflowService calls fulfil()); deleting that draft
- *              expense reopens the request (release())
+ *   fulfilled  for every line item of its items an expense of that line item
+ *              is linked to it (ExpenseWorkflowService calls fulfil(), one
+ *              expense per line item); deleting a linked draft expense
+ *              reopens that line item (release())
  *   cancelled  by the Project Leader or the requester, with a reason
  *
  * One audit entry per step. The Project Leader is notified on submit,
@@ -79,20 +93,26 @@ class PurchaseRequestService
 
         return $item->resolveFundingSource($requested);
     }
-    private const FIELDS = ['lib_category_id', 'funding_source', 'description', 'quantity', 'estimated_amount', 'supplier'];
-
+    /**
+     * $data: description (purpose), supplier, funding_source and items
+     * (each: lib_category_id, quantity, unit, description, unit_cost).
+     */
     public function create(Project $project, array $data, User $actor): PurchaseRequest
     {
         $this->requireRole($project, $actor, self::ENCODERS, 'Only a Research Assistant or Finance/Admin staff of this project can create purchase requests.');
+        $items = array_values($data['items'] ?? []);
+        $this->requireNotHonoraria($project->id, $items);
 
-        return AuditLogger::transaction(function () use ($project, $data, $actor) {
-            $data['funding_source'] = $this->fundingSource($data['lib_category_id'] ?? null, $data['funding_source'] ?? null);
-            $request = PurchaseRequest::create(array_merge(array_intersect_key($data, array_flip(self::FIELDS)), [
+        return AuditLogger::transaction(function () use ($project, $data, $actor, $items) {
+            $requested = $data['funding_source'] ?? null;
+            $request = PurchaseRequest::create(array_merge(array_intersect_key($data, array_flip(['description', 'supplier'])), [
                 'project_id' => $project->id,
                 'requested_by' => $actor->id,
                 'workflow_status' => 'draft',
-            ]));
-            AuditLogger::write('created', $request, [], $this->snapshot($request), $actor);
+                'funding_source' => $this->requestSource($items, $requested),
+            ], $this->summary($items)));
+            $this->writeItems($request, $items, $requested);
+            AuditLogger::write('created', $request, [], $this->snapshot($request->fresh()), $actor);
 
             return $request->fresh();
         });
@@ -106,15 +126,25 @@ class PurchaseRequestService
         return AuditLogger::transaction(function () use ($request, $data, $actor) {
             $locked = $this->lockRecord($request);
             $this->requireState($locked, self::EDITABLE, 'edited');
-            if (array_key_exists('lib_category_id', $data) || array_key_exists('funding_source', $data)) {
-                $data['funding_source'] = $this->fundingSource(
-                    $data['lib_category_id'] ?? $locked->lib_category_id,
-                    array_key_exists('funding_source', $data) ? $data['funding_source'] : $locked->funding_source,
-                    ! array_key_exists('funding_source', $data)
-                );
-            }
             $old = $this->snapshot($locked);
-            $locked->update(array_intersect_key($data, array_flip(self::FIELDS)));
+            $requested = array_key_exists('funding_source', $data) ? $data['funding_source'] : $locked->funding_source;
+            // A kept source that no longer fits goes back to the funder; one asked for must fit.
+            $fallback = ! array_key_exists('funding_source', $data);
+
+            $items = array_key_exists('items', $data)
+                ? array_values($data['items'])
+                : (array_key_exists('funding_source', $data) ? $this->itemsAsInput($locked) : null);
+            $changes = array_intersect_key($data, array_flip(['description', 'supplier']));
+            if ($items !== null) {
+                $this->requireNotHonoraria((int) $locked->project_id, $items);
+                $changes = array_merge($changes, $this->summary($items), [
+                    'funding_source' => $this->requestSource($items, $requested, $fallback),
+                ]);
+            }
+            $locked->update($changes);
+            if ($items !== null) {
+                $this->writeItems($locked, $items, $requested);
+            }
             AuditLogger::write('updated', $locked, $old, $this->snapshot($locked->fresh()), $actor);
 
             return $locked->fresh();
@@ -146,6 +176,9 @@ class PurchaseRequestService
                 'documents' => ['Attach a quotation or invoice before submitting.'],
             ]);
         }
+
+        $this->requireNotHonoraria((int) $request->project_id, $this->itemsAsInput($request));
+        $this->requireAvailable($request);
 
         // Made by the project's Project Leader: no Project Leader step.
         $byLeader = $this->makerLeadsProject($request->project_id, $request->requested_by);
@@ -190,6 +223,8 @@ class PurchaseRequestService
     {
         $this->checkLeader($request, $actor, 'approve');
         $this->requireState($request, ['submitted'], 'approved');
+        // The balance may have changed since the submit.
+        $this->requireAvailable($request);
 
         $request = $this->moveRecord($request, 'endorsed', $actor, 'endorsed', ['submitted'], 'approved', [
             'pl_reviewed_by' => $actor->id,
@@ -228,8 +263,9 @@ class PurchaseRequestService
     public function fulfil(PurchaseRequest $request, Expense $expense, User $actor): PurchaseRequest
     {
         $locked = $this->lockRecord($request);
+        $lines = $locked->lineItemIds();
 
-        if ((int) $locked->project_id !== (int) $expense->project_id || (int) $locked->lib_category_id !== (int) $expense->lib_category_id) {
+        if ((int) $locked->project_id !== (int) $expense->project_id || ! in_array((int) $expense->lib_category_id, $lines, true)) {
             throw ValidationException::withMessages([
                 'purchase_request_id' => ['Link an approved purchase request of the same project and line item.'],
             ]);
@@ -240,10 +276,21 @@ class PurchaseRequestService
                 'purchase_request_id' => ["Only an approved purchase request can be linked; this one is {$label}."],
             ]);
         }
-        if (Expense::query()->where('purchase_request_id', $locked->id)->whereKeyNot($expense->id)->exists()) {
+        $others = Expense::query()->where('purchase_request_id', $locked->id)->whereKeyNot($expense->id);
+        if ((clone $others)->where('lib_category_id', $expense->lib_category_id)->exists()) {
             throw ValidationException::withMessages([
-                'purchase_request_id' => ['This purchase request is already linked to another expense.'],
+                'purchase_request_id' => [count($lines) > 1
+                    ? "This purchase request's items on this line item are already linked to another expense."
+                    : 'This purchase request is already linked to another expense.'],
             ]);
+        }
+
+        // Fulfilled once every line item of its items has a linked expense.
+        $covered = (clone $others)->pluck('lib_category_id')->map(fn ($id) => (int) $id)->push((int) $expense->lib_category_id)->unique()->all();
+        if (array_diff($lines, $covered) !== []) {
+            AuditLogger::write('linked', $locked, ['expense_id' => null], ['expense_id' => $expense->id, 'lib_category_id' => (int) $expense->lib_category_id], $actor, 'An expense was linked for one line item; the other line items are still open.');
+
+            return $locked->fresh();
         }
 
         $old = $locked->only(['workflow_status', 'fulfilled_at', 'fulfilled_by']);
@@ -266,6 +313,12 @@ class PurchaseRequestService
     public function release(PurchaseRequest $request, Expense $expense, User $actor): void
     {
         $locked = $this->lockRecord($request);
+        if ($locked->workflow_status === PurchaseRequest::OPEN_APPROVED) {
+            // Partly linked: that line item is open again.
+            AuditLogger::write('unlinked', $locked, ['expense_id' => $expense->id], ['expense_id' => null], $actor, 'The linked expense was deleted.');
+
+            return;
+        }
         if ($locked->workflow_status !== 'fulfilled') {
             return;
         }
@@ -285,6 +338,11 @@ class PurchaseRequestService
         }
         $this->requireState($request, [PurchaseRequest::OPEN_APPROVED], 'cancelled');
         $reason = $this->requireReason($reason, 'A reason is required to cancel a purchase request.');
+        if ($request->expenses()->exists()) {
+            throw ValidationException::withMessages([
+                'workflow_status' => ['An expense is already linked to this purchase request, so it cannot be cancelled.'],
+            ]);
+        }
 
         $request = $this->moveRecord($request, 'cancelled', $actor, 'cancelled', [PurchaseRequest::OPEN_APPROVED], 'cancelled', [
             'cancelled_at' => now(),
@@ -299,6 +357,167 @@ class PurchaseRequestService
         $this->notify($recipients, $request, 'cancelled', $actor, $reason);
 
         return $request;
+    }
+
+    /**
+     * Finance/Admin fills in the PR No., SAI No. and ALOBS No. (and dates) of
+     * an approved or fulfilled request. One audit entry.
+     */
+    public function setNumbers(PurchaseRequest $request, array $data, User $actor): PurchaseRequest
+    {
+        $this->requireRole($request->project, $actor, ['finance-admin'], 'Only Finance/Admin staff of this project can set the PR, SAI and ALOBS numbers.');
+        $allowed = [PurchaseRequest::OPEN_APPROVED, 'fulfilled'];
+        $this->requireState($request, $allowed, 'given PR, SAI or ALOBS numbers');
+
+        return AuditLogger::transaction(function () use ($request, $data, $actor, $allowed) {
+            $locked = $this->lockRecord($request);
+            $this->requireState($locked, $allowed, 'given PR, SAI or ALOBS numbers');
+            $old = $this->numbers($locked);
+            $locked->update(array_intersect_key($data, array_flip(PurchaseRequest::NUMBER_FIELDS)));
+            AuditLogger::write('updated', $locked, $old, $this->numbers($locked->fresh()), $actor);
+
+            return $locked->fresh();
+        });
+    }
+
+    // ---------------------------------------------------------------- items
+
+    /** Quantity x unit cost, computed in centavos so it never drifts. */
+    public static function cost(int $quantity, $unitCost): float
+    {
+        return round(((int) round((float) $unitCost * 100)) * $quantity / 100, 2);
+    }
+
+    /** The request's summary columns from its items. */
+    private function summary(array $items): array
+    {
+        $cents = 0;
+        $quantity = 0;
+        foreach ($items as $item) {
+            $cents += (int) round($this->itemCost($item) * 100);
+            $quantity += (int) $item['quantity'];
+        }
+
+        return [
+            'estimated_amount' => round($cents / 100, 2),
+            'quantity' => max(1, $quantity),
+            'lib_category_id' => (int) ($items[0]['lib_category_id'] ?? 0),
+        ];
+    }
+
+    /** Computed, except a migrated item keeps its stored cost exactly. */
+    private function itemCost(array $item): float
+    {
+        return ! empty($item['keep_cost'])
+            ? round((float) $item['estimated_cost'], 2)
+            : self::cost((int) $item['quantity'], $item['unit_cost']);
+    }
+
+    /**
+     * The request-level source as asked: the counterpart only when an item's
+     * line item has one. With $fallback (a kept choice) a source that no
+     * longer fits goes back to the funder instead of failing.
+     */
+    private function requestSource(array $items, ?string $requested, bool $fallback = false): string
+    {
+        if ($requested === null || $requested === '' || $requested === LibCategory::SOURCE_FUNDER) {
+            return LibCategory::SOURCE_FUNDER;
+        }
+        foreach ($items as $item) {
+            if ($this->fundingSource($item['lib_category_id'] ?? null, $requested, true) === $requested) {
+                return $requested;
+            }
+        }
+        if ($fallback) {
+            return LibCategory::SOURCE_FUNDER;
+        }
+
+        // Fails with the line item's own message ("no counterpart").
+        return $this->fundingSource($items[0]['lib_category_id'] ?? null, $requested);
+    }
+
+    /** Replace the request's items; each draws on the asked source when its line item has it. */
+    private function writeItems(PurchaseRequest $request, array $items, ?string $requested): void
+    {
+        $request->items()->delete();
+        foreach (array_values($items) as $index => $item) {
+            PurchaseRequestItem::create([
+                'purchase_request_id' => $request->id,
+                'lib_category_id' => (int) $item['lib_category_id'],
+                'funding_source' => $this->fundingSource($item['lib_category_id'], $requested, true),
+                'quantity' => (int) $item['quantity'],
+                'unit' => $item['unit'],
+                'description' => trim((string) $item['description']),
+                'unit_cost' => round((float) $item['unit_cost'], 2),
+                'estimated_cost' => $this->itemCost($item),
+                'sort_order' => $index,
+            ]);
+        }
+    }
+
+    /** The stored items as input rows (migrated estimated costs are kept exactly). */
+    private function itemsAsInput(PurchaseRequest $request): array
+    {
+        return $request->lineItems()->map(fn (PurchaseRequestItem $item) => [
+            'lib_category_id' => (int) $item->lib_category_id,
+            'quantity' => (int) $item->quantity,
+            'unit' => $item->unit,
+            'description' => $item->description,
+            'unit_cost' => (float) $item->unit_cost,
+            'estimated_cost' => (float) $item->estimated_cost,
+            'keep_cost' => true,
+        ])->values()->all();
+    }
+
+    /** Honoraria lines (personnel linked) are paid through Payroll only. */
+    private function requireNotHonoraria(int $projectId, array $items): void
+    {
+        $honoraria = ProjectFinancialService::honorariaLineIds($projectId);
+        foreach (array_values($items) as $index => $item) {
+            if (in_array((int) ($item['lib_category_id'] ?? 0), $honoraria, true)) {
+                throw ValidationException::withMessages(["items.{$index}.lib_category_id" => [
+                    ProjectFinancialService::HONORARIA_LINE . ' Choose another line item for this item.',
+                ]]);
+            }
+        }
+    }
+
+    /**
+     * Per line item and source, the items charged to it may not exceed the
+     * available amount (allocated - spent - pending). A submitted request is
+     * not pending yet, so it is not counted against itself.
+     */
+    private function requireAvailable(PurchaseRequest $request): void
+    {
+        $finance = app(ProjectFinancialService::class);
+        $project = $request->project;
+        $problems = [];
+        foreach ($request->amountsByLine() as $row) {
+            $balance = $finance->sourceBalance($project, $row['lib_category_id'], $row['funding_source']);
+            if (! $balance) {
+                continue;
+            }
+            $available = round((float) $balance['available'], 2);
+            if ($row['amount'] > $available) {
+                $problems[] = sprintf(
+                    'The items charged to %s total ₱%s, more than the ₱%s available.',
+                    $balance['name'],
+                    number_format($row['amount'], 2),
+                    number_format(max(0, $available), 2)
+                );
+            }
+        }
+        if ($problems) {
+            $problems[] = 'Lower the amounts or ask the Project Leader for a realignment.';
+            throw ValidationException::withMessages(['items' => [implode(' ', $problems)]]);
+        }
+    }
+
+    private function numbers(PurchaseRequest $request): array
+    {
+        return collect(PurchaseRequest::NUMBER_FIELDS)
+            ->mapWithKeys(fn ($field) => [$field => $request->{$field} instanceof \DateTimeInterface ? $request->{$field}->format('Y-m-d') : $request->{$field}])
+            ->all();
     }
 
     protected function stageLabels(): array
@@ -326,13 +545,19 @@ class PurchaseRequestService
 
     private function snapshot(PurchaseRequest $request): array
     {
-        return $request->only(['project_id', 'lib_category_id', 'funding_source', 'description', 'quantity', 'estimated_amount', 'supplier', 'workflow_status']);
+        return $request->only(['project_id', 'lib_category_id', 'funding_source', 'description', 'quantity', 'estimated_amount', 'supplier', 'workflow_status'])
+            + ['items' => $request->lineItems()->map(fn (PurchaseRequestItem $item) => sprintf(
+                '%d %s %s @ %s = %s',
+                $item->quantity, $item->unit, $item->description,
+                number_format((float) $item->unit_cost, 2), number_format((float) $item->estimated_cost, 2)
+            ))->implode('; ')];
     }
 
     private function notify(Collection $recipients, PurchaseRequest $request, string $event, User $actor, ?string $reason = null, ?Expense $expense = null): void
     {
         $request->loadMissing('project');
-        $what = $request->description . ' (' . $request->quantity . ' × ₱' . number_format((float) $request->estimated_amount, 2) . ' est.)';
+        $count = $request->lineItems()->count();
+        $what = $request->description . ' (' . $count . ' ' . ($count === 1 ? 'item' : 'items') . ', ₱' . number_format((float) $request->estimated_amount, 2) . ' est.)';
         $because = $reason ? ' Reason: ' . $reason : '';
 
         [$title, $message] = match ($event) {

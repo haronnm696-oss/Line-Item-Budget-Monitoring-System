@@ -121,9 +121,11 @@ test('free-text record fields turn off browser suggestions', () => {
     assert.match(expense, new RegExp(`id="${id}"[^>]*autoComplete="off"`), id);
   }
   const purchase = source('components/assistant/PurchaseRequestDialog.jsx');
-  for (const id of ['ra-pr-supplier', 'ra-pr-desc']) {
+  for (const id of ['ra-pr-supplier', 'ra-pr-purpose']) {
     assert.match(purchase, new RegExp(`id="${id}"[^>]*autoComplete="off"`), id);
   }
+  // Each item row's description.
+  assert.match(purchase, /id=\{id\('desc'\)\}[^>]*autoComplete="off"/);
 });
 
 test('the Researcher Overview has no Reports card; Transaction summary is full width', () => {

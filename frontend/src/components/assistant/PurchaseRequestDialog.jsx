@@ -9,46 +9,54 @@ import { useAuth } from '../../context/AuthContext';
 import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
 import MoneyInput from '../MoneyInput';
-import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
+import { expenseLineItems } from '../../lib/expenseForm';
+import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
+import {
+  UNITS, emptyItem, itemCost, itemErrors, itemsPayload, itemsToForm, itemsTotal, totalsByLine,
+} from '../../lib/purchaseRequestItems';
 
-const GENERIC_MONEY = ['Enter an amount.', 'The amount must be more than zero.'];
-
-const EMPTY = { lib_category_id: '', description: '', quantity: '1', estimated_amount: '', supplier: '' };
-const FIELDS = Object.keys(EMPTY);
 const SUPPORTING = ['quotation', 'invoice'];
 const TYPE_LABEL = { quotation: 'Quotation', invoice: 'Invoice', other: 'Other' };
 
 function toForm(values) {
-  const form = Object.fromEntries(FIELDS.map((key) => [key, values?.[key] == null ? '' : String(values[key])]));
-  return { ...form, estimated_amount: moneyText(values?.estimated_amount) };
+  return {
+    purpose: values?.purpose == null ? '' : String(values.purpose),
+    supplier: values?.supplier == null ? '' : String(values.supplier),
+    funding_source: values?.funding_source || FUNDER,
+    items: itemsToForm(values?.items),
+  };
 }
 
 function payload(form, before = null) {
   const value = {
-    lib_category_id: Number(form.lib_category_id),
-    description: form.description.trim(),
-    quantity: Number(form.quantity),
-    estimated_amount: moneyNumber(form.estimated_amount),
+    purpose: form.purpose.trim(),
     supplier: form.supplier.trim() || null,
+    funding_source: form.funding_source || FUNDER,
+    items: itemsPayload(form.items),
   };
   if (!before) return value;
   const old = payload(before);
-  return Object.fromEntries(Object.entries(value).filter(([key, v]) => v !== old[key]));
+  return Object.fromEntries(Object.entries(value).filter(([key, v]) => JSON.stringify(v) !== JSON.stringify(old[key])));
 }
 
 /**
  * Create a purchase request, or edit a draft / returned one (`request` with
- * `edit` values). Save as draft, or save + attach + submit in one click.
- * Submitting needs a quotation or invoice (the server checks it too). If a
- * step fails, "Try again" resumes from that step; a new draft is kept
- * unless "Discard draft" is chosen.
+ * `edit` values), as MSU's Purchase Request form: purpose, supplier, funding
+ * source and one or more items, each charged to its own line item
+ * (honoraria lines are paid through Payroll and not offered). Estimated
+ * cost = quantity x unit cost, read-only; the total shows live. Save as
+ * draft, or save + attach + submit in one click. Submitting needs a
+ * quotation or invoice (the server checks it and each line item's balance
+ * too). If a step fails, "Try again" resumes from that step; a new draft is
+ * kept unless "Discard draft" is chosen.
  */
 export default function PurchaseRequestDialog({ projectId, request = null, onClose, onDone }) {
   const editing = Boolean(request);
   const { user } = useAuth();
   const balancing = useApiData(ENDPOINTS.balancing(projectId));
-  const lineItems = balancing.data?.line_items ?? [];
-  const [form, setForm] = useState(editing ? toForm(request.edit) : EMPTY);
+  const lineItems = expenseLineItems(balancing.data?.line_items ?? []);
+  const labels = balancing.data?.labels;
+  const [form, setForm] = useState(editing ? toForm(request.edit) : toForm(null));
   const [file, setFile] = useState(null);
   const [fileType, setFileType] = useState('quotation');
   const [errors, setErrors] = useState({});
@@ -68,18 +76,35 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
     return () => { alive = false; };
   }, [editing, request?.id]);
 
-  const chosen = lineItems.find((item) => String(item.id) === form.lib_category_id);
   const keptSupporting = (documents ?? []).filter((doc) => SUPPORTING.includes(doc.document_type) && !toRemove.includes(doc.id));
   const set = (key) => (event) => setForm({ ...form, [key]: event.target.value });
+  const setItem = (index, key) => (event) => {
+    const items = form.items.map((item, i) => (i === index ? { ...item, [key]: event.target.value } : item));
+    setForm({ ...form, items });
+  };
+  const addItem = () => setForm({ ...form, items: [...form.items, emptyItem()] });
+  const removeItem = (index) => {
+    setForm({ ...form, items: form.items.filter((_, i) => i !== index) });
+    setErrors({});
+  };
+
+  const total = itemsTotal(form.items);
+  const byLine = totalsByLine(form.items);
+  const chosenLines = lineItems.filter((item) => byLine[String(item.id)] !== undefined);
+  const fundedByShown = chosenLines.some((item) => hasCounterpart(item));
+  // Line items whose items add up to more than is available (the server checks too).
+  const overBudget = chosenLines
+    .map((item) => ({ item, amount: byLine[String(item.id)], available: sourceAvailable(item, effectiveSource(item, form.funding_source)) }))
+    .filter((row) => row.amount > row.available);
 
   function validate(submitting) {
     const next = {};
-    if (!form.lib_category_id) next.lib_category_id = 'Choose a line item.';
-    if (!form.description.trim()) next.description = 'Describe what is needed.';
-    if (!(Number.isInteger(Number(form.quantity)) && Number(form.quantity) >= 1)) next.quantity = 'Enter a whole number of at least 1.';
-    const amountError = moneyError(form.estimated_amount, { positive: true });
-    if (amountError) next.estimated_amount = GENERIC_MONEY.includes(amountError) ? 'Enter an amount greater than zero.' : amountError;
+    if (!form.purpose.trim()) next.description = 'Enter the purpose of this request.';
     if (form.supplier.trim().length > 255) next.supplier = 'Use at most 255 characters.';
+    if (form.items.length === 0) next.items = 'Add at least one item.';
+    itemErrors(form.items).forEach((rowErrors, index) => {
+      for (const [key, message] of Object.entries(rowErrors)) next[`items.${index}.${key}`] = message;
+    });
     const hasSupporting = (file && SUPPORTING.includes(fileType)) || (saved?.uploaded && SUPPORTING.includes(fileType)) || keptSupporting.length > 0;
     if (submitting && !hasSupporting) next.file = 'Attach a quotation or invoice before submitting.';
     return next;
@@ -115,7 +140,8 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
         step = { ...step, uploaded: true };
         setSaved(step);
       }
-      const what = `“${form.description.trim()}” (${peso(moneyNumber(form.estimated_amount))})`;
+      const count = form.items.length;
+      const what = `“${form.purpose.trim()}” (${count} ${count === 1 ? 'item' : 'items'}, ${peso(total)})`;
       if (!submitting) {
         onDone?.(editing ? `Saved your changes to ${what}.` : `Saved ${what} as a draft.`);
         return;
@@ -166,7 +192,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
         <div className="program-modal-head">
           <div>
             <div className="program-modal-title" id="ra-pr-title">{returned ? 'Edit and resubmit' : editing ? 'Edit purchase request' : 'New purchase request'}</div>
-            <div className="program-card-sub">The Project Leader approves it; then record the expense and link it</div>
+            <div className="program-card-sub">The Project Leader approves it; then record an expense per line item and link it</div>
           </div>
           <button type="button" className="program-icon-btn" onClick={close} aria-label="Close" disabled={busy}>×</button>
         </div>
@@ -185,38 +211,102 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
 
         <div className="program-form-grid">
           <div className="program-field full">
-            <label htmlFor="ra-pr-line">Line item</label>
-            <select id="ra-pr-line" className="program-select" value={form.lib_category_id} onChange={set('lib_category_id')} disabled={locked || balancing.status !== 'ready'}>
-              <option value="">{balancing.status === 'ready' ? 'Choose a line item' : 'Loading…'}</option>
-              {lineItems.map((item) => (
-                <option key={item.id} value={item.id}>{item.type} · {item.name} — {peso(item.available)} available</option>
-              ))}
-            </select>
-            {chosen && moneyNumber(form.estimated_amount) > Number(chosen.available) && (
-              <div className="ld-hint is-risk" role="status">⚠ More than the {peso(chosen.available)} available on this line item.</div>
-            )}
-            {err('lib_category_id')}
-          </div>
-          <div className="program-field full">
-            <label htmlFor="ra-pr-desc">Description</label>
-            <input id="ra-pr-desc" className="program-input" autoComplete="off" maxLength={500} value={form.description} onChange={set('description')} disabled={locked} />
+            <label htmlFor="ra-pr-purpose">Purpose / remarks</label>
+            <input id="ra-pr-purpose" className="program-input" autoComplete="off" maxLength={500} value={form.purpose} onChange={set('purpose')} disabled={locked} />
             {err('description')}
-          </div>
-          <div className="program-field">
-            <label htmlFor="ra-pr-qty">Quantity</label>
-            <input id="ra-pr-qty" className="program-input" autoComplete="off" type="number" min="1" step="1" value={form.quantity} onChange={set('quantity')} disabled={locked} />
-            {err('quantity')}
-          </div>
-          <div className="program-field">
-            <label htmlFor="ra-pr-amount">Estimated amount (₱)</label>
-            <MoneyInput id="ra-pr-amount" value={form.estimated_amount} onChange={set('estimated_amount')} disabled={locked} />
-            {err('estimated_amount')}
           </div>
           <div className="program-field full">
             <label htmlFor="ra-pr-supplier">Supplier / payee <span className="ld-muted">optional</span></label>
             <input id="ra-pr-supplier" className="program-input" autoComplete="off" maxLength={255} value={form.supplier} onChange={set('supplier')} disabled={locked} />
             <div className="ld-hint">Fills the payee when an expense is linked to this request.</div>
             {err('supplier')}
+          </div>
+          {fundedByShown && (
+            <fieldset className="program-field full ld-funded-by">
+              <legend className="program-label">Funded by</legend>
+              {[FUNDER, COUNTERPART].map((value) => (
+                <label key={value} className="ld-radio">
+                  <input type="radio" name="ra-pr-source" value={value} checked={form.funding_source === value}
+                    onChange={() => setForm({ ...form, funding_source: value })} disabled={locked} />
+                  <span>{sourceName(value, labels)}</span>
+                </label>
+              ))}
+              <div className="ld-hint">Items on a line item without a counterpart are charged to the funder.</div>
+              {err('funding_source')}
+            </fieldset>
+          )}
+
+          <div className="program-field full">
+            <span className="program-label" id="ra-pr-items-label">Items</span>
+            <ol className="pr-item-list" aria-labelledby="ra-pr-items-label">
+              {form.items.map((item, index) => {
+                const id = (key) => `ra-pr-${key}-${index}`;
+                const e = (key) => err(`items.${index}.${key}`);
+                return (
+                  <li key={index}>
+                    <fieldset className="pr-item">
+                      <legend>Item {index + 1}</legend>
+                      <div className="pr-item-grid">
+                        <div className="program-field full">
+                          <label htmlFor={id('line')}>Line item</label>
+                          <select id={id('line')} className="program-select" value={item.lib_category_id} onChange={setItem(index, 'lib_category_id')} disabled={locked || balancing.status !== 'ready'}>
+                            <option value="">{balancing.status === 'ready' ? 'Choose a line item' : 'Loading…'}</option>
+                            {lineItems.map((line) => (
+                              <option key={line.id} value={line.id}>{line.type} · {line.name} — {peso(sourceAvailable(line, effectiveSource(line, form.funding_source)))} available</option>
+                            ))}
+                          </select>
+                          {e('lib_category_id')}
+                        </div>
+                        <div className="program-field full">
+                          <label htmlFor={id('desc')}>Description</label>
+                          <input id={id('desc')} className="program-input" autoComplete="off" maxLength={500} value={item.description} onChange={setItem(index, 'description')} disabled={locked} />
+                          {e('description')}
+                        </div>
+                        <div className="program-field">
+                          <label htmlFor={id('qty')}>Quantity</label>
+                          <input id={id('qty')} className="program-input" autoComplete="off" type="number" min="1" step="1" value={item.quantity} onChange={setItem(index, 'quantity')} disabled={locked} />
+                          {e('quantity')}
+                        </div>
+                        <div className="program-field">
+                          <label htmlFor={id('unit')}>Unit</label>
+                          <select id={id('unit')} className="program-select" value={item.unit} onChange={setItem(index, 'unit')} disabled={locked}>
+                            {UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                          </select>
+                          {e('unit')}
+                        </div>
+                        <div className="program-field">
+                          <label htmlFor={id('cost')}>Est. unit cost (₱)</label>
+                          <MoneyInput id={id('cost')} value={item.unit_cost} onChange={setItem(index, 'unit_cost')} disabled={locked} />
+                          {e('unit_cost')}
+                        </div>
+                        <div className="program-field pr-item-cost">
+                          <span className="program-label" id={id('est-label')}>Est. cost</span>
+                          <output aria-labelledby={id('est-label')}>{peso(itemCost(item))}</output>
+                        </div>
+                      </div>
+                      {form.items.length > 1 && (
+                        <div className="pr-item-foot">
+                          <button type="button" className="program-btn" onClick={() => removeItem(index)} disabled={locked} aria-label={`Remove item ${index + 1}`}>Remove item</button>
+                        </div>
+                      )}
+                    </fieldset>
+                  </li>
+                );
+              })}
+            </ol>
+            <div className="pr-items-total">
+              <button type="button" className="program-btn" onClick={addItem} disabled={locked || form.items.length >= 100}>+ Add item</button>
+              <div>
+                <span className="program-label" id="ra-pr-total-label">Total </span>
+                <output aria-labelledby="ra-pr-total-label" aria-live="polite">{peso(total)}</output>
+              </div>
+            </div>
+            {overBudget.map(({ item, amount, available }) => (
+              <div key={item.id} className="ld-hint is-risk" role="status">
+                ⚠ Items on {item.name} total {peso(amount)}, more than the {peso(available)} available.
+              </div>
+            ))}
+            {err('items')}
           </div>
 
           {editing && (
@@ -240,7 +330,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
                         {mine && !saved?.removed.includes(doc.id) && (
                           <div className="ld-doc-actions">
                             <button type="button" className="program-btn sm" disabled={busy}
-                              onClick={() => setToRemove(removing ? toRemove.filter((id) => id !== doc.id) : [...toRemove, doc.id])}>
+                              onClick={() => setToRemove(removing ? toRemove.filter((docId) => docId !== doc.id) : [...toRemove, doc.id])}>
                               {removing ? 'Keep' : 'Remove'}
                             </button>
                           </div>

@@ -3,6 +3,7 @@ import { fetchReviewItem } from '../../api/leader';
 import ProgramPill from '../program/ProgramPill';
 import DocumentList from './DocumentList';
 import { peso } from '../money';
+import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
 import { formatDate, formatDateTime } from '../../lib/datetime';
 
 function fieldValue(field) {
@@ -85,6 +86,7 @@ export default function RecordPanel({ projectId, target, refreshKey, busyKey, on
                 <div><dt>Project Leader decision</dt><dd>{item.reviewed_by.name} · {formatDateTime(item.reviewed_at)}</dd></div>
               )}
             </dl>
+            {Array.isArray(item.pr_items) && <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} />}
 
             <h3 className="ld-panel-sub">Documents</h3>
             <DocumentList type={item.type} id={item.id} />

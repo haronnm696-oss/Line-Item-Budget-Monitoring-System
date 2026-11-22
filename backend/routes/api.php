@@ -112,6 +112,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::post('/purchase-requests/{purchaseRequest}/endorse', [PurchaseRequestController::class, 'endorse']);
     Route::post('/purchase-requests/{purchaseRequest}/return', [PurchaseRequestController::class, 'returnRequest']);
     Route::post('/purchase-requests/{purchaseRequest}/cancel', [PurchaseRequestController::class, 'cancel']);
+    // Finance/Admin: PR, SAI and ALOBS numbers and dates of an approved request.
+    Route::patch('/purchase-requests/{purchaseRequest}/numbers', [PurchaseRequestController::class, 'numbers']);
 
     // Budget requests from the Project Leader to the Program Leader.
     Route::get('/projects/{project}/budget-requests', [BudgetRequestController::class, 'index']);

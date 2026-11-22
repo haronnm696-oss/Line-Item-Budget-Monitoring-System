@@ -15,6 +15,7 @@ import {
 } from '../../lib/expenseForm';
 import { COUNTERPART, FUNDER, effectiveSource, hasCounterpart, sourceAvailable, sourceName } from '../../lib/fundingSource';
 import MoneyInput from '../MoneyInput';
+import { linkOptions } from '../../lib/purchaseRequestItems';
 import { moneyError, moneyNumber, moneyText } from '../../lib/moneyInput';
 import { DATE_BOUNDS, dateRangeError } from '../../lib/dateRange';
 
@@ -89,7 +90,8 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   // Honoraria lines (personnel linked) are paid through Payroll, never as an expense.
   const lineItems = expenseLineItems(allLineItems);
   const honorariaLines = honorariaLineItems(allLineItems);
-  const requests = Array.isArray(approved.data?.purchase_requests) ? approved.data.purchase_requests : [];
+  // One choice per approved request and line item still waiting for its expense.
+  const requests = linkOptions(Array.isArray(approved.data?.purchase_requests) ? approved.data.purchase_requests : []);
   const [form, setForm] = useState(editing ? toForm(expense.edit) : { ...EMPTY, expense_date: todayInManila() });
   const [receipt, setReceipt] = useState(null);
   const [errors, setErrors] = useState({});
@@ -122,7 +124,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
 
   const alreadyLinked = editing && Boolean(expense.edit?.purchase_request_id);
   const chosen = lineItems.find((item) => String(item.id) === form.lib_category_id);
-  const linkedRequest = requests.find((request) => String(request.id) === form.purchase_request_id);
+  const linkedRequest = form.purchase_request_id ? requests.find((request) => request.key === `${form.purchase_request_id}:${form.lib_category_id}`) : undefined;
   // A linked request's estimate (or an already linked expense) is held in
   // "pending"; it is freed by this expense, so it counts as available here.
   const heldForThis = alreadyLinked ? Number(expense.edit.amount) || 0 : Number(linkedRequest?.estimated_amount) || 0;
@@ -149,8 +151,8 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
   };
 
   function chooseRequest(event) {
-    const id = event.target.value;
-    const request = requests.find((row) => String(row.id) === id);
+    const key = event.target.value;
+    const request = requests.find((row) => row.key === key);
     const next = prefillFromRequest(form, request ?? null, linkedRequest ?? null);
     // A linked expense draws from its purchase request's source.
     if (request) next.funding_source = request.funding_source || FUNDER;
@@ -296,18 +298,18 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
               {alreadyLinked ? (
                 <p className="ld-muted" id="ld-exp-pr">Linked to PR-{expense.edit.purchase_request_id}. The line item stays the same.</p>
               ) : (
-                <select id="ld-exp-pr" className="program-select" value={form.purchase_request_id} onChange={chooseRequest} disabled={locked || approved.status !== 'ready'}>
+                <select id="ld-exp-pr" className="program-select" value={linkedRequest?.key ?? ''} onChange={chooseRequest} disabled={locked || approved.status !== 'ready'}>
                   <option value="">
                     {approved.status === 'error' ? 'Could not load the purchase requests' : approved.status !== 'ready' ? 'Loading…' : requestOptions.length === 0 ? 'No approved purchase request' : 'Not linked'}
                   </option>
                   {requestOptions.map((request) => (
-                    <option key={request.id} value={request.id}>
-                      PR-{request.id} · {request.description} — {peso(request.estimated_amount)} ({request.line_item})
+                    <option key={request.key} value={request.key}>
+                      PR-{request.id} · {request.description} — {peso(request.estimated_amount)} ({request.line_item}{request.several_lines ? ', part of a request on several line items' : ''})
                     </option>
                   ))}
                 </select>
               )}
-              {linkedRequest && <div className="ld-hint">Saving links this expense; the request becomes fulfilled.</div>}
+              {linkedRequest && <div className="ld-hint">{linkedRequest.several_lines ? 'Saving links this expense to the request’s items on this line item; the request is fulfilled once every line item has its expense.' : 'Saving links this expense; the request becomes fulfilled.'}</div>}
               {err('purchase_request_id')}
             </div>
           )}

@@ -80,10 +80,12 @@ class FormInsertsTest extends TestCase
             'amount' => '2,500.50', 'expense_date' => '2026-03-10', 'payee' => null, 'reference_no' => null, 'purchase_request_id' => null,
         ])->assertCreated();
         $this->postJson("/api/projects/{$projectId}/purchase-requests", [
-            'lib_category_id' => $mooe, 'description' => 'Glassware', 'quantity' => 2, 'estimated_amount' => '3,500.00', 'supplier' => null,
+            'purpose' => 'Glassware', 'supplier' => null, 'funding_source' => 'funder',
+            'items' => [['lib_category_id' => $mooe, 'quantity' => 2, 'unit' => 'set', 'description' => 'Beakers', 'unit_cost' => '1,750.00']],
         ])->assertCreated();
 
         $this->assertSame('2500.50', (string) Expense::where('project_id', $projectId)->value('amount'));
         $this->assertSame('3500.00', (string) PurchaseRequest::where('project_id', $projectId)->value('estimated_amount'));
+        $this->assertSame('3500.00', (string) \App\Models\PurchaseRequestItem::query()->value('estimated_cost'));
     }
 }

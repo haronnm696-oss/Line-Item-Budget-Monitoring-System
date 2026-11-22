@@ -11,6 +11,7 @@ import FundingWarnings from '../../components/program/FundingWarnings';
 import FormBTable from '../../components/projects/FormBTable';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
 import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
+import PurchaseRequestsSection from '../../components/projects/PurchaseRequestsSection';
 import { agreementLines } from '../../lib/projectAgreement';
 import { formBBlocker } from '../../lib/formBPrint';
 import { formatShare, releaseShare, releaseSummary, splitAmounts } from '../../lib/releasePlan';
@@ -399,6 +400,8 @@ export default function ProgramProjectDetail() {
       </section>
 
       <PersonnelSection key={teamVersion} projectId={project.id} teamCount={team.length} />
+
+      <PurchaseRequestsSection projectId={project.id} />
 
       <section className="program-card">
         <div className="program-card-head">

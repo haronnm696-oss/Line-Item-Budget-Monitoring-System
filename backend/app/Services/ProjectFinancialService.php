@@ -326,8 +326,11 @@ class ProjectFinancialService
      *            not cancelled), plus payroll submitted or approved by the
      *            Project Leader (waiting for verification)
      *
-     * A fulfilled request stops counting and its linked expense counts
-     * instead, so the same money is never counted twice.
+     * A purchase request holds each item's estimated cost on that item's
+     * line item. Once an expense is linked for a line item, that line item's
+     * share stops counting and the expense counts instead (a fulfilled
+     * request has every line item linked), so the same money is never
+     * counted twice.
      *
      * @return array{line_items: array<int, array<string, mixed>>, totals: array<string, float>}
      */
@@ -347,7 +350,7 @@ class ProjectFinancialService
             $q->whereIn('workflow_status', self::PENDING_STAGES)
                 ->orWhere(fn ($linked) => $linked->whereNotNull('purchase_request_id')->whereIn('workflow_status', ['draft', 'returned']));
         }), 'amount');
-        $pendingRequests = $sums(PurchaseRequest::query()->where('workflow_status', PurchaseRequest::OPEN_APPROVED), 'estimated_amount');
+        $pendingRequests = self::openRequestAmounts($project->id);
         // Payroll has no funding_source column: it is the funder's share.
         $payrollSums = fn ($query) => $query->where('project_id', $project->id)
             ->selectRaw('lib_category_id, SUM(gross_pay) as total')->groupBy('lib_category_id')
@@ -440,6 +443,35 @@ class ProjectFinancialService
         $source = self::source($source);
 
         return $row['sources'][$source] + ['name' => $row['name'], 'source' => $source, 'has_counterpart' => $row['has_counterpart']];
+    }
+
+    /**
+     * Money held by approved, open purchase requests: item estimated costs
+     * per "lineId:source", leaving out the line items of a request that
+     * already have a linked expense (that expense counts instead).
+     *
+     * @return \Illuminate\Support\Collection<string, float>
+     */
+    public static function openRequestAmounts(int $projectId, ?int $exceptRequestId = null): \Illuminate\Support\Collection
+    {
+        $totals = [];
+        PurchaseRequest::query()
+            ->where('project_id', $projectId)
+            ->where('workflow_status', PurchaseRequest::OPEN_APPROVED)
+            ->when($exceptRequestId, fn ($q) => $q->whereKeyNot($exceptRequestId))
+            ->with(['items', 'expenses:id,purchase_request_id,lib_category_id'])
+            ->get()
+            ->each(function (PurchaseRequest $request) use (&$totals) {
+                $linked = $request->expenses->pluck('lib_category_id')->map(fn ($id) => (int) $id)->all();
+                foreach ($request->amountsByLine() as $key => $row) {
+                    if (in_array($row['lib_category_id'], $linked, true)) {
+                        continue;
+                    }
+                    $totals[$key] = round(($totals[$key] ?? 0.0) + $row['amount'], 2);
+                }
+            });
+
+        return collect($totals);
     }
 
     /** Unknown or empty funding source values mean the funder. */

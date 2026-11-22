@@ -40,6 +40,7 @@ import Documents from './pages/assistant/Documents';
 import BalancingQuery from './pages/assistant/BalancingQuery';
 import VerificationQueue from './pages/finance/VerificationQueue';
 import FinanceExpenses from './pages/finance/FinanceExpenses';
+import FinancePurchaseRequests from './pages/finance/FinancePurchaseRequests';
 import FinancePayroll from './pages/finance/FinancePayroll';
 import ResearcherBudget from './pages/researcher/ResearcherBudget';
 import ByRole from './routes/ByRole';
@@ -74,7 +75,7 @@ const ROLE_PAGES = [
   ['/verification-queue', <VerificationQueue />],
   ['/verification', <RedirectKeepingQuery to="/verification-queue" />],
   ['/transaction-history', <Transactions />],
-  ['/purchase-requests', <PurchaseRequests />],
+  ['/purchase-requests', <ByRole RA={<PurchaseRequests />} FIN={<FinancePurchaseRequests />} />],
   ['/my-submissions', <MySubmissions />],
   ['/documents', <Documents />],
   ['/balancing-query', <BalancingQuery />],

@@ -52,7 +52,7 @@ export const ROUTE_ROLES = {
   '/reports': ['PL', 'FIN', 'RES'],
   '/expenses': ['RA', 'FIN'],
   '/payroll': ['RA', 'FIN'],
-  '/purchase-requests': ['RA'],
+  '/purchase-requests': ['RA', 'FIN'],
   '/documents': ['RA'],
   '/my-submissions': ['RA'],
   '/balancing-query': ['RA'],

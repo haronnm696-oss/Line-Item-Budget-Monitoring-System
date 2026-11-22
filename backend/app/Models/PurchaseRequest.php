@@ -5,12 +5,20 @@ namespace App\Models;
 use App\Models\Contracts\HasDocuments;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * A purchase request against a LIB line item. Workflow: draft -> submitted
+ * A purchase request (MSU Purchase Request form): purpose (stored in
+ * `description`), supplier, funding source, optional PR / SAI / ALOBS numbers
+ * and dates (Finance/Admin, after approval), and one or more items, each
+ * charged to its own line item (PurchaseRequestItem). The old single-item
+ * columns hold the summary: quantity = total quantity, estimated_amount =
+ * total of the items, lib_category_id = the first item's line item.
+ * Workflow: draft -> submitted
  * -> endorsed ("Approved by Project Leader") or returned. No Finance step.
  * An approved request then ends as "fulfilled" (an expense is linked to it)
  * or "cancelled" (with a reason).
@@ -32,7 +40,11 @@ class PurchaseRequest extends Model implements HasDocuments
         'project_id', 'lib_category_id', 'funding_source', 'requested_by', 'description', 'quantity', 'estimated_amount', 'supplier',
         'workflow_status', 'submitted_at', 'pl_reviewed_by', 'pl_reviewed_at', 'return_reason',
         'fulfilled_at', 'fulfilled_by', 'cancelled_at', 'cancelled_by', 'cancel_reason',
+        'pr_no', 'pr_date', 'sai_no', 'sai_date', 'alobs_no', 'alobs_date',
     ];
+
+    /** Document numbers Finance/Admin fills in on an approved request. */
+    public const NUMBER_FIELDS = ['pr_no', 'pr_date', 'sai_no', 'sai_date', 'alobs_no', 'alobs_date'];
 
     protected $casts = [
         'quantity' => 'integer',
@@ -41,6 +53,9 @@ class PurchaseRequest extends Model implements HasDocuments
         'pl_reviewed_at' => 'datetime',
         'fulfilled_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'pr_date' => 'date:Y-m-d',
+        'sai_date' => 'date:Y-m-d',
+        'alobs_date' => 'date:Y-m-d',
     ];
 
     public function project(): BelongsTo
@@ -73,10 +88,74 @@ class PurchaseRequest extends Model implements HasDocuments
         return $this->belongsTo(User::class, 'cancelled_by');
     }
 
-    /** The expense that fulfils this request. */
+    /** The (first) expense linked to this request. */
     public function expense(): HasOne
     {
-        return $this->hasOne(Expense::class);
+        return $this->hasOne(Expense::class)->oldestOfMany();
+    }
+
+    /** Every expense linked to this request (one per line item of its items). */
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(PurchaseRequestItem::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    /**
+     * The items; a request stored without items (made before items existed
+     * and not migrated, or created directly) reads as one "lot" item built
+     * from its own columns, so it still counts and displays.
+     *
+     * @return Collection<int, PurchaseRequestItem>
+     */
+    public function lineItems(): Collection
+    {
+        $items = $this->relationLoaded('items') ? $this->items : $this->items()->get();
+        if ($items->isNotEmpty()) {
+            return $items;
+        }
+        $quantity = max(1, (int) $this->quantity);
+        $amount = round((float) $this->estimated_amount, 2);
+
+        return collect([new PurchaseRequestItem([
+            'purchase_request_id' => $this->id,
+            'lib_category_id' => $this->lib_category_id,
+            'funding_source' => $this->funding_source ?: LibCategory::SOURCE_FUNDER,
+            'quantity' => $quantity,
+            'unit' => 'lot',
+            'description' => (string) $this->description,
+            'unit_cost' => round($amount / $quantity, 2),
+            'estimated_cost' => $amount,
+        ])]);
+    }
+
+    /**
+     * Item totals per line item and source: "lineId:source" =>
+     * [lib_category_id, funding_source, amount].
+     *
+     * @return array<string, array{lib_category_id: int, funding_source: string, amount: float}>
+     */
+    public function amountsByLine(): array
+    {
+        $out = [];
+        foreach ($this->lineItems() as $item) {
+            $source = in_array($item->funding_source, LibCategory::SOURCES, true) ? $item->funding_source : LibCategory::SOURCE_FUNDER;
+            $key = $item->lib_category_id . ':' . $source;
+            $out[$key] ??= ['lib_category_id' => (int) $item->lib_category_id, 'funding_source' => $source, 'amount' => 0.0];
+            $out[$key]['amount'] = round($out[$key]['amount'] + (float) $item->estimated_cost, 2);
+        }
+
+        return $out;
+    }
+
+    /** @return array<int, int> distinct line item ids of the items */
+    public function lineItemIds(): array
+    {
+        return $this->lineItems()->pluck('lib_category_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     public function documents(): MorphMany

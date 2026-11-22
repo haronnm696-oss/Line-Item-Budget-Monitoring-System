@@ -259,7 +259,10 @@ class ExpenseWorkflowService
     private function fundingSource($lineItemId, ?string $requested, $purchaseRequestId = null): string
     {
         if ($purchaseRequestId && $request = PurchaseRequest::find($purchaseRequestId)) {
-            return ProjectFinancialService::source($request->funding_source);
+            // The source of the request's items on this line item.
+            $item = $request->lineItems()->first(fn ($row) => (int) $row->lib_category_id === (int) $lineItemId);
+
+            return ProjectFinancialService::source($item?->funding_source ?? $request->funding_source);
         }
         $item = $lineItemId ? LibCategory::find($lineItemId) : null;
 

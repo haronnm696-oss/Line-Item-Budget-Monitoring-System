@@ -8,6 +8,7 @@ use App\Models\Expense;
 use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\PurchaseRequest;
+use App\Support\PurchaseRequestItems;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -259,27 +260,32 @@ class ProjectLeaderService
 
     private function purchaseRequestItem(PurchaseRequest $request, User $user, callable $person): array
     {
-        $request->loadMissing(['libCategory', 'requestedBy']);
+        $request->loadMissing(['libCategory', 'requestedBy', 'expenses', 'items.libCategory']);
         $mine = (int) $request->requested_by === (int) $user->id;
+        $items = PurchaseRequestItems::rows($request);
+        $count = count($items);
+        $types = collect($items)->pluck('line_item_type')->filter()->unique()->values();
 
         return [
             'title' => $request->description,
             'details' => trim(implode(' · ', array_filter([
-                $request->libCategory?->line_item_name,
-                'Qty ' . $request->quantity,
+                PurchaseRequestItems::lineSummary($request),
+                $count . ' ' . ($count === 1 ? 'item' : 'items'),
             ]))),
-            'line_item' => $request->libCategory?->line_item_name,
-            'category' => $request->libCategory?->category_type,
+            'line_item' => PurchaseRequestItems::lineSummary($request),
+            'category' => $types->count() === 1 ? $types->first() : ($types->isEmpty() ? $request->libCategory?->category_type : $types->implode(' + ')),
+            'pr_items' => $items,
+            'pr_total' => round((float) $request->estimated_amount, 2),
             'amount' => round((float) $request->estimated_amount, 2),
             'workflow_label' => PurchaseRequestService::label($request),
             'submitted_by' => $person($request->requestedBy),
-            'fields' => [
-                ['label' => 'Line item', 'value' => $request->libCategory?->line_item_name],
-                ['label' => 'Quantity', 'value' => (string) $request->quantity],
-                ['label' => 'Estimated amount', 'value' => round((float) $request->estimated_amount, 2), 'kind' => 'money'],
+            'fields' => array_merge([
+                ['label' => 'Purpose / remarks', 'value' => $request->description],
+                ['label' => 'Total', 'value' => round((float) $request->estimated_amount, 2), 'kind' => 'money'],
                 ['label' => 'Supplier / payee', 'value' => $request->supplier],
+            ], PurchaseRequestItems::numberFields($request), [
                 ['label' => 'Cancel reason', 'value' => $request->cancel_reason],
-            ],
+            ]),
             'can_review' => $request->workflow_status === 'submitted' && ! $mine,
             'waiting_text' => $request->workflow_status === 'submitted' && $mine ? 'You made this request, so it skips your approval.' : null,
             'can_edit' => false,
