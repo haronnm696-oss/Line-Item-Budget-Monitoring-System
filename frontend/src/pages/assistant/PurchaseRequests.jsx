@@ -6,6 +6,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { SUBMISSION_TABS, parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import PurchaseRequestDialog from '../../components/assistant/PurchaseRequestDialog';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
@@ -43,9 +44,7 @@ export default function PurchaseRequests() {
         <div>
           <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Purchase requests</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}An approved request holds its amount on the line item until an expense is linked
-          </p>
+          <ProjectLine picker={picker} detail="An approved request holds its amount on the line item until an expense is linked" />
         </div>
         {projectId && (
           <div className="pl-head-actions">

@@ -6,6 +6,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import LateReceipts from '../../components/finance/LateReceipts';
 import QueueTable from '../../components/finance/QueueTable';
@@ -57,9 +58,7 @@ export default function VerificationQueue() {
         <div>
           <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Verification queue</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Spent = verified expenses and verified payroll
-          </p>
+          <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll" />
         </div>
       </div>
 

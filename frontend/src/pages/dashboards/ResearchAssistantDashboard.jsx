@@ -7,6 +7,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
@@ -20,7 +21,7 @@ import BalancingCheck from '../../components/assistant/BalancingCheck';
  * documents are attached inside each record. The "Missing receipts" KPI
  * opens Expenses and receipts. Counts come from the server
  * (assistant-overview); the "Returned to you" KPI and the sidebar badge use
- * the same query. The project is chosen in the top bar.
+ * the same query. "Switch project" sits on the project line (ProjectLine).
  */
 export default function ResearchAssistantDashboard() {
   const picker = useAssignedProject({ role: 'research-assistant' });
@@ -39,11 +40,13 @@ export default function ResearchAssistantDashboard() {
       <div className="pl-head">
         <div>
           <h1 className="program-h1">Encoding and payroll</h1>
-          <p className="program-sub">
-            {data
-              ? [data.project.title, data.project.code, data.project.project_leader ? `Project Leader: ${data.project.project_leader}` : null].filter(Boolean).join(' · ')
-              : picker.project ? `${picker.project.title} · ${picker.project.code}` : 'Expenses, purchase requests and payroll you encode'}
-          </p>
+          <ProjectLine
+            picker={picker}
+            project={data?.project ?? picker.project}
+            detail={data?.project.project_leader
+              ? `Project Leader: ${data.project.project_leader}`
+              : (picker.project ? null : 'Expenses, purchase requests and payroll you encode')}
+          />
         </div>
       </div>
 

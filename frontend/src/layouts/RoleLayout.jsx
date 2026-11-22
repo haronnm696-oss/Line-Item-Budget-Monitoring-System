@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 import { useApiData } from '../lib/useApiData';
 import { pickProject, projectRoleFor } from '../lib/myProjects';
-import {
-  hasTopBarPicker, readProjectChoice, requestedProject, searchWithProject, showProjectPicker, withProject, writeProjectChoice,
-} from '../lib/projectChoice';
+import { canSwitchProject, readProjectChoice, requestedProject, withProject, writeProjectChoice } from '../lib/projectChoice';
 import { apiGet } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
 import RoleShell from './RoleShell';
-import TopBarProjectPicker from './TopBarProjectPicker';
 import { RoleBadgesContext } from './roleBadges';
 import { ROLE_NAV } from './roleNav';
 
@@ -44,17 +41,17 @@ const BADGE_SOURCE = {
 
 /**
  * The project the role's pages show: ?project=, else the one remembered
- * from the top-bar picker (Research Assistant, Finance/Admin, Researcher),
- * else the first one (lib/useAssignedProject.js uses the same rule). A
- * valid ?project= that arrives by link is remembered too. The Project
- * Leader leads one project and has no picker.
+ * from "Switch project" (Research Assistant, Finance/Admin, Researcher;
+ * components/ProjectLine.jsx), else the first one (lib/useAssignedProject.js
+ * uses the same rule). It drives the sidebar badges and links. A valid
+ * ?project= that arrives by link is remembered too. The Project Leader
+ * leads one project and cannot switch.
  */
 function useRoleProject(code) {
   const { user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const role = projectRoleFor(code);
-  const withPicker = hasTopBarPicker(code);
+  const withPicker = canSwitchProject(code);
   const needsProjects = withPicker || Boolean(BADGE_SOURCE[code]);
   const projects = useApiData(needsProjects ? ENDPOINTS.projects : null);
   const fromUrl = new URLSearchParams(location.search).get('project');
@@ -68,12 +65,7 @@ function useRoleProject(code) {
     }
   }, [withPicker, fromUrl, projectId, user?.id, role]);
 
-  function choose(id) {
-    writeProjectChoice(user?.id, role, id);
-    navigate({ pathname: location.pathname, search: searchWithProject(location.search, id) }, { replace: true });
-  }
-
-  return { projects: picked.projects, projectId, choose, showPicker: showProjectPicker(code, picked.projects), withPicker };
+  return { projectId, withPicker };
 }
 
 /**
@@ -108,8 +100,9 @@ function useProjectBadges(code, projectId) {
  * Shell for the Project Leader, Research Assistant, Finance/Admin and
  * Researcher pages: the same shell as the Program Leader, with that role's
  * menu. The Project Leader, Research Assistant and Finance/Admin have
- * badge counts. The Research Assistant, Finance/Admin and Researcher choose
- * their project once, in the top bar (shown with more than one project).
+ * badge counts. The Research Assistant, Finance/Admin and Researcher switch
+ * project from the project line under each page title (ProjectLine); the
+ * sidebar links keep that project in ?project=.
  */
 export default function RoleLayout() {
   const { user, roleInfo } = useAuth();
@@ -127,9 +120,6 @@ export default function RoleLayout() {
         badgeLabel={(key, count) => (BADGE_LABEL[key] ?? ((n) => `${n}`))(count)}
         fallbackName={roleLabel}
         navTo={current.withPicker ? (to) => withProject(to, current.projectId) : undefined}
-        topBarExtra={current.showPicker
-          ? <TopBarProjectPicker projects={current.projects} projectId={current.projectId} onChoose={current.choose} />
-          : null}
       />
     </RoleBadgesContext.Provider>
   );

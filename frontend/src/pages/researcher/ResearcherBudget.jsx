@@ -4,6 +4,7 @@ import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import { formatPct, peso } from '../../components/money';
 
 const GROUPS = [
@@ -49,9 +50,7 @@ export default function ResearcherBudget() {
           <h1 className="program-h1 res-title">
             Budget <span className="res-readonly"><span aria-hidden="true">👁</span> Read-only access</span>
           </h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Spent = verified expenses and verified payroll
-          </p>
+          <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll" />
         </div>
       </div>
 

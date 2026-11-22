@@ -8,6 +8,7 @@ import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
+import ProjectLine from '../../components/ProjectLine';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
@@ -41,9 +42,7 @@ export default function FinanceDashboard() {
       <div className="pl-head">
         <div>
           <h1 className="program-h1">Verification</h1>
-          <p className="program-sub">
-            {[data?.project.title ?? picker.project?.title, data?.project.code ?? picker.project?.code, 'only verified amounts count as spent'].filter(Boolean).join(' · ')}
-          </p>
+          <ProjectLine picker={picker} project={data?.project ?? picker.project} detail="only verified amounts count as spent" />
         </div>
         {picker.projectId && (
           <div className="pl-head-actions">
