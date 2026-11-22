@@ -112,7 +112,9 @@ Personnel → **Add personnel**:
 - Save → "Personnel added."
 
 Check: the Researcher Honoraria line now pays through Payroll only. An
-expense or purchase request item on it is refused.
+expense or purchase request item on it is refused. The Personnel table shows
+the file as **Special Order (PDF)** (or JPG / PNG), not its file name;
+clicking it opens a preview with **Download**.
 
 | After Part 1 | Allocated | Spent | Pending | Available | Released |
 |---|---|---|---|---|---|
@@ -187,7 +189,10 @@ Research Assistant: Expenses → **Record expense**:
 - Attach the receipt → **Save and submit**
 
 Then the Project Leader approves it (Submissions → **Approve**) and
-Finance/Admin verifies it (Verification queue → **Verify**).
+Finance/Admin verifies it against the receipt (Verification queue →
+**Verify**). Finance/Admin does not record expenses: it has no **Record
+expense** button and the API refuses it (403); the Research Assistant and the
+Project Leader record them.
 
 | | Spent | Pending | Available (project) |
 |---|---|---|---|
@@ -208,7 +213,9 @@ There are no deduction or allowance columns (no GSIS, PhilHealth, Pag-IBIG
 or tax). **Upload payroll file** → **Submit batch** (disabled until a payroll
 file is attached).
 
-Then the Project Leader approves the batch and Finance/Admin verifies it.
+Then the Project Leader approves the batch and Finance/Admin verifies it
+(Verification queue → Type **Payroll**; the Payroll page has no separate
+"Payroll to verify" button).
 
 | | Spent | Pending | Available (project) |
 |---|---|---|---|
@@ -250,11 +257,38 @@ Spent does not change: liquidation reports money already spent.
 
 ## Part 5. Finance/Admin checks
 
+Finance/Admin verifies expenses and payroll against their documents and
+records PR / SAI / ALOBS numbers; it does not encode expenses.
+
+- Sidebar: **Overview**; VERIFY: **Verification queue**, **Purchase
+  requests**, **Payroll**; RECORDS: **Transaction history**, **Reports**.
+  There is no "Expenses and receipts" page and no **Record expense** button.
 - Verification queue → **Verified by you** lists OR-88812 (₱4,300.00) and the
   July–September payroll (₱54,000.00).
-- Overview: Total spent **₱58,300.00**, Total budget ₱1,000,000.00.
+- Overview: Total spent **₱58,300.00**, Verified this month and Recently
+  verified show the same amounts, Total budget ₱1,000,000.00. Reload the page
+  (or switch tabs while it loads): the figures never change. No "Missing
+  receipts" card at the bottom.
+- Overview → **Missing receipts** KPI opens Transaction history filtered to
+  **Missing receipt** (0 here: every verified expense has its receipt). A row
+  without a receipt shows "! No receipt" and **Notify RA**.
+- Transaction history: eyebrow **RECORDS · FINANCE/ADMIN**, title
+  **Transaction history**, both transactions, total ₱58,300.00.
 - Purchase requests: PR 2026-11-001 with its PR, SAI and ALOBS numbers,
   **Cancelled (partly fulfilled)**.
+
+### 5.1 Older expense recorded by Finance/Admin (optional, existing data)
+An expense a Finance/Admin recorded before this change still works:
+- Returned to them: the Overview shows **Returned to you** with **Edit and
+  resubmit**.
+- Approved by the Project Leader: another Finance/Admin of the project
+  verifies it. With no other Finance/Admin on the project, it goes to the
+  Program Leader: Approvals → Type **Expense verification** → **Approve**
+  (counts in Total spent) or **Return** (back to the recorder). Expenses that
+  were already waiting are moved there by
+  `php artisan workflow:reroute-leader-steps --apply --as=<Program Leader email>`,
+  and automatically when a Finance/Admin is removed from the project or
+  deactivated.
 
 ## Part 6. Researcher (read-only)
 

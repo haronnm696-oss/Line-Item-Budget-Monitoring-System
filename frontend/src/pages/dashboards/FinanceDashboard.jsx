@@ -9,9 +9,7 @@ import { parseOpen } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import ProjectLine from '../../components/ProjectLine';
-import AnimatedNumber from '../../components/program/AnimatedNumber';
 import ProgramPill from '../../components/program/ProgramPill';
-import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import LateReceipts from '../../components/finance/LateReceipts';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
@@ -21,6 +19,12 @@ import { formatPct, peso } from '../../components/money';
  * Finance/Admin Overview: what waits for verification, what was verified
  * this month, missing receipts and Total spent. "To verify" and the sidebar
  * badge use the same server query (finance-overview / finance-badges).
+ * Finance/Admin verifies against the documents; it does not record
+ * expenses (the Research Assistant and the Project Leader do).
+ *
+ * KPI figures are shown as the exact server values (ProjectFinancialService),
+ * never a counting animation: an animation paused mid-way (background tab,
+ * printing) once showed ₱365.00 for a ₱500.00 Total spent.
  */
 export default function FinanceDashboard() {
   const picker = useAssignedProject({ role: 'finance-admin' });
@@ -28,7 +32,6 @@ export default function FinanceDashboard() {
   const { get, update } = useUrlQuery();
   const open = parseOpen(get('open'));
   const [refreshKey, setRefreshKey] = useState(0);
-  const [recording, setRecording] = useState(false);
   const reload = () => { overview.retry(); setRefreshKey((value) => value + 1); };
   const actions = useVerifyActions({ projectId: picker.projectId, onChanged: reload });
 
@@ -44,11 +47,6 @@ export default function FinanceDashboard() {
           <h1 className="program-h1">Verification</h1>
           <ProjectLine picker={picker} project={data?.project ?? picker.project} detail="only verified amounts count as spent" />
         </div>
-        {picker.projectId && (
-          <div className="pl-head-actions">
-            <button type="button" className="program-btn primary" onClick={() => { actions.setFeedback(null); setRecording(true); }}>Record expense</button>
-          </div>
-        )}
       </div>
 
       {actions.feedback && (
@@ -64,7 +62,7 @@ export default function FinanceDashboard() {
                   sub={`Approved by the Project Leader${othersOnly > 0 ? ` · ${othersOnly} need another verifier` : ''}`} />
                 <Kpi to={`/verification-queue${q}${q ? '&' : '?'}tab=verified`} label="Verified this month" value={kpis.verified_this_month} format={peso}
                   sub={`${kpis.month_label} · ${plural(kpis.verified_this_month_expenses, 'expense')} · ${plural(kpis.verified_this_month_payroll, 'payroll batch', 'payroll batches')}`} />
-                <Kpi alert={kpis.missing_receipts > 0} to={`/expenses${q}`} label="Missing receipts" value={kpis.missing_receipts}
+                <Kpi alert={kpis.missing_receipts > 0} to={`/transaction-history${q}${q ? '&' : '?'}receipt=missing`} label="Missing receipts" value={kpis.missing_receipts}
                   sub={kpis.verified_expenses > 0
                     ? `Receipt compliance ${formatPct(kpis.receipt_compliance_pct)} · ${kpis.verified_with_receipt} of ${kpis.verified_expenses}`
                     : 'No verified expenses yet'} />
@@ -96,31 +94,32 @@ export default function FinanceDashboard() {
                   <LateReceipts items={data.late_receipts} onOpen={(row) => update({ open: row.key })} />
                 </section>
 
-                <section className="program-card">
-                  <div className="program-card-head">
-                    <div>
-                      <div className="program-card-title">Missing receipts</div>
-                      <div className="program-card-sub">Verified expenses without an invoice or official receipt</div>
+                {data.returned_to_you?.length > 0 && (
+                  <section className="program-card">
+                    <div className="program-card-head">
+                      <div>
+                        <div className="program-card-title">Returned to you</div>
+                        <div className="program-card-sub">Expenses you recorded earlier. Edit and resubmit them; new expenses are recorded by the Research Assistant.</div>
+                      </div>
                     </div>
-                  </div>
-                  {data.missing_receipts.length === 0 ? (
-                    <p className="ld-empty">✓ Every verified expense has a receipt.</p>
-                  ) : (
                     <ul className="ld-mini-list">
-                      {data.missing_receipts.map((row) => (
-                        <li key={row.id}>
+                      {data.returned_to_you.map((item) => (
+                        <li key={item.key}>
                           <div>
-                            <b>{row.reference_no || `EXP-${row.id}`} · {peso(row.amount)}</b>
-                            <span>{row.description}</span>
+                            <b>{item.reference} · {peso(item.amount)}</b>
+                            <span>{item.title}</span>
+                            {item.return_reason && <span>↩ Returned: {item.return_reason}</span>}
                           </div>
-                          <button type="button" className="program-btn sm" disabled={actions.busyKey === `notify-${row.id}`} onClick={() => actions.notifyRa(row)}>
-                            {actions.busyKey === `notify-${row.id}` ? 'Sending…' : 'Notify RA'}
-                          </button>
+                          {item.can_edit && (
+                            <button type="button" className="program-btn sm primary" disabled={actions.busyKey === item.key} onClick={() => actions.resubmit(item)}>
+                              {actions.busyKey === item.key ? 'Opening…' : (item.workflow_status === 'returned' ? 'Edit and resubmit' : 'Edit and submit')}
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>
-                  )}
-                </section>
+                  </section>
+                )}
               </div>
 
               <section className="program-card">
@@ -172,14 +171,6 @@ export default function FinanceDashboard() {
         <FinanceRecordPanel projectId={picker.projectId} target={open} refreshKey={refreshKey} actions={actions} onClose={() => update({ open: '' })} />
       )}
       {actions.dialog}
-      {recording && picker.projectId && (
-        <RecordExpenseDialog
-          assistant
-          projectId={picker.projectId}
-          onClose={() => { setRecording(false); reload(); }}
-          onDone={(text) => { setRecording(false); actions.setFeedback({ tone: 'ok', text }); reload(); }}
-        />
-      )}
     </div>
   );
 }
@@ -192,7 +183,7 @@ function Kpi({ label, value, sub, to, format, alert = false }) {
   return (
     <Link to={to} className={`program-card pl-kpi ra-kpi${alert ? ' ra-kpi-alert' : ''}`}>
       <div className="pl-kpi-head"><span className="pl-kpi-label">{label}</span></div>
-      <div className="pl-kpi-value"><AnimatedNumber value={value} format={format} /></div>
+      <div className="pl-kpi-value">{format ? format(value) : Number(value || 0).toLocaleString('en-PH')}</div>
       <div className="pl-kpi-sub">{sub}</div>
     </Link>
   );

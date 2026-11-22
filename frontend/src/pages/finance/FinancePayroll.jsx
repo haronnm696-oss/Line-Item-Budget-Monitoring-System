@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
@@ -32,7 +31,6 @@ export default function FinancePayroll() {
     onChanged: () => { list.retry(); setRefreshKey((value) => value + 1); },
   });
   const batches = Array.isArray(list.data?.batches) ? list.data.batches : [];
-  const q = picker.projectId ? `?project=${picker.projectId}` : '';
 
   return (
     <div className="ld-page">
@@ -42,11 +40,6 @@ export default function FinancePayroll() {
           <h1 className="program-h1">Payroll</h1>
           <ProjectLine picker={picker} detail="One batch per pay period; no deductions or allowances. Spent = verified expenses and verified payroll" />
         </div>
-        {picker.projectId && (
-          <div className="pl-head-actions">
-            <Link className="program-btn" to={`/verification-queue${q}${q ? '&' : '?'}type=payroll`}>Payroll to verify</Link>
-          </div>
-        )}
       </div>
 
       {actions.feedback && (

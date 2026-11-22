@@ -143,7 +143,25 @@ function Payroll({ details }) {
   );
 }
 
+/** An expense no Finance/Admin of the project may verify: the Program Leader verifies it. */
+function ExpenseVerify({ details }) {
+  return (
+    <dl className="ld-fields">
+      <div><dt>Reference</dt><dd>{details.reference}</dd></div>
+      <div><dt>Description</dt><dd>{details.description}{details.payee ? ` · ${details.payee}` : ''}</dd></div>
+      <div><dt>Date</dt><dd>{formatDate(details.expense_date)}</dd></div>
+      <div><dt>Line item</dt><dd>{details.line_item ?? '—'}{details.category ? ` (${details.category})` : ''}</dd></div>
+      <div><dt>Amount</dt><dd><b>{peso(details.amount)}</b></dd></div>
+      <div><dt>Recorded by</dt><dd>{details.recorded_by ?? '—'}</dd></div>
+      <div><dt>Approved by</dt><dd>{details.approved_by ?? 'No Project Leader step (recorded by the Project Leader)'}</dd></div>
+      <div><dt>Receipt</dt><dd>{details.receipts_count > 0 ? <>✓ {details.receipts_count} attached</> : <>! No receipt</>}</dd></div>
+      <div><dt>Step sent to you</dt><dd>{details.step}: approving counts it in Total spent; returning sends it back to the recorder.</dd></div>
+    </dl>
+  );
+}
+
 const DETAILS = {
+  expense: ['Expense to verify', ExpenseVerify],
   fund_release: ['Fund release', FundRelease],
   realignment: ['Line items', Realignment],
   liquidation: ['Liquidation', Liquidation],

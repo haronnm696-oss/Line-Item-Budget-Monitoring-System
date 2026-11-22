@@ -116,10 +116,7 @@ class FinanceService
         $compliance = $this->financials->compliance($project);
         $queue = $this->queue($project, $user, 'waiting');
         [$start, $end] = $this->thisMonth();
-
-        $verifiedExpenses = ProjectFinancialService::onlySpent($project->expenses())->whereBetween('verified_at', [$start, $end]);
-        $verifiedBatches = PayrollBatch::query()->where('project_id', $project->id)
-            ->where('workflow_status', 'verified')->whereBetween('verified_at', [$start, $end]);
+        $verifiedThisMonth = $this->financials->verifiedBetween($project, $start, $end);
 
         // Transactions this user verified, newest first.
         $recent = collect()
@@ -142,11 +139,9 @@ class FinanceService
                 'to_verify_actionable' => collect($queue['items'])->where('can_verify', true)->count(),
                 // Amount verified this month (expenses and payroll: both are spent),
                 // and the counts of expenses and payroll batches verified, kept separate.
-                'verified_this_month' => round((float) (clone $verifiedExpenses)->sum('amount')
-                    + (float) ProjectFinancialService::onlySpentPayroll(\App\Models\Payroll::query())
-                        ->whereIn('payroll_batch_id', (clone $verifiedBatches)->select('id'))->sum('gross_pay'), 2),
-                'verified_this_month_expenses' => (clone $verifiedExpenses)->count(),
-                'verified_this_month_payroll' => (clone $verifiedBatches)->count(),
+                'verified_this_month' => $verifiedThisMonth['amount'],
+                'verified_this_month_expenses' => $verifiedThisMonth['expenses'],
+                'verified_this_month_payroll' => $verifiedThisMonth['payroll_batches'],
                 'month_label' => Carbon::now('Asia/Manila')->format('F Y'),
                 'missing_receipts' => $compliance['missing_receipt'],
                 'receipt_compliance_pct' => $compliance['compliance_pct'],
@@ -157,8 +152,14 @@ class FinanceService
                 'utilization_pct' => $metrics['utilization_pct'],
             ],
             'queue' => array_slice($queue['items'], 0, 6),
-            'missing_receipts' => $compliance['missing_items'],
             'recently_verified' => $recent,
+            // Older expenses this Finance/Admin recorded that are back with
+            // them (draft or returned): edit and resubmit. Finance/Admin no
+            // longer records new expenses.
+            'returned_to_you' => $project->expenses()->where('recorded_by', $user->id)
+                ->whereIn('workflow_status', ['draft', 'returned'])
+                ->orderByDesc('updated_at')->limit(10)->get()
+                ->map(fn ($e) => $this->item('expense', $e, $user))->values()->all(),
             'late_receipts' => array_slice($queue['late_receipts'], 0, 5),
         ];
     }
@@ -286,7 +287,9 @@ class FinanceService
         $expense->loadMissing(['libCategory', 'recordedBy', 'plReviewedBy', 'verifiedBy']);
         $endorsed = $expense->workflow_status === 'endorsed';
         $blocked = null;
-        if ($endorsed && (int) $expense->recorded_by === (int) $user->id) {
+        if ($endorsed && $expense->pendingEscalation() !== null) {
+            $blocked = ExpenseWorkflowService::WAITING_PROGRAM_LEADER . '.';
+        } elseif ($endorsed && (int) $expense->recorded_by === (int) $user->id) {
             $blocked = 'You recorded this expense; another Finance/Admin must verify it.';
         } elseif ($endorsed && (int) $expense->pl_reviewed_by === (int) $user->id) {
             $blocked = 'You approved this expense as Project Leader; another person must verify it.';

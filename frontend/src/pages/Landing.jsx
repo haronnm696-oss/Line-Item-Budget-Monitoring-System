@@ -63,7 +63,7 @@ const ROLES = [
   },
   {
     name: 'Finance/Admin Staff',
-    text: 'Verifies records and supports reporting.',
+    text: 'Verifies expenses and payroll against their documents and records PR, SAI and ALOBS numbers.',
   },
   {
     name: 'Researcher',

@@ -6,6 +6,7 @@ use App\Support\Percent;
 use App\Models\Expense;
 use App\Models\LibCategory;
 use App\Models\Payroll;
+use App\Models\PayrollBatch;
 use App\Models\Project;
 use App\Models\ProjectPersonnel;
 use App\Models\PurchaseRequest;
@@ -221,6 +222,28 @@ class ProjectFinancialService
     public static function missingReceipt($expenses)
     {
         return self::onlySpent($expenses)->whereDoesntHave('receipts');
+    }
+
+    /**
+     * What was verified (became spent) between two moments: verified
+     * expenses by verified_at, and the rows of payroll batches verified in
+     * that window (gross pay). The same rule as spent(), limited in time.
+     *
+     * @return array{amount: float, expenses: int, payroll_batches: int}
+     */
+    public function verifiedBetween(Project $project, $start, $end): array
+    {
+        $expenses = self::onlySpent($project->expenses())->whereBetween('verified_at', [$start, $end]);
+        $batches = PayrollBatch::query()->where('project_id', $project->id)
+            ->where('workflow_status', 'verified')->whereBetween('verified_at', [$start, $end]);
+        $payroll = (float) self::onlySpentPayroll($project->payrolls())
+            ->whereIn('payroll_batch_id', (clone $batches)->select('id'))->sum('gross_pay');
+
+        return [
+            'amount' => round((float) (clone $expenses)->sum('amount') + $payroll, 2),
+            'expenses' => (clone $expenses)->count(),
+            'payroll_batches' => (clone $batches)->count(),
+        ];
     }
 
     /** Spent = verified expenses + verified payroll. */

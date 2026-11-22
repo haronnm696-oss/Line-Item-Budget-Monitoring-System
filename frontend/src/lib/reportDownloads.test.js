@@ -41,5 +41,5 @@ test('every Researcher page uses one eyebrow; Transactions follows the role', ()
   assert.equal(reportsEyebrow('RES'), RESEARCHER_EYEBROW);
   assert.equal(transactionsEyebrow('RES'), RESEARCHER_EYEBROW);
   assert.equal(transactionsEyebrow('PL'), 'Project');
-  assert.equal(transactionsEyebrow('FIN'), 'Project');
+  assert.equal(transactionsEyebrow('FIN'), 'Records · Finance/Admin');
 });

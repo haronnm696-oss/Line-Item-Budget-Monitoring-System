@@ -8,7 +8,13 @@ export function isReadOnlyRole(roleCode) {
   return roleCode === 'RES';
 }
 
-/** The shared Transactions page: the Researcher's eyebrow, otherwise "Project". */
+/** The shared Transactions page: Finance/Admin's and the Researcher's eyebrows, otherwise "Project". */
 export function transactionsEyebrow(roleCode) {
+  if (roleCode === 'FIN') return 'Records · Finance/Admin';
   return roleCode === 'RES' ? RESEARCHER_EYEBROW : 'Project';
+}
+
+/** Finance/Admin calls the page "Transaction history" (its sidebar label); others keep "Transactions". */
+export function transactionsTitle(roleCode) {
+  return roleCode === 'FIN' ? 'Transaction history' : 'Transactions';
 }

@@ -18,13 +18,13 @@ class RerouteLeaderSteps extends Command
         {--apply : Move the items (without it, only count them)}
         {--as= : Email of the active Program Leader recorded as the actor (required with --apply)}';
 
-    protected $description = 'Move items stuck waiting for "another Project Leader" to their reviewer (Finance/Admin or Program Leader).';
+    protected $description = 'Move items stuck waiting for "another Project Leader" to their reviewer (Finance/Admin or Program Leader), and send approved expenses no Finance/Admin may verify to the Program Leader.';
 
     public function handle(LeaderStepRouter $router): int
     {
         if (! $this->option('apply')) {
             $counts = $router->reroute(new User(), null, true);
-            $this->info("Dry run. Expenses: {$counts['expense']}, purchase requests: {$counts['purchase_request']}. Payroll batches are checked only with --apply.");
+            $this->info("Dry run. Expenses: {$counts['expense']}, purchase requests: {$counts['purchase_request']}, expenses to the Program Leader to verify: {$counts['expense_verify']}. Payroll batches are checked only with --apply.");
 
             return self::SUCCESS;
         }
@@ -41,7 +41,7 @@ class RerouteLeaderSteps extends Command
         }
 
         $counts = $router->reroute($actor);
-        $this->info("Rerouted. Expenses: {$counts['expense']}, purchase requests: {$counts['purchase_request']}, payroll batches: {$counts['payroll']}.");
+        $this->info("Rerouted. Expenses: {$counts['expense']}, purchase requests: {$counts['purchase_request']}, payroll batches: {$counts['payroll']}, expenses to the Program Leader to verify: {$counts['expense_verify']}.");
 
         return self::SUCCESS;
     }

@@ -50,7 +50,7 @@ export const ROUTE_ROLES = {
   '/submissions': ['PL'],
   '/my-requests': ['PL'],
   '/reports': ['PL', 'FIN', 'RES'],
-  '/expenses': ['RA', 'FIN'],
+  '/expenses': ['RA'],
   '/payroll': ['RA', 'FIN'],
   '/purchase-requests': ['RA', 'FIN'],
   '/documents': ['RA'],

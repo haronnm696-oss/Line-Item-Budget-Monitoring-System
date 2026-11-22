@@ -160,14 +160,16 @@ class ExpenseWorkflowTest extends TestCase
 
     public function test_each_step_is_limited_to_its_role_on_the_project(): void
     {
-        // RA / FIN record expenses; so may the Project Leader (their own,
-        // see ProjectLeaderPagesTest). Researchers and the Program Leader may not.
-        foreach ([$this->researcher, $this->programLeader] as $user) {
+        // The Research Assistant records expenses; so may the Project Leader
+        // (their own, see ProjectLeaderPagesTest). Finance/Admin verifies and
+        // does not encode (FinanceVerifiesOnlyTest); Researchers and the
+        // Program Leader may not record either.
+        foreach ([$this->researcher, $this->programLeader, $this->finance] as $user) {
             $this->actingAs($user)
                 ->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload())
                 ->assertForbidden();
         }
-        $this->actingAs($this->finance)
+        $this->actingAs($this->assistant)
             ->postJson("/api/projects/{$this->project->id}/expenses", $this->expensePayload())
             ->assertCreated();
 

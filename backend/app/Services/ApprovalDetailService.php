@@ -42,6 +42,9 @@ class ApprovalDetailService
         $batch = PayrollService::isEscalation($approval)
             ? PayrollBatch::query()->find(($approval->payload ?? [])['payroll_batch_id'] ?? 0)
             : null;
+        $expense = ExpenseWorkflowService::isEscalation($approval)
+            ? Expense::query()->with(['libCategory', 'recordedBy', 'plReviewedBy'])->find(($approval->payload ?? [])['expense_id'] ?? 0)
+            : null;
 
         [$canDecide, $blocked] = $this->decidable($approval, $viewer);
 
@@ -69,9 +72,10 @@ class ApprovalDetailService
             'review_notes' => $approval->review_notes,
             'last_return_reason' => $approval->last_return_reason,
             'history' => $this->history($approval),
-            'details' => $project ? $this->typeDetails($approval, $project, $batch) : null,
+            'details' => $project ? ($expense ? $this->expense($expense) : $this->typeDetails($approval, $project, $batch)) : null,
             // Payroll files show pay per person: not listed for Researchers.
-            'documents' => $this->documents($approval, $batch && $viewer->canSeePersonnelPay((int) $batch->project_id) ? $batch : null),
+            // An escalated expense shows its receipts and other documents.
+            'documents' => $this->documents($approval, $expense ?? ($batch && $viewer->canSeePersonnelPay((int) $batch->project_id) ? $batch : null)),
             // Approve / Return only inside the panel, for the Program Leader, on a pending request someone else made.
             'can_decide' => $canDecide,
             'blocked_text' => $blocked,
@@ -323,12 +327,33 @@ class ApprovalDetailService
         ];
     }
 
-    /** The request's own files, plus the batch files for an escalated payroll step. */
-    private function documents(ApprovalRequest $approval, ?PayrollBatch $batch): array
+    /** An expense whose verify step was escalated to the Program Leader. */
+    private function expense(Expense $expense): array
+    {
+        return [
+            'kind' => 'expense',
+            'expense_id' => $expense->id,
+            'step' => 'Verify',
+            'reference' => $expense->reference_no ?: 'EXP-' . $expense->id,
+            'description' => $expense->description,
+            'payee' => $expense->payee,
+            'expense_date' => $expense->expense_date?->toDateString(),
+            'line_item' => $expense->libCategory?->line_item_name,
+            'category' => $expense->libCategory?->category_type,
+            'amount' => round((float) $expense->amount, 2),
+            'workflow_status' => $expense->workflow_status,
+            'recorded_by' => $expense->recordedBy?->name,
+            'approved_by' => $expense->plReviewedBy?->name,
+            'receipts_count' => $expense->receipts()->count(),
+        ];
+    }
+
+    /** The request's own files, plus the record's files (escalated payroll batch or expense). */
+    private function documents(ApprovalRequest $approval, $record): array
     {
         $documents = $approval->documents()->with('uploader')->orderBy('id')->get();
-        if ($batch) {
-            $documents = $documents->concat($batch->documents()->with('uploader')->orderBy('id')->get());
+        if ($record) {
+            $documents = $documents->concat($record->documents()->with('uploader')->orderBy('id')->get());
         }
 
         return $documents->map(fn (Document $d) => DocumentController::row($d))->values()->all();

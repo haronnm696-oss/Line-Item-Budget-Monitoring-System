@@ -47,3 +47,15 @@ test('the form never prefills a bank account; period text', () => {
   assert.equal(periodText('2026-01-01', '2026-12-31', (d) => d), '2026-01-01 – 2026-12-31');
   assert.equal(periodText(null, null, (d) => d), '—');
 });
+
+test('the Special Order shows its type, not the raw file name', async () => {
+  const { specialOrderLabel, specialOrderPreview } = await import('./personnel.js');
+  assert.equal(specialOrderLabel({ file_name: 'SO 1111-OP s.2025 scan final.pdf', mime: 'application/pdf' }), 'Special Order (PDF)');
+  assert.equal(specialOrderLabel({ file_name: 'IMG_2041.JPG' }), 'Special Order (JPG)');
+  assert.equal(specialOrderLabel({ file_name: 'order', mime: 'image/png' }), 'Special Order (PNG)');
+  assert.equal(specialOrderLabel({ file_name: 'order.docx' }), 'Special Order');
+  assert.equal(specialOrderLabel(null), '');
+  assert.equal(specialOrderPreview({ file_name: 'a.pdf' }), 'pdf');
+  assert.equal(specialOrderPreview({ file_name: 'a.jpeg' }), 'image');
+  assert.equal(specialOrderPreview({ file_name: 'a.docx' }), null);
+});

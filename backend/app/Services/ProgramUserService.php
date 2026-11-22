@@ -670,6 +670,9 @@ class ProgramUserService
                 'roles' => count($roles) > 1 ? $roles : null,
             ], fn ($value) => $value !== null), [], $reason);
         });
+
+        // A removed Finance/Admin may leave approved expenses with no one to verify them.
+        $this->rerouteProjects([(int) $project->id], $actor);
     }
 
     /**
@@ -699,7 +702,7 @@ class ProgramUserService
             abort(422, 'You cannot deactivate your own account.');
         }
 
-        return AuditLogger::transaction(function () use ($user, $isActive, $reason, $actor) {
+        $updated = AuditLogger::transaction(function () use ($user, $isActive, $reason, $actor) {
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $oldValues = $locked->only(['is_active']);
 
@@ -729,6 +732,13 @@ class ProgramUserService
 
             return $locked->fresh()->load('primaryRole');
         });
+
+        // A deactivated Finance/Admin may leave approved expenses with no one to verify them.
+        if (! $isActive) {
+            $this->rerouteAfterRoleChange($updated, $actor);
+        }
+
+        return $updated;
     }
 
     public function updatePrimaryRole(User $user, string $roleSlug, ?string $reason, User $actor): User
@@ -785,7 +795,12 @@ class ProgramUserService
      */
     protected function rerouteAfterRoleChange(User $user, User $actor): void
     {
-        $projectIds = ProjectUser::where('user_id', $user->id)->pluck('project_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $this->rerouteProjects(ProjectUser::where('user_id', $user->id)->pluck('project_id')->map(fn ($id) => (int) $id)->unique()->values()->all(), $actor);
+    }
+
+    /** LeaderStepRouter for these projects, after the commit; a failure is reported, never thrown. */
+    protected function rerouteProjects(array $projectIds, User $actor): void
+    {
         if ($projectIds === []) {
             return;
         }

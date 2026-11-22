@@ -39,7 +39,6 @@ import MySubmissions from './pages/assistant/MySubmissions';
 import Documents from './pages/assistant/Documents';
 import BalancingQuery from './pages/assistant/BalancingQuery';
 import VerificationQueue from './pages/finance/VerificationQueue';
-import FinanceExpenses from './pages/finance/FinanceExpenses';
 import FinancePurchaseRequests from './pages/finance/FinancePurchaseRequests';
 import FinancePayroll from './pages/finance/FinancePayroll';
 import ResearcherBudget from './pages/researcher/ResearcherBudget';
@@ -69,7 +68,7 @@ const ROLE_PAGES = [
   ['/projects', <Projects />],
   ['/projects/:id', <ProjectDetail />],
   // Shared paths: the Research Assistant gets their own encoding pages.
-  ['/expenses', <ByRole RA={<AssistantExpenses />} FIN={<FinanceExpenses />} />],
+  ['/expenses', <AssistantExpenses />],
   ['/payroll', <ByRole RA={<AssistantPayroll />} FIN={<FinancePayroll />} />],
   // Finance/Admin.
   ['/verification-queue', <VerificationQueue />],
