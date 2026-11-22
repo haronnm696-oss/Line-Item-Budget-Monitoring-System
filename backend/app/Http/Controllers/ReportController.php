@@ -23,9 +23,12 @@ class ReportController extends Controller
      * Verified payroll batches only, per month and per person (Reports PDF,
      * the Research Assistant's Payroll page). Project access is enforced by
      * EnsureProjectAccess: the Program Leader, or a user assigned to it.
+     * Personnel pay: not for Researchers (User::canSeePersonnelPay).
      */
     public function payrollRegister(Request $request, Project $project)
     {
+        $this->requirePayAccess($request, $project);
+
         return response()->json($this->registerFor($request, $project));
     }
 
@@ -37,6 +40,11 @@ class ReportController extends Controller
     public function formB(Project $project)
     {
         return response()->json($this->formB->build($project));
+    }
+
+    private function requirePayAccess(Request $request, Project $project): void
+    {
+        abort_unless($request->user()->canSeePersonnelPay($project), 403, 'The payroll register shows pay per person and is not available to Researchers.');
     }
 
     private function registerFor(Request $request, Project $project): array
@@ -62,6 +70,7 @@ class ReportController extends Controller
         abort_unless(in_array($type, $allowed, true), 404, 'Unknown report type.');
 
         if ($type === 'payroll-register') {
+            $this->requirePayAccess($request, $project);
             $register = $this->registerFor($request, $project);
             $filename = Str::slug($project->code . '-payroll-register-' . $register['period'] . '-' . now()->format('Ymd')) . '.csv';
 

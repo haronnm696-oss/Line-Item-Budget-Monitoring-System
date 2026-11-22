@@ -125,3 +125,45 @@ test('free-text record fields turn off browser suggestions', () => {
     assert.match(purchase, new RegExp(`id="${id}"[^>]*autoComplete="off"`), id);
   }
 });
+
+test('the Researcher Overview has no Reports card; Transaction summary is full width', () => {
+  const page = source('pages/dashboards/ResearcherDashboard.jsx');
+  assert.doesNotMatch(page, /program-card-title">Reports</);
+  assert.doesNotMatch(page, /format=pdf|format=csv|res-export/);
+  assert.match(page, /program-card-title">Transaction summary</);
+  // Not in a two-column row any more.
+  assert.doesNotMatch(page, /pl-row-charts/);
+});
+
+// The Researcher's menu: eyebrow and "Read-only access" badge from PageTitle.
+const RESEARCHER_PAGES = [
+  ['pages/dashboards/ResearcherDashboard.jsx', /<PageTitle eyebrow=\{RESEARCHER_EYEBROW\} title="[^"]+" readOnly \/>/],
+  ['pages/researcher/ResearcherBudget.jsx', /<PageTitle eyebrow=\{RESEARCHER_EYEBROW\} title="Budget" readOnly \/>/],
+  ['pages/leader/Transactions.jsx', /<PageTitle eyebrow=\{transactionsEyebrow\(roleCode\)\} title="Transactions" readOnly=\{readOnly\} \/>/],
+  ['pages/Reports.jsx', /<PageTitle eyebrow=\{reportsEyebrow\(roleCode\)\} title="Reports" readOnly=\{isReadOnlyRole\(roleCode\)\} \/>/],
+];
+
+test('every Researcher page shows the eyebrow and the read-only badge in the same place', () => {
+  for (const [path, title] of RESEARCHER_PAGES) {
+    const page = source(path);
+    assert.match(page, title, path);
+    assert.doesNotMatch(page, /Read-only access/, `${path}: the badge comes from PageTitle`);
+  }
+  assert.match(source('components/PageTitle.jsx'), /res-readonly"><span aria-hidden="true">👁<\/span> Read-only access/);
+});
+
+test('the Reports page hides the Project field with one project and shows no payroll register to Researchers', () => {
+  const page = source('pages/Reports.jsx');
+  assert.match(page, /const showProjectField = showReportProjectField\(roleCode, projectsStatus, projectList\.length\);/);
+  assert.match(page, /\{showProjectField && <div \{\.\.\.fieldProps\}>\s*<label htmlFor="report-param-project">/);
+  assert.match(page, /Generated from verified expenses and verified payroll · R&D Form B/);
+  assert.doesNotMatch(page, /REPORT_TYPES\.(map|find)/);
+  assert.match(page, /const registerKey = listRow && seesRegister \?/);
+});
+
+test('the Researcher Budget reuses the Form B table read-only, with Remaining', () => {
+  const page = source('pages/researcher/ResearcherBudget.jsx');
+  assert.match(page, /<FormBTable formB=\{formB\} remaining \/>/);
+  assert.doesNotMatch(page, /setup=|RowMenu/);
+  assert.match(source('pages/program/ProgramProjectDetail.jsx'), /<FormBTable formB=\{formB\} setup=\{setup\} onOpen=\{openDialog\} \/>/);
+});

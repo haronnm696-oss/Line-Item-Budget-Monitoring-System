@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { assignToProject, fetchProgramProject } from '../../api/program';
 import { ENDPOINTS } from '../../api/endpoints';
@@ -8,6 +8,7 @@ import { formatPct, peso } from '../../components/money';
 import { formatDate, formatDateTime } from '../../lib/datetime';
 import { sourceLabels } from '../../lib/fundingSource';
 import FundingWarnings from '../../components/program/FundingWarnings';
+import FormBTable from '../../components/projects/FormBTable';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
 import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
 import { agreementLines } from '../../lib/projectAgreement';
@@ -18,7 +19,7 @@ import { errorText } from '../../api/leader';
 import { RowMenu } from '../../components/ActionMenu';
 import ProgramAssignUserModal from '../../components/program/ProgramAssignUserModal';
 import { canAssignTo } from '../../lib/assignForm';
-import { activityTitle, lineItemActions, menuOptions, trancheActions } from '../../lib/projectRowActions';
+import { activityTitle, menuOptions, trancheActions } from '../../lib/projectRowActions';
 
 const LIQUIDATION_TONE = { Approved: 'healthy', Pending: 'watch', Rejected: 'risk', 'Not submitted': 'watch' };
 
@@ -255,36 +256,7 @@ export default function ProgramProjectDetail() {
         {sections.length === 0 ? (
           <p className="pl-inbox-empty">No line items recorded yet.</p>
         ) : (
-          <div className="program-scroll">
-            <table className="program-table fb-table">
-              <caption className="pa-sr-only">Line-item budget in R&amp;D Form B layout</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Particulars</th>
-                  <th scope="col" className="num">{labels.implementing_agency}</th>
-                  <th scope="col" className="num">{labels.funder}</th>
-                  <th scope="col" className="num">Total</th>
-                  <th scope="col" className="num">Spent</th>
-                  {setup && <th scope="col"><span className="pa-sr-only">Actions</span></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {sections.map((section) => (
-                  <FormBSection
-                    key={section.type}
-                    section={section}
-                    setup={setup}
-                    onOpen={openDialog}
-                  />
-                ))}
-              </tbody>
-              {formB?.grand_total && (
-                <tfoot>
-                  <TotalRow className="fb-grand" label="Grand total" totals={formB.grand_total} setup={setup} />
-                </tfoot>
-              )}
-            </table>
-          </div>
+          <FormBTable formB={formB} setup={setup} onOpen={openDialog} />
         )}
       </section>
 
@@ -532,84 +504,6 @@ export default function ProgramProjectDetail() {
           onSaved={saved}
         />
       )}
-    </>
-  );
-}
-
-/** A sub-total row: counterpart, funder and total (spent left blank). */
-function TotalRow({ className, label, totals, setup }) {
-  return (
-    <tr className={className}>
-      <th scope="row">{label}</th>
-      <td className="num">{peso(totals.implementing_agency)}</td>
-      <td className="num">{peso(totals.funder)}</td>
-      <td className="num">{peso(totals.total)}</td>
-      <td />
-      {setup && <td />}
-    </tr>
-  );
-}
-
-/** One line item: name, Form B computation, the two amounts, spent, actions. */
-function ItemRow({ item, inSub, setup, onOpen }) {
-  const used = setup?.used_line_items.includes(item.id);
-  return (
-    <tr className={`fb-item${inSub ? ' in-sub' : ''}`}>
-      <td>
-        <div>{item.name}</div>
-        {item.computation && <div className="fb-computation">{item.computation}</div>}
-      </td>
-      <td className="num">{peso(item.implementing_agency_amount)}</td>
-      <td className="num">{peso(item.funder_amount)}</td>
-      <td className="num">{peso(item.allocated)}</td>
-      <td className="num">
-        {peso(item.spent)}
-        {item.spent > item.allocated && <div><ProgramPill value="Over budget" tone="risk" icon="✕" /></div>}
-      </td>
-      {setup && (
-        <td className="pd-actions">
-          {used && <span className="project-code" title="It has expenses, payroll or purchase requests">🔒 In use </span>}
-          <RowMenu name={item.name} options={menuOptions(lineItemActions(item, { used }), onOpen)} />
-        </td>
-      )}
-    </tr>
-  );
-}
-
-/**
- * PS or MOOE in Form B order: Direct then Indirect cost, each with its
- * expense groups (and optional sub-groups), sub-totals per source at every
- * level.
- */
-function FormBSection({ section, setup, onOpen }) {
-  const span = setup ? 6 : 5;
-  const rowProps = { setup, onOpen };
-  return (
-    <>
-      <tr className="fb-section">
-        <th scope="rowgroup" colSpan={span}>{section.label} ({section.type})</th>
-      </tr>
-      {section.cost_types.map((cost) => (
-        <Fragment key={cost.cost_type}>
-          <tr className="fb-cost"><td colSpan={span}>{cost.label}</td></tr>
-          {cost.groups.map((group) => (
-            <Fragment key={group.name}>
-              <tr className="fb-group"><td colSpan={span}>{group.name}</td></tr>
-              {group.items.map((item) => <ItemRow key={item.id} item={item} {...rowProps} />)}
-              {group.subgroups.map((sub) => (
-                <Fragment key={sub.name}>
-                  <tr className="fb-subgroup"><td colSpan={span}>{sub.name}</td></tr>
-                  {sub.items.map((item) => <ItemRow key={item.id} item={item} inSub {...rowProps} />)}
-                  <TotalRow className="fb-sub" label={`Sub-total, ${sub.name}`} totals={sub.subtotal} setup={setup} />
-                </Fragment>
-              ))}
-              <TotalRow className="fb-sub" label={`Sub-total, ${group.name}`} totals={group.subtotal} setup={setup} />
-            </Fragment>
-          ))}
-          <TotalRow className="fb-sub" label={`Sub-total, ${cost.label}`} totals={cost.subtotal} setup={setup} />
-        </Fragment>
-      ))}
-      <TotalRow className="fb-sub-section" label={`Total ${section.type}`} totals={section.subtotal} setup={setup} />
     </>
   );
 }

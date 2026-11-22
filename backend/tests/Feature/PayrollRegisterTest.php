@@ -185,10 +185,13 @@ class PayrollRegisterTest extends TestCase
 
     public function test_each_role_sees_only_their_projects(): void
     {
-        foreach ([$this->programLeader, $this->projectLeader, $this->finance, $this->researcher, $this->assistant] as $user) {
+        foreach ([$this->programLeader, $this->projectLeader, $this->finance, $this->assistant] as $user) {
             $this->actingAs($user)->getJson($this->url($this->project))->assertOk();
             $this->get("/api/projects/{$this->project->id}/reports/payroll-register")->assertOk();
         }
+        // Pay per person: never for Researchers (ResearcherPayPrivacyTest).
+        $this->actingAs($this->researcher)->getJson($this->url($this->project))->assertForbidden();
+        $this->get("/api/projects/{$this->project->id}/reports/payroll-register")->assertForbidden();
 
         // Assigned to the other project only (Finance/Admin there).
         $this->actingAs($this->outsider)->getJson($this->url($this->project))->assertForbidden();

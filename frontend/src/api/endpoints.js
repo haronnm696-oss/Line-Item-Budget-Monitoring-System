@@ -137,7 +137,8 @@
  *       -> { project, period, period_label, has_recorded_deductions,
  *            months: [{ month, month_label, months, batch_id, verified_at, verified_by, rows, totals }], totals }
  *       VERIFIED payroll batches only; CSV: /reports/payroll-register with the same params.
- *       Any user of the project (and the Program Leader); 403 otherwise.
+ *       The Program Leader, and the project's Project Leader, Finance/Admin and Research Assistants;
+ *       403 for Researchers (pay per person; also GET /payroll, payroll-batch files) and outsiders.
  *
  * Audit trail:
  *   GET /api/audit?project_id=&action=&type=&date=
