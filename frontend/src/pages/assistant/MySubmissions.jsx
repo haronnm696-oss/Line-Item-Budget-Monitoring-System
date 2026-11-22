@@ -6,7 +6,6 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { SUBMISSION_TABS, SUBMISSION_TYPES, parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
@@ -53,7 +52,6 @@ export default function MySubmissions() {
             {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Every record you encoded, and who has it now
           </p>
         </div>
-        <div className="pl-head-actions"><ProjectSelect picker={picker} id="ra-submissions-project" /></div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>

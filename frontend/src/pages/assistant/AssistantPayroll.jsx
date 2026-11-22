@@ -13,7 +13,6 @@ import { downloadPayrollRegisterCsv, fetchPayrollRegister } from '../../api/repo
 import { printHtmlDocument, saveBlob } from '../../lib/download';
 import { registerDocumentHtml } from '../../lib/payrollRegister';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import DocumentList from '../../components/leader/DocumentList';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import StagePill from '../../components/assistant/StagePill';
@@ -136,7 +135,6 @@ export default function AssistantPayroll() {
         </div>
         {projectId && (
           <div className="pl-head-actions">
-            <ProjectSelect picker={picker} id="ra-payroll-project" />
             <div className="program-field">
               <label htmlFor="ra-payroll-month">First month</label>
               <input id="ra-payroll-month" className="program-input" type="month" {...MONTH_BOUNDS} value={month}

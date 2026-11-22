@@ -141,7 +141,6 @@ class ResearchAssistantService
                 'missing_receipts' => $compliance['missing_receipt'],
             ],
             'submissions' => $latest,
-            'missing_receipts' => $compliance['missing_items'],
         ];
     }
 

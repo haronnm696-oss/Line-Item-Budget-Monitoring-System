@@ -5,7 +5,6 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import { peso } from '../../components/money';
 
 const GROUPS = [
@@ -45,7 +44,6 @@ export default function BalancingQuery() {
             {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Available = Allocated − Spent − Pending. Spent = verified expenses and verified payroll.
           </p>
         </div>
-        <div className="pl-head-actions"><ProjectSelect picker={picker} id="ra-balancing-project" /></div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>

@@ -360,7 +360,7 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
           )}
           <div className="program-field full">
             <label htmlFor="ld-exp-desc">Description</label>
-            <input id="ld-exp-desc" className="program-input" maxLength={500} value={form.description} onChange={set('description')} disabled={locked} />
+            <input id="ld-exp-desc" className="program-input" autoComplete="off" maxLength={500} value={form.description} onChange={set('description')} disabled={locked} />
             {err('description')}
           </div>
           <div className="program-field">
@@ -375,11 +375,11 @@ export default function RecordExpenseDialog({ projectId, expense = null, assista
           </div>
           <div className="program-field">
             <label htmlFor="ld-exp-payee">Payee <span className="ld-muted">optional</span></label>
-            <input id="ld-exp-payee" className="program-input" maxLength={255} value={form.payee} onChange={set('payee')} disabled={locked} />
+            <input id="ld-exp-payee" className="program-input" autoComplete="off" maxLength={255} value={form.payee} onChange={set('payee')} disabled={locked} />
           </div>
           <div className="program-field">
             <label htmlFor="ld-exp-ref">Reference no. (OR / voucher) <span className="ld-muted">optional</span></label>
-            <input id="ld-exp-ref" className="program-input" maxLength={100} value={form.reference_no} onChange={set('reference_no')} disabled={locked} />
+            <input id="ld-exp-ref" className="program-input" autoComplete="off" maxLength={100} value={form.reference_no} onChange={set('reference_no')} disabled={locked} />
           </div>
 
           {editing && (

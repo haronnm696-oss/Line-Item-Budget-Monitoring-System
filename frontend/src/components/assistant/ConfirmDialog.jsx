@@ -42,6 +42,7 @@ export default function ConfirmDialog({ title, body, confirmLabel, busyLabel = '
             <label htmlFor="ra-confirm-reason">{reasonLabel} <span className="ld-required">required</span></label>
             <textarea
               id="ra-confirm-reason"
+              autoComplete="off"
               className="program-textarea"
               rows={3}
               maxLength={2000}

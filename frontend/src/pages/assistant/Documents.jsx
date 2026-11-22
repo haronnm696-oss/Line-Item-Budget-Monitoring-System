@@ -9,7 +9,6 @@ import { useUrlQuery } from '../../lib/useUrlQuery';
 import { RECORD_PAGE } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import ProjectDocumentsSection from '../../components/projects/ProjectDocumentsSection';
 
 const DOCUMENT_TYPES = [
@@ -69,7 +68,6 @@ export default function Documents() {
             {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}Receipts, quotations, invoices and payroll files of the project
           </p>
         </div>
-        <div className="pl-head-actions"><ProjectSelect picker={picker} id="ra-documents-project" /></div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>

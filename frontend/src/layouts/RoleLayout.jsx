@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
 import { useApiData } from '../lib/useApiData';
-import { pickProject } from '../lib/myProjects';
+import { pickProject, projectRoleFor } from '../lib/myProjects';
+import {
+  hasTopBarPicker, readProjectChoice, requestedProject, searchWithProject, showProjectPicker, withProject, writeProjectChoice,
+} from '../lib/projectChoice';
 import { apiGet } from '../api/http';
 import { ENDPOINTS } from '../api/endpoints';
 import RoleShell from './RoleShell';
+import TopBarProjectPicker from './TopBarProjectPicker';
 import { RoleBadgesContext } from './roleBadges';
 import { ROLE_NAV } from './roleNav';
 
@@ -39,19 +43,49 @@ const BADGE_SOURCE = {
 };
 
 /**
- * Sidebar badges for the project the page shows (?project=, else the
- * user's first project in that role). Project Leader: Submissions = "To
- * review", My requests = decisions not seen yet. Research Assistant: My
- * submissions = "Returned to you". Finance/Admin: Verification queue =
- * "To verify". Reloaded on every navigation and when a
- * page calls refreshBadges(). A failed count never breaks the shell.
+ * The project the role's pages show: ?project=, else the one remembered
+ * from the top-bar picker (Research Assistant, Finance/Admin, Researcher),
+ * else the first one (lib/useAssignedProject.js uses the same rule). A
+ * valid ?project= that arrives by link is remembered too. The Project
+ * Leader leads one project and has no picker.
  */
-function useProjectBadges(code) {
+function useRoleProject(code) {
+  const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const role = projectRoleFor(code);
+  const withPicker = hasTopBarPicker(code);
+  const needsProjects = withPicker || Boolean(BADGE_SOURCE[code]);
+  const projects = useApiData(needsProjects ? ENDPOINTS.projects : null);
+  const fromUrl = new URLSearchParams(location.search).get('project');
+  const remembered = withPicker ? readProjectChoice(user?.id, role) : null;
+  const picked = needsProjects ? pickProject(projects.data, requestedProject(fromUrl, remembered), role) : { projects: [], project: null };
+  const projectId = picked.project?.id ?? null;
+
+  useEffect(() => {
+    if (withPicker && fromUrl && projectId && String(projectId) === String(fromUrl)) {
+      writeProjectChoice(user?.id, role, projectId);
+    }
+  }, [withPicker, fromUrl, projectId, user?.id, role]);
+
+  function choose(id) {
+    writeProjectChoice(user?.id, role, id);
+    navigate({ pathname: location.pathname, search: searchWithProject(location.search, id) }, { replace: true });
+  }
+
+  return { projects: picked.projects, projectId, choose, showPicker: showProjectPicker(code, picked.projects), withPicker };
+}
+
+/**
+ * Sidebar badges for the project the page shows. Project Leader:
+ * Submissions = "To review", My requests = decisions not seen yet. Research
+ * Assistant: My submissions = "Returned to you". Finance/Admin: Verification
+ * queue = "To verify". Reloaded on every navigation and when a page calls
+ * refreshBadges(). A failed count never breaks the shell.
+ */
+function useProjectBadges(code, projectId) {
   const source = BADGE_SOURCE[code] ?? null;
   const location = useLocation();
-  const projects = useApiData(source ? ENDPOINTS.projects : null);
-  const requested = new URLSearchParams(location.search).get('project');
-  const projectId = source ? pickProject(projects.data, requested, source.role).project?.id ?? null : null;
   const [badges, setBadges] = useState({});
   const [tick, setTick] = useState(0);
 
@@ -67,19 +101,22 @@ function useProjectBadges(code) {
   const refreshBadges = useCallback(() => setTick((value) => value + 1), []);
   const take = useCallback((counts) => setBadges((current) => ({ ...current, ...counts })), []);
 
-  return { badges: projectId ? badges : {}, refreshBadges, setBadges: take };
+  return { badges: projectId && source ? badges : {}, refreshBadges, setBadges: take };
 }
 
 /**
  * Shell for the Project Leader, Research Assistant, Finance/Admin and
  * Researcher pages: the same shell as the Program Leader, with that role's
- * menu. The Project Leader and Research Assistant have badge counts.
+ * menu. The Project Leader, Research Assistant and Finance/Admin have
+ * badge counts. The Research Assistant, Finance/Admin and Researcher choose
+ * their project once, in the top bar (shown with more than one project).
  */
 export default function RoleLayout() {
   const { user, roleInfo } = useAuth();
   const code = normalizeRole(user) ?? 'RES';
   const roleLabel = roleInfo?.label ?? 'Account';
-  const badgeState = useProjectBadges(code);
+  const current = useRoleProject(code);
+  const badgeState = useProjectBadges(code, current.projectId);
 
   return (
     <RoleBadgesContext.Provider value={badgeState}>
@@ -89,6 +126,10 @@ export default function RoleLayout() {
         badges={badgeState.badges}
         badgeLabel={(key, count) => (BADGE_LABEL[key] ?? ((n) => `${n}`))(count)}
         fallbackName={roleLabel}
+        navTo={current.withPicker ? (to) => withProject(to, current.projectId) : undefined}
+        topBarExtra={current.showPicker
+          ? <TopBarProjectPicker projects={current.projects} projectId={current.projectId} onChoose={current.choose} />
+          : null}
       />
     </RoleBadgesContext.Provider>
   );

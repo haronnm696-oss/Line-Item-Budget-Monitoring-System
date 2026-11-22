@@ -199,12 +199,12 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
           </div>
           <div className="program-field full">
             <label htmlFor="ra-pr-desc">Description</label>
-            <input id="ra-pr-desc" className="program-input" maxLength={500} value={form.description} onChange={set('description')} disabled={locked} />
+            <input id="ra-pr-desc" className="program-input" autoComplete="off" maxLength={500} value={form.description} onChange={set('description')} disabled={locked} />
             {err('description')}
           </div>
           <div className="program-field">
             <label htmlFor="ra-pr-qty">Quantity</label>
-            <input id="ra-pr-qty" className="program-input" type="number" min="1" step="1" value={form.quantity} onChange={set('quantity')} disabled={locked} />
+            <input id="ra-pr-qty" className="program-input" autoComplete="off" type="number" min="1" step="1" value={form.quantity} onChange={set('quantity')} disabled={locked} />
             {err('quantity')}
           </div>
           <div className="program-field">
@@ -214,7 +214,7 @@ export default function PurchaseRequestDialog({ projectId, request = null, onClo
           </div>
           <div className="program-field full">
             <label htmlFor="ra-pr-supplier">Supplier / payee <span className="ld-muted">optional</span></label>
-            <input id="ra-pr-supplier" className="program-input" maxLength={255} value={form.supplier} onChange={set('supplier')} disabled={locked} />
+            <input id="ra-pr-supplier" className="program-input" autoComplete="off" maxLength={255} value={form.supplier} onChange={set('supplier')} disabled={locked} />
             <div className="ld-hint">Fills the payee when an expense is linked to this request.</div>
             {err('supplier')}
           </div>

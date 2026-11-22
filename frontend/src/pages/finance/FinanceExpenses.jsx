@@ -7,7 +7,6 @@ import { useUrlQuery } from '../../lib/useUrlQuery';
 import { canResubmit, parseOpen } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import StagePill from '../../components/assistant/StagePill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
@@ -58,7 +57,6 @@ export default function FinanceExpenses() {
         </div>
         {projectId && (
           <div className="pl-head-actions">
-            <ProjectSelect picker={picker} id="fin-expenses-project" />
             <div className="program-field">
               <label htmlFor="fin-expenses-status">Stage</label>
               <select id="fin-expenses-status" className="program-select" value={status} onChange={(event) => update({ status: event.target.value })}>

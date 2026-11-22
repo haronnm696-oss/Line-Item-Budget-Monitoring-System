@@ -6,7 +6,6 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { SUBMISSION_TABS, parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
 import SubmissionTable from '../../components/assistant/SubmissionTable';
@@ -52,7 +51,6 @@ export default function AssistantExpenses() {
         </div>
         {projectId && (
           <div className="pl-head-actions">
-            <ProjectSelect picker={picker} id="ra-expenses-project" />
             <button type="button" className="program-btn primary" onClick={() => { actions.setFeedback(null); setRecording(true); }}>Record expense</button>
           </div>
         )}

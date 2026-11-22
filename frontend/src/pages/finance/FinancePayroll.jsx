@@ -7,7 +7,6 @@ import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen } from '../../lib/assistantStatus';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import StagePill from '../../components/assistant/StagePill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
@@ -44,10 +43,11 @@ export default function FinancePayroll() {
             {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}One batch per pay period; no deductions or allowances. Spent = verified expenses and verified payroll
           </p>
         </div>
-        <div className="pl-head-actions">
-          <ProjectSelect picker={picker} id="fin-payroll-project" />
-          {picker.projectId && <Link className="program-btn" to={`/verification-queue${q}${q ? '&' : '?'}type=payroll`}>Payroll to verify</Link>}
-        </div>
+        {picker.projectId && (
+          <div className="pl-head-actions">
+            <Link className="program-btn" to={`/verification-queue${q}${q ? '&' : '?'}type=payroll`}>Payroll to verify</Link>
+          </div>
+        )}
       </div>
 
       {actions.feedback && (

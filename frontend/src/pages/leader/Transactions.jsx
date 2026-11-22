@@ -6,7 +6,6 @@ import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
-import ProjectSelect from '../../components/leader/ProjectSelect';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../lib/roles';
@@ -24,7 +23,8 @@ const FILTERS = ['from', 'to', 'line_item', 'category'];
  */
 export default function Transactions() {
   const picker = useAssignedProject();
-  // Only the Project Leader records here (no project picker for them either).
+  // Only the Project Leader records here. They lead one project and have no
+  // picker; Finance/Admin and Researchers choose the project in the top bar.
   const isLeader = normalizeRole(useAuth().user) === 'PL';
   const [searchParams, setSearchParams] = useSearchParams();
   const [docsFor, setDocsFor] = useState(null);
@@ -69,15 +69,14 @@ export default function Transactions() {
             Spent = verified expenses and verified payroll, newest first
           </p>
         </div>
-        <div className="pl-head-actions">
-          {!isLeader && <ProjectSelect picker={picker} id="transactions-project" />}
-          {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
-          {isLeader && picker.projectId && (
+        {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
+        {isLeader && picker.projectId && (
+          <div className="pl-head-actions">
             <button type="button" className="program-btn primary" onClick={() => { setFeedback(null); setRecording(true); }}>
               Record transaction
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {feedback && (
