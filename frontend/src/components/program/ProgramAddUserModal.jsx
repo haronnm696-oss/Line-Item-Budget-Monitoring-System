@@ -44,7 +44,7 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       return;
     }
     if (!isValidMsuEmail(form.email.trim())) {
-      setLocalError('Email must be a valid MSU-Marawi address (@s.msumain.edu.ph or @msumain.edu.ph).');
+      setLocalError('Email must be a valid MSU-Main address (@s.msumain.edu.ph or @msumain.edu.ph).');
       return;
     }
     if (!/^MSU-\d{5}$/i.test(form.empId.trim())) {

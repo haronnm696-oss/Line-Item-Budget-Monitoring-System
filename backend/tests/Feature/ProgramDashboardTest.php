@@ -38,13 +38,19 @@ class ProgramDashboardTest extends TestCase
             ->getJson('/api/program/overview')
             ->assertForbidden();
 
-        $this->actingAs($this->userWithRole('program-leader'))
+        $response = $this->actingAs($this->userWithRole('program-leader'))
             ->getJson('/api/program/overview')
             ->assertOk()
             ->assertJsonStructure([
-                'meta', 'kpis', 'projects', 'approvals', 'forecast',
-                'funders', 'funding_sources', 'deadlines', 'exceptions',
+                'meta', 'kpis', 'projects', 'approvals',
+                'funders', 'funding_sources', 'deadlines',
+                'monthly_expenses', 'category_summary',
             ]);
+
+        // Descriptive analytics only: no release forecast or exception flags.
+        foreach (['forecast', 'scheduled_releases', 'exceptions'] as $key) {
+            $this->assertArrayNotHasKey($key, $response->json());
+        }
     }
 
     public function test_health_rules_and_funder_filter_are_applied(): void
@@ -229,64 +235,6 @@ class ProgramDashboardTest extends TestCase
         $this->assertEquals($programLeader->id, $liquidation->fresh()->reviewed_by);
         $this->assertSame('Missing official receipts.', $liquidation->fresh()->remarks);
         $this->assertSame('rejected', $approval->fresh()->status);
-    }
-
-    public function test_forecast_counts_overdue_tranches_in_the_current_month(): void
-    {
-        $programLeader = $this->userWithRole('program-leader');
-        $project = $this->project($this->funder(), []);
-        ProjectTranche::create([
-            'project_id' => $project->id,
-            'sequence' => 1,
-            'name' => 'Overdue tranche',
-            'amount' => 420000,
-            'status' => 'due',
-            'planned_release_date' => '2026-08-01',
-        ]);
-        ProjectTranche::create([
-            'project_id' => $project->id,
-            'sequence' => 2,
-            'name' => 'December tranche',
-            'amount' => 628000,
-            'status' => 'upcoming',
-            'planned_release_date' => '2026-12-15',
-        ]);
-
-        $response = $this->actingAs($programLeader)
-            ->getJson('/api/program/overview')
-            ->assertOk();
-
-        $forecast = collect($response->json('forecast'))->keyBy('month');
-        $this->assertSame(420000.0, (float) $forecast['2026-11']['amount']);
-        $this->assertSame(628000.0, (float) $forecast['2026-12']['amount']);
-    }
-
-    public function test_exceptions_flag_self_benefiting_and_unused_line_items(): void
-    {
-        $programLeader = $this->userWithRole('program-leader');
-        $project = $this->project($this->funder(), [
-            'start_date' => '2026-01-01',
-            'end_date' => '2026-12-31',
-        ]);
-        LibCategory::create([
-            'project_id' => $project->id,
-            'category_type' => 'PS',
-            'line_item_name' => 'Program Leader Indirect Honoraria',
-            'allocated_amount' => 200000,
-        ]);
-        LibCategory::create([
-            'project_id' => $project->id,
-            'category_type' => 'MOOE',
-            'line_item_name' => 'Professional Services',
-            'allocated_amount' => 500000,
-        ]);
-
-        $response = $this->actingAs($programLeader)
-            ->getJson('/api/program/overview')
-            ->assertOk();
-
-        $this->assertCount(1, $response->json('exceptions.self_benefiting'));
-        $this->assertCount(1, $response->json('exceptions.unused_line_items'));
     }
 
     protected function userWithRole(string $slug): User

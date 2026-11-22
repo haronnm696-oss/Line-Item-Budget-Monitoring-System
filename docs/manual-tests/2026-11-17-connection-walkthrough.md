@@ -1,5 +1,7 @@
 # Manual test: the whole chain on one project (2026-11-17)
 
+> **Superseded by [2026-11-22-full-walkthrough.md](2026-11-22-full-walkthrough.md).** Its payroll steps use the removed Pay rates card and deduction settings, and say payroll is not part of LIB spent; none of these is true any more.
+
 The browser version of `backend/tests/Feature/ConnectionWalkthroughTest.php`.
 It checks that every role sees the **same project** once the Program Leader
 assigns them (the "You do not lead a project yet" bug), and that each hand-off

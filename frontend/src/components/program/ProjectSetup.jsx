@@ -292,7 +292,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
             <div className="program-form-grid">
               {text('implementing_agency_name', 'Implementing Agency', 'text', {
                 full: true,
-                hint: `For example MSU-Marawi. Leave blank to print ${setup?.labels?.implementing_agency || 'the default implementing agency'}.`,
+                hint: `For example MSU-Main. Leave blank to print ${setup?.labels?.implementing_agency || 'the default implementing agency'}.`,
               })}
               {text('monitoring_agency', 'Monitoring agency', 'text', { full: true, hint: "Leave blank to print the funder's name." })}
               {FORM_B_SIGNATORIES.map(([prefix, label]) => (

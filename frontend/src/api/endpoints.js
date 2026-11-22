@@ -18,16 +18,13 @@
  *   GET  /api/me                            -> 200 { user } | 401
  *
  * Dashboards (role-scoped, server decides what the caller may see):
- *   GET /api/dashboard/program              -> Program Leader summary
- *   GET /api/dashboard/project-leader       -> Project Leader summary
- *   GET /api/dashboard/researcher           -> Researcher summary
- *   GET /api/dashboard/research-assistant   -> RA summary
+ *   GET /api/program/overview               -> Program Leader overview (descriptive figures only)
+ *   GET /api/projects/:id/leader-overview   -> Project Leader overview (see below)
  *
  * Projects:
  *   GET  /api/projects                      -> list (Program Leader: all; others: assigned projects only)
  *   GET  /api/projects/:id                  -> detail incl. lib_categories rollups and expenses (403 if not assigned)
- *   POST /api/projects                      -> create (not built yet)
- *   PUT  /api/projects/:id                  -> update (not built yet)
+ *   Projects are created and edited by the Program Leader under /api/program/projects.
  *
  * Expenses (workflow: draft -> submitted -> endorsed "Approved by Project
  * Leader" -> verified, or returned; only verified counts as spent):
@@ -165,11 +162,6 @@
  * Audit trail:
  *   GET /api/audit?project_id=&action=&type=&date=
  *
- * Users & roles:
- *   GET  /api/projects/:id/team
- *   POST /api/projects/:id/team              -> { user_id, role_id }
- *   GET  /api/roles                          -> role catalogue + capability matrix
- *
  * Project Leader pages (project-leader of the project; 403 otherwise):
  *   GET /api/projects/:id/leader-overview   -> { project, kpis, review, alerts, monthly_expenses, category_summary, transactions, requests }
  *                                           project.implementing_agency (Form B field, else IMPLEMENTING_AGENCY);
@@ -223,7 +215,6 @@ export const ENDPOINTS = {
   me: '/api/me',
   forgotPassword: '/api/forgot-password',
   resetPassword: '/api/reset-password',
-  dashboard: (role) => `/api/dashboard/${role}`,
   programLeaderDashboard: (projectId) =>
     `/api/dashboard/program-leader${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`,
   programOverview: '/api/program/overview',
@@ -338,8 +329,6 @@ export const ENDPOINTS = {
   formB: (projectId) => `/api/projects/${projectId}/form-b`,
   payrollRegister: (projectId) => `/api/projects/${projectId}/payroll-register`,
   audit: '/api/audit',
-  team: (projectId) => `/api/projects/${projectId}/team`,
-  roles: '/api/roles',
   pendingUsers: '/api/users/pending',
   approveUser: (id) => `/api/users/${id}/approve`,
 };

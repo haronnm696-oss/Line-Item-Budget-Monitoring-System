@@ -189,8 +189,6 @@ class ProgramApprovalsTest extends TestCase
 
         $this->assertSame(4, $response->json('kpis.pending_approvals_total'));
         $this->assertSame(8, $response->json('kpis.oldest_waiting_days'));
-        $this->assertArrayHasKey('scheduled_releases', $response->json());
-        $this->assertSame($response->json('forecast'), $response->json('scheduled_releases'));
     }
 
     public function test_completed_projects_are_closed_and_never_scored_for_under_spending(): void

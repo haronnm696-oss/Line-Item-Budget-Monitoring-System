@@ -294,8 +294,8 @@ class DashboardService
     }
 
     /**
-     * Burn rate compares elapsed project time against budget consumption and
-     * projects the final spend at the current monthly run rate.
+     * Burn rate compares elapsed project time against budget consumption
+     * (descriptive only; it does not project future spending).
      */
     public function burnRate(Project $project, ?float $budget = null, ?float $spent = null): array
     {
@@ -321,17 +321,12 @@ class DashboardService
         $variance = round($spentPct - $elapsedPct, 1);
 
         $monthsElapsed = max(0.1, $elapsedDays / 30.44);
-        $totalMonths = max(0.1, $totalDays / 30.44);
-        $monthlyBurn = $elapsedDays > 0 ? round($spent / $monthsElapsed, 2) : 0.0;
-        $projectedTotal = round($monthlyBurn * $totalMonths, 2);
 
         [$status, $label, $tone, $message] = $this->burnStatus(
             $start,
-            $today,
             $budget,
             $spent,
-            $variance,
-            $projectedTotal
+            $variance
         );
 
         return [
@@ -349,9 +344,6 @@ class DashboardService
             'total_days' => $totalDays,
             'days_remaining' => $today->greaterThan($end) ? 0 : (int) $today->diffInDays($end),
             'months_elapsed' => round($monthsElapsed, 1),
-            'monthly_burn' => $monthlyBurn,
-            'projected_total' => $projectedTotal,
-            'forecast_variance' => round($projectedTotal - $budget, 2),
         ];
     }
 
@@ -411,11 +403,9 @@ class DashboardService
 
     protected function burnStatus(
         $start,
-        $today,
         float $budget,
         float $spent,
-        float $variance,
-        float $projectedTotal
+        float $variance
     ): array {
         if ($start->isFuture()) {
             return [
@@ -426,11 +416,11 @@ class DashboardService
             ];
         }
 
-        if ($budget > 0 && ($spent > $budget || $projectedTotal > $budget * 1.05 || $variance > 15)) {
-            $overrun = $projectedTotal - $budget;
-            $message = $overrun > 0
-                ? 'At the current run rate the project is projected to exceed its budget by '
-                    . number_format($overrun, 2) . '.'
+        // Descriptive only: compares what has been spent with how much of
+        // the project period has passed. No projection of future spending.
+        if ($budget > 0 && ($spent > $budget || $variance > 15)) {
+            $message = $spent > $budget
+                ? 'Spending has passed the approved budget.'
                 : 'Spending is running materially ahead of the elapsed project timeline.';
 
             return ['high_risk', 'High Burn Rate Risk', 'over', $message];

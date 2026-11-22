@@ -109,17 +109,31 @@ CACHE_DRIVER=file
 FILESYSTEM_DRIVER=local
 QUEUE_CONNECTION=sync
 
-# Password-reset email. Replace every placeholder with your SMTP provider.
+# Uploaded documents (receipts, MOA, Special Orders, quotations) are stored in
+# the database (document_contents), so they survive Render's ephemeral disk.
+DOCUMENTS_DISK=database
+
+# Implementing agency printed on R&D Form B when a project leaves its own
+# "Implementing Agency" blank. Funder names come from the funders list.
+IMPLEMENTING_AGENCY=MSU
+
+# Email (password reset, registration review, approval notifications)
+# through Brevo SMTP relay.
 FRONTEND_URL=https://<your-app>.vercel.app
 MAIL_MAILER=smtp
-MAIL_HOST=<smtp-host>
+MAIL_HOST=smtp-relay.brevo.com
 MAIL_PORT=587
-MAIL_USERNAME=<smtp-username>
-MAIL_PASSWORD=<smtp-password>
+MAIL_USERNAME=<Brevo SMTP login>
+MAIL_PASSWORD=<Brevo SMTP key>
 MAIL_ENCRYPTION=tls
-MAIL_FROM_ADDRESS=no-reply@<your-domain>
+MAIL_FROM_ADDRESS=<a sender verified in Brevo>
 MAIL_FROM_NAME="LIB Monitoring System"
 ```
+
+Brevo: create an SMTP key under **SMTP & API → SMTP**, use the SMTP login
+shown there as `MAIL_USERNAME`, and verify the sender address (or domain)
+under **Senders, Domains & Dedicated IPs** before using it as
+`MAIL_FROM_ADDRESS`. Mail from an unverified sender is rejected.
 
 ### Testing password-reset mail locally
 
@@ -245,17 +259,37 @@ Aiven console before you deploy.
 
 ### 5.3 Environment variables (Render)
 
+Settings in use besides the database, session and CORS values in section 2:
+
 | Variable | Value | Notes |
 |---|---|---|
+| `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Brevo SMTP relay (section 2) | Password reset, registration review and notification emails. `FRONTEND_URL` builds the links in them. |
+| `IMPLEMENTING_AGENCY` | `MSU` (default) | Printed on R&D Form B when a project's own Implementing Agency field is blank. |
 | `DOCUMENTS_DISK` | `database` | Documents are stored in `document_contents`, so they survive Render's ephemeral filesystem. |
 | `RUN_DEMO_ASSIGN` | `1` only for the release that needs it | Runs the idempotent `DemoProjectAssignmentsSeeder` on boot. |
 | `RUN_DOCUMENT_IMPORT` | `1` only for the release that needs it | Copies document files from the old disk into the database on boot (idempotent). |
 
-- Payroll has no environment settings. Project honoraria have no deductions
-  (no GSIS, PhilHealth, Pag-IBIG or withholding tax) and no allowances: each
-  row is the monthly honorarium x the months the Special Order is effective
-  in the pay period, and net pay = gross pay. Any `PAYROLL_*` or
-  `PAYROLL_RATES_LABEL` variable left on Render is ignored and can be removed.
+Payroll has no environment settings. Delete any `PAYROLL_*` variable still
+set on Render (or in a local `backend/.env`); nothing reads them.
+
+### 5.3.1 Migrations in this release
+
+The entrypoint runs them on boot (`php artisan migrate --force`). All are
+additive: they add tables or nullable/defaulted columns and never drop or
+rename anything. Added since the previous release notes (2026-11-20):
+
+| Migration | What it does |
+|---|---|
+| `2026_11_27_000001_add_moa_fields_to_projects` | Adds the MOA number and date, the R&D committee approval date and the fund source (printed on Form B) to `projects`. |
+| `2026_11_28_000001_add_implementing_agency_name_to_projects` | Adds the optional per-project Implementing Agency printed on Form B (blank = `IMPLEMENTING_AGENCY`). |
+| `2026_11_29_000001_restore_money_column_defaults` | Restores `DEFAULT 0` on NOT NULL money columns that an earlier `MODIFY` dropped (strict-mode error 1364 on New project). |
+| `2026_11_30_000001_add_items_and_document_numbers_to_purchase_requests` | Creates `purchase_request_items` (multi-item purchase requests) and adds the PR, SAI and ALOBS numbers and dates to `purchase_requests`. Backfills one item for every existing request. |
+| `2026_12_01_000001_add_expense_id_to_purchase_request_items` | Links each purchase request item to the expense that pays it. Backfills existing links. |
+| `2026_12_02_000001_add_purchase_request_signatories_to_projects` | Adds the Requested by position and the Noted by / Approved by names and positions printed on purchase requests. |
+
+After the deploy, `SELECT COUNT(*) FROM purchase_requests pr WHERE NOT EXISTS
+(SELECT 1 FROM purchase_request_items i WHERE i.purchase_request_id = pr.id);`
+should return 0 (every request has its items).
 
 ### 5.4 Post-deploy checks
 
@@ -302,8 +336,9 @@ start. Confirm that the next boot log has no `[demo-assign]` or
   worker count low (the shipped `mpm_prefork.conf` uses 15 workers).
 - For local testing, `MAIL_MAILER=log` writes the reset link to
   `storage/logs/laravel.log`. Production should use the SMTP settings above.
-- Render's filesystem is ephemeral. Add S3/R2 storage or a paid persistent disk
-  before relying on uploaded files.
+- Render's filesystem is ephemeral. Uploaded documents are safe because
+  `DOCUMENTS_DISK=database` keeps them in MySQL; anything written to
+  `storage/` on the container (logs, cached files) is lost on redeploy.
 - **Cookie domain note:** `SESSION_DOMAIN` must stay unset so the session cookie
   is host-only for the Vercel domain. Do not set it to `.vercel.app` (a public
   suffix — browsers reject it) or `localhost`.

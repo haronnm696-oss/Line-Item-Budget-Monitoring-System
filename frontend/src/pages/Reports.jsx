@@ -106,6 +106,15 @@ function downloadCSV(content, filename) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * PS or MOOE from the row's line item type (Form B). Only a row without a
+ * line item falls back to its name. "Professional Services" is MOOE.
+ */
+function isPsRow(row) {
+  if (row.type) return row.type === 'PS';
+  return /honoraria|salaries/i.test(row.category || '');
+}
+
 export default function Reports({ programMode = false, initialCode = '' }) {
   const { user } = useAuth();
   const roleCode = programMode ? 'PRG' : normalizeRole(user);
@@ -239,17 +248,9 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }
 
     if (selectedCategory === 'PS only') {
-      result = result.filter((e) => e.type === 'PS' || (
-        (e.category || '').includes('Honoraria')
-        || (e.category || '').includes('Professional Services')
-        || (e.category || '').includes('Salaries')
-      ));
+      result = result.filter((e) => isPsRow(e));
     } else if (selectedCategory === 'MOOE only') {
-      result = result.filter((e) => e.type === 'MOOE' || (
-        !(e.category || '').includes('Honoraria')
-        && !(e.category || '').includes('Professional Services')
-        && !(e.category || '').includes('Salaries')
-      ));
+      result = result.filter((e) => !isPsRow(e));
     }
 
     return result.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -314,15 +315,12 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
   function buildMonthlySummaryRows() {
     const data = {};
-    expensesForPreview.forEach((e) => {
+    // Spent only (verified expenses and verified payroll), like every other screen.
+    expensesForPreview.filter((e) => e.status === 'Verified').forEach((e) => {
       const key = (e.date || '').slice(0, 7);
       if (!key) return;
       if (!data[key]) data[key] = { ps: 0, mooe: 0 };
-      const isPS = e.type === 'PS'
-        || (e.category || '').includes('Honoraria')
-        || (e.category || '').includes('Professional Services')
-        || (e.category || '').includes('Salaries');
-      if (isPS) data[key].ps += Number(e.amount) || 0;
+      if (isPsRow(e)) data[key].ps += Number(e.amount) || 0;
       else data[key].mooe += Number(e.amount) || 0;
     });
 
