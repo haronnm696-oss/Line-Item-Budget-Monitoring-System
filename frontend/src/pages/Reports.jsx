@@ -11,7 +11,9 @@ import { statusTone } from '../components/Chip';
 import DownloadMenu from '../components/DownloadMenu';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
-import { reportDownloadOptions, reportsEyebrow } from '../lib/reportDownloads';
+import { canSeePayrollRegister, reportDownloadOptions, reportsEyebrow, reportTypesFor, showReportProjectField } from '../lib/reportDownloads';
+import { isReadOnlyRole } from '../lib/pageHead';
+import PageTitle from '../components/PageTitle';
 import { NO_ACTIVE_PROJECT_TEXT } from '../lib/leaderRule';
 import { myProjects, notAssignedText, pickProject, projectRoleFor } from '../lib/myProjects';
 import FundingWarnings from '../components/program/FundingWarnings';
@@ -109,6 +111,9 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const roleCode = programMode ? 'PRG' : normalizeRole(user);
   // The Project Leader works on the project from ?project= (no Project parameter).
   const isLeader = roleCode === 'PL';
+  // Researchers: no Payroll register (pay per person).
+  const reportTypes = reportTypesFor(roleCode, REPORT_TYPES);
+  const seesRegister = canSeePayrollRegister(roleCode);
   // The one "my projects" rule for this role (the Program Leader: all projects).
   const myRole = programMode ? null : projectRoleFor(roleCode);
   const [chosenCode, setChosenCode] = useState('');
@@ -148,6 +153,9 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     ?? projectList[0]
     ?? null;
   const selectedCode = listRow?.code ?? '';
+  // One project (Researcher, Finance/Admin) or the Project Leader: no Project
+  // parameter; the subtitle names the project instead.
+  const showProjectField = showReportProjectField(roleCode, projectsStatus, projectList.length);
 
   // ---------- Selected project's financial detail ----------
   const [detailAttempt, setDetailAttempt] = useState(0);
@@ -178,7 +186,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   const expenseRows = Array.isArray(detail?.expenses) ? detail.expenses : [];
   // ---------- Payroll register (server: verified batches only) ----------
   const registerParams = { period: REGISTER_PERIOD[selectedPeriod] ?? 'all' };
-  const registerKey = listRow ? `${listRow.id}:${registerParams.period}:${detailAttempt}` : '';
+  const registerKey = listRow && seesRegister ? `${listRow.id}:${registerParams.period}:${detailAttempt}` : '';
   const [registerResult, setRegisterResult] = useState(null); // { key, data } | { key, error }
 
   useEffect(() => {
@@ -540,7 +548,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         ${tableHtml}
 
         <div class="footer">
-          This report was generated from verified expense records only. <br />
+          This report was generated from verified expenses and verified payroll. <br />
           Mindanao State University–Main Campus · R&D Form B · Line-Item Budget Monitoring System.
         </div>
       </body>
@@ -565,7 +573,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   }
 
   // Project / Period / Category selects, shared by both layouts. The Project
-  // Leader has no Project select (the page follows ?project=).
+  // select only when there is a project to choose (showReportProjectField).
   function renderParamFields(program) {
     const fieldProps = program ? { className: 'program-field' } : { className: 'field', style: { margin: 0 } };
     const selectClass = program ? 'program-select' : undefined;
@@ -576,7 +584,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     }[projectsStatus];
     return (
       <>
-        {!isLeader && <div {...fieldProps}>
+        {showProjectField && <div {...fieldProps}>
           <label htmlFor="report-param-project">Project</label>
           <div className="rp-project">
             <select
@@ -660,7 +668,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   useEffect(() => {
     if (autoExport.current || !reportsReady) return;
     const params = new URLSearchParams(window.location.search);
-    const report = REPORT_TYPES.find((r) => r.key === params.get('report'));
+    const report = reportTypes.find((r) => r.key === params.get('report'));
     const format = params.get('format');
     if (!report || !['pdf', 'csv'].includes(format)) return;
     // The payroll register loads separately: wait for it.
@@ -676,11 +684,10 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       {!programMode && (
         <div className="pl-head">
           <div>
-            <div className="program-eyebrow">{reportsEyebrow(roleCode)}</div>
-            <h1 className="program-h1">Reports</h1>
+            <PageTitle eyebrow={reportsEyebrow(roleCode)} title="Reports" readOnly={isReadOnlyRole(roleCode)} />
             <p className="program-sub">
-              {isLeader && listRow ? `${listRow.title} · ${listRow.code} · ` : ''}
-              Generated from verified expense records only · R&D Form B
+              {!showProjectField && listRow ? `${listRow.title} · ${listRow.code} · ` : ''}
+              Generated from verified expenses and verified payroll · R&D Form B
             </p>
           </div>
         </div>
@@ -711,7 +718,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
           <div className="prr-label" id="prr-reports">Reports for this project</div>
           <ul className="prr-list" aria-labelledby="prr-reports">
-            {REPORT_TYPES.map((r) => (
+            {reportTypes.map((r) => (
               <li className="prr-row" key={r.key}>
                 <span className="prr-ic" aria-hidden="true">{r.icon}</span>
                 <div className="prr-text">
@@ -727,14 +734,14 @@ export default function Reports({ programMode = false, initialCode = '' }) {
         </div>
       ) : (
         <>
-          {/* Without the Project select, the Project Leader sees the project list's state here. */}
-          {isLeader && projectsStatus === 'error' && (
+          {/* Without the Project select, the project list's state shows here. */}
+          {!showProjectField && projectsStatus === 'error' && (
             <div className="rp-error rp-error-block" role="alert">
               <span>{projectsResult?.error || 'Could not load projects'}</span>
               <button type="button" className="btn sm" onClick={retryProjects}>Try again</button>
             </div>
           )}
-          {isLeader && projectsStatus === 'empty' && <div className="banner" role="status">{notAssignedText(myRole)}</div>}
+          {!showProjectField && projectsStatus === 'empty' && <div className="banner" role="status">{notAssignedText(myRole)}</div>}
           {leaderPick && !leaderPick.project && (
             <div className="banner" role="status">{leaderPick.past.length ? NO_ACTIVE_PROJECT_TEXT : notAssignedText(myRole)}</div>
           )}
@@ -742,7 +749,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           {/* Report parameters first: every report below uses them. */}
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="panel-head"><h3>Report parameters</h3></div>
-            <div style={{ padding: 16 }} className={`grid ${isLeader ? 'c2' : 'c3'}`}>
+            <div style={{ padding: 16 }} className={`grid ${showProjectField ? 'c3' : 'c2'}`}>
               {renderParamFields(false)}
             </div>
           </div>
@@ -750,7 +757,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
           {/* Report cards */}
           <div className="report-opts" style={{ marginBottom: 20 }}>
-            {REPORT_TYPES.map((r) => (
+            {reportTypes.map((r) => (
               <div className="report-card" key={r.key}>
                 <div className="rc-ic">{r.icon}</div>
                 <div style={{ flex: 1 }}>

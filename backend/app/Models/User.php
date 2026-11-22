@@ -200,6 +200,21 @@ class User extends Authenticatable
         return $this->projectUsers()->pluck('project_id')->map(fn ($id) => (int) $id)->all();
     }
 
+    /**
+     * Personnel pay (honoraria per person, payroll rows, the payroll register
+     * and payroll files): the Program Leader, and the project's Project
+     * Leader, Finance/Admin and Research Assistants. A Researcher sees
+     * payroll only as totals (budget, transactions, Form B), never per person.
+     */
+    public function canSeePersonnelPay(Project|int $project): bool
+    {
+        if ($this->isProgramLeader()) {
+            return true;
+        }
+
+        return $this->hasRoleOn($project, ['project-leader', 'finance-admin', 'research-assistant']);
+    }
+
     public function canAccessProject(Project|int $project): bool
     {
         if ($this->isProgramLeader()) {

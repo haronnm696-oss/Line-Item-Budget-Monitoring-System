@@ -37,7 +37,12 @@ class DocumentController extends Controller
     // One typed pair per record so route-model binding resolves the record.
     public function indexForExpense(Expense $expense) { return $this->index($expense); }
     public function storeForExpense(Request $request, Expense $expense) { return $this->store($request, $expense); }
-    public function indexForPayrollBatch(PayrollBatch $payrollBatch) { return $this->index($payrollBatch); }
+    public function indexForPayrollBatch(Request $request, PayrollBatch $payrollBatch)
+    {
+        self::requirePayAccess($payrollBatch, $request->user());
+
+        return $this->index($payrollBatch);
+    }
     public function storeForPayrollBatch(Request $request, PayrollBatch $payrollBatch) { return $this->store($request, $payrollBatch); }
     public function indexForPurchaseRequest(PurchaseRequest $purchaseRequest) { return $this->index($purchaseRequest); }
     public function storeForPurchaseRequest(Request $request, PurchaseRequest $purchaseRequest) { return $this->store($request, $purchaseRequest); }
@@ -87,6 +92,11 @@ class DocumentController extends Controller
         if ($document->documentable instanceof ProjectPersonnel) {
             $access = app(PersonnelService::class)->access($document->documentable->project, $request->user());
             abort_unless(in_array($access, [PersonnelService::EDIT, PersonnelService::VIEW], true), 403, 'You cannot open this Special Order.');
+        }
+
+        // Payroll files show pay per person: not for Researchers.
+        if ($document->documentable instanceof PayrollBatch) {
+            self::requirePayAccess($document->documentable, $request->user());
         }
 
         $previewable = in_array($document->mime, ['application/pdf', 'image/jpeg', 'image/png'], true);
@@ -159,6 +169,12 @@ class DocumentController extends Controller
             "{$prefix}.max" => 'The file is too large. The limit is 5 MB per file.',
             "{$prefix}.uploaded" => 'The file could not be uploaded. Files must be 5 MB or smaller.',
         ];
+    }
+
+    /** Payroll files (a batch's documents): User::canSeePersonnelPay. */
+    public static function requirePayAccess(PayrollBatch $batch, User $actor): void
+    {
+        abort_unless($actor->canSeePersonnelPay((int) $batch->project_id), 403, 'Payroll files show pay per person and are not available to Researchers.');
     }
 
     public static function mayUpload(HasDocuments $record, User $actor): bool

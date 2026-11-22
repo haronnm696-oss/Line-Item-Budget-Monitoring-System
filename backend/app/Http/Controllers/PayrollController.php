@@ -36,6 +36,7 @@ class PayrollController extends Controller
      */
     public function index(Request $request, Project $project)
     {
+        abort_unless($request->user()->canSeePersonnelPay($project), 403, 'Payroll shows pay per person and is not available to Researchers.');
         $data = $request->validate([
             'month' => array_merge(['nullable'], self::MONTH, [new DateInRange()]),
             'to' => array_merge(['nullable'], self::MONTH, [new DateInRange()]),

@@ -10,12 +10,9 @@ import AnimatedNumber from '../../components/program/AnimatedNumber';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
 import { formatPct, peso } from '../../components/money';
+import PageTitle from '../../components/PageTitle';
+import { RESEARCHER_EYEBROW } from '../../lib/pageHead';
 
-const REPORTS = [
-  ['utilization', 'Budget utilization', 'Allocated, spent and remaining per line item'],
-  ['ledger', 'Expense ledger', 'Every verified expense with its reference number'],
-  ['monthly-summary', 'Monthly financial summary', 'Expense trend and category comparison'],
-];
 
 function clampPct(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -23,7 +20,8 @@ function clampPct(value) {
 
 /**
  * Researcher Overview (read-only): the project's budget, spending trend,
- * PS vs MOOE, latest verified transactions and the reports. Every number
+ * PS vs MOOE and the latest verified transactions (the Reports page is in
+ * the sidebar). Every number
  * comes from GET /projects/:id/budget-summary (the same calls as the
  * Project Leader Overview). No control here changes data.
  */
@@ -37,10 +35,7 @@ export default function ResearcherDashboard() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="pl-greeting res-greeting">
-            <span className="res-readonly"><span aria-hidden="true">👁</span> Read-only access</span>
-          </div>
-          <h1 className="program-h1">Budget information</h1>
+          <PageTitle eyebrow={RESEARCHER_EYEBROW} title="Budget information" readOnly />
           <ProjectLine picker={picker} project={data?.project ?? picker.project} detail="verified data only" />
         </div>
       </div>
@@ -83,46 +78,20 @@ export default function ResearcherDashboard() {
                 />
               </div>
 
-              <div className="pl-row pl-row-charts">
-                <section className="program-card">
-                  <div className="program-card-head">
-                    <div>
-                      <div className="program-card-title">Transaction summary</div>
-                      <div className="program-card-sub">Latest verified transactions</div>
-                    </div>
-                    <Link className="program-card-link" to={`/transactions${q}`}>View all</Link>
+              <section className="program-card">
+                <div className="program-card-head">
+                  <div>
+                    <div className="program-card-title">Transaction summary</div>
+                    <div className="program-card-sub">Latest verified transactions</div>
                   </div>
-                  {data.transactions.length === 0 ? (
-                    <p className="ld-empty">No verified expenses or payroll yet.</p>
-                  ) : (
-                    <TransactionTable rows={data.transactions} />
-                  )}
-                </section>
-
-                <section className="program-card">
-                  <div className="program-card-head">
-                    <div>
-                      <div className="program-card-title">Reports</div>
-                      <div className="program-card-sub">View and export, for this project</div>
-                    </div>
-                    <Link className="program-card-link" to={`/reports${q}`}>All reports</Link>
-                  </div>
-                  <ul className="ld-mini-list">
-                    {REPORTS.map(([key, title, desc]) => (
-                      <li key={key}>
-                        <div>
-                          <b>{title}</b>
-                          <span>{desc}</span>
-                        </div>
-                        <div className="res-export">
-                          <Link className="program-btn sm" to={`/reports${q}${q ? '&' : '?'}report=${key}&format=pdf`} aria-label={`${title} as PDF`}>PDF</Link>
-                          <Link className="program-btn sm" to={`/reports${q}${q ? '&' : '?'}report=${key}&format=csv`} aria-label={`${title} as CSV`}>CSV</Link>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              </div>
+                  <Link className="program-card-link" to={`/transactions${q}`}>View all</Link>
+                </div>
+                {data.transactions.length === 0 ? (
+                  <p className="ld-empty">No verified expenses or payroll yet.</p>
+                ) : (
+                  <TransactionTable rows={data.transactions} />
+                )}
+              </section>
             </>
           )}
         </LoadState>

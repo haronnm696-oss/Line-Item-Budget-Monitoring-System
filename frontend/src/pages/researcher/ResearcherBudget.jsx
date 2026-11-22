@@ -1,105 +1,50 @@
-import { Fragment } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
+import { sourceLabels } from '../../lib/fundingSource';
+import { RESEARCHER_EYEBROW } from '../../lib/pageHead';
 import LoadState from '../../components/LoadState';
+import PageTitle from '../../components/PageTitle';
 import ProjectLine from '../../components/ProjectLine';
-import { formatPct, peso } from '../../components/money';
-
-const GROUPS = [
-  ['PS', 'Personal Services (PS)'],
-  ['MOOE', 'Maintenance and Other Operating Expenses (MOOE)'],
-];
-
-function total(rows) {
-  const sum = (key) => Math.round(rows.reduce((value, row) => value + (Number(row[key]) || 0), 0) * 100) / 100;
-  return { allocated: sum('allocated'), spent: sum('spent'), remaining: sum('remaining') };
-}
-
-function Cells({ allocated, spent, remaining, pct }) {
-  return (
-    <>
-      <td className="num">{peso(allocated)}</td>
-      <td className="num">{peso(spent)}</td>
-      <td className={`num${remaining < 0 ? ' ld-neg' : ''}`}>{remaining < 0 ? '⚠ ' : ''}{peso(remaining)}</td>
-      <td className="num">{pct == null ? '—' : formatPct(pct)}</td>
-    </>
-  );
-}
-
-const pctOf = (spent, allocated) => (allocated > 0 ? (spent / allocated) * 100 : null);
+import FormBTable from '../../components/projects/FormBTable';
 
 /**
- * Budget (Researcher, read-only): every line item grouped by PS and MOOE
- * with allocated, spent (verified), remaining and % used, from
- * ProjectFinancialService::categoryRows (the same rows as the Program
- * Leader's project page).
+ * Budget (Researcher, read-only): the line items in the R&D Form B layout
+ * the Program Leader sees (PS / MOOE, Direct / Indirect cost, groups and
+ * sub-groups, implementing agency and funder columns, sub-totals), with
+ * Spent and Remaining. form_b comes from GET /projects/:id
+ * (ProjectFinancialService::formB); FormBTable without `setup` has no row
+ * menus.
  */
 export default function ResearcherBudget() {
   const picker = useAssignedProject({ role: 'researcher' });
-  const summary = useApiData(picker.projectId ? ENDPOINTS.budgetSummary(picker.projectId) : null);
-  const rows = Array.isArray(summary.data?.line_items) ? summary.data.line_items : [];
-  const all = total(rows);
+  const detail = useApiData(picker.projectId ? ENDPOINTS.project(picker.projectId) : null);
+  const formB = detail.data?.form_b ?? null;
+  const sections = Array.isArray(formB?.sections) ? formB.sections : [];
+  const labels = sourceLabels(formB?.labels);
 
   return (
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">View · Researcher</div>
-          <h1 className="program-h1 res-title">
-            Budget <span className="res-readonly"><span aria-hidden="true">👁</span> Read-only access</span>
-          </h1>
+          <PageTitle eyebrow={RESEARCHER_EYEBROW} title="Budget" readOnly />
           <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll" />
         </div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
-        <LoadState state={summary} loadingText="Loading line items…" emptyText="This project has no line items yet." isEmpty={rows.length === 0}>
+        <LoadState state={detail} loadingText="Loading line items…" emptyText="This project has no line items yet." isEmpty={sections.length === 0}>
           <section className="program-card">
-            <div className="ra-table-scroll">
-              <table className="program-table ld-table">
-                <caption className="pa-sr-only">Line-item budget</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Line item</th>
-                    <th scope="col" className="num">Allocated</th>
-                    <th scope="col" className="num">Spent</th>
-                    <th scope="col" className="num">Remaining</th>
-                    <th scope="col" className="num">% used</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {GROUPS.map(([type, label]) => {
-                    const group = rows.filter((row) => row.type === type);
-                    if (group.length === 0) return null;
-                    const sub = total(group);
-                    return (
-                      <Fragment key={type}>
-                        <tr className="ld-group-row"><th colSpan={5} scope="colgroup">{label}</th></tr>
-                        {group.map((row) => (
-                          <tr key={row.id}>
-                            <td>
-                              <div className="project-name">{row.name}</div>
-                              {row.code && <div className="project-code">{row.code}</div>}
-                            </td>
-                            <Cells allocated={row.allocated} spent={row.spent} remaining={row.remaining} pct={row.utilization_pct} />
-                          </tr>
-                        ))}
-                        <tr className="ld-subtotal">
-                          <th scope="row">{type} subtotal</th>
-                          <Cells {...sub} pct={pctOf(sub.spent, sub.allocated)} />
-                        </tr>
-                      </Fragment>
-                    );
-                  })}
-                  <tr className="ld-total">
-                    <th scope="row">Total</th>
-                    <Cells {...all} pct={pctOf(all.spent, all.allocated)} />
-                  </tr>
-                </tbody>
-              </table>
+            <div className="program-card-head">
+              <div>
+                <div className="program-card-title">Line-item budget (R&amp;D Form B)</div>
+                <div className="program-card-sub">
+                  PS and MOOE, direct and indirect cost, by expense group: {labels.implementing_agency} counterpart and {labels.funder} amounts, with verified spending and what remains
+                </div>
+              </div>
             </div>
+            <FormBTable formB={formB} remaining />
           </section>
         </LoadState>
       </LoadState>

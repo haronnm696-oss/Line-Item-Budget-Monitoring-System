@@ -70,7 +70,8 @@ class ApprovalDetailService
             'last_return_reason' => $approval->last_return_reason,
             'history' => $this->history($approval),
             'details' => $project ? $this->typeDetails($approval, $project, $batch) : null,
-            'documents' => $this->documents($approval, $batch),
+            // Payroll files show pay per person: not listed for Researchers.
+            'documents' => $this->documents($approval, $batch && $viewer->canSeePersonnelPay((int) $batch->project_id) ? $batch : null),
             // Approve / Return only inside the panel, for the Program Leader, on a pending request someone else made.
             'can_decide' => $canDecide,
             'blocked_text' => $blocked,

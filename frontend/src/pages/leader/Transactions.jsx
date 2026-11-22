@@ -10,6 +10,8 @@ import ProjectLine from '../../components/ProjectLine';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../lib/roles';
+import { isReadOnlyRole, transactionsEyebrow } from '../../lib/pageHead';
+import PageTitle from '../../components/PageTitle';
 import DocumentList from '../../components/leader/DocumentList';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
@@ -26,7 +28,11 @@ export default function Transactions() {
   const picker = useAssignedProject();
   // Only the Project Leader records here. They lead one project and cannot
   // switch; Finance/Admin and Researchers switch from the project line.
-  const isLeader = normalizeRole(useAuth().user) === 'PL';
+  const roleCode = normalizeRole(useAuth().user);
+  const isLeader = roleCode === 'PL';
+  // Researchers read only and never open payroll files (pay per person;
+  // the API refuses them too).
+  const readOnly = isReadOnlyRole(roleCode);
   const [searchParams, setSearchParams] = useSearchParams();
   const [docsFor, setDocsFor] = useState(null);
   const [recording, setRecording] = useState(false);
@@ -63,8 +69,7 @@ export default function Transactions() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Project</div>
-          <h1 className="program-h1">Transactions</h1>
+          <PageTitle eyebrow={transactionsEyebrow(roleCode)} title="Transactions" readOnly={readOnly} />
           <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll, newest first" />
         </div>
         {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
@@ -148,9 +153,13 @@ export default function Transactions() {
                         <td>{row.line_item ?? '—'}<div className="project-code">{row.category ?? ''}</div></td>
                         <td className="num">{peso(row.amount)}</td>
                         <td>
-                          <button type="button" className="ld-link" onClick={() => setDocsFor(row)}>
-                            {row.documents_count > 0 ? `${row.documents_count} document${row.documents_count === 1 ? '' : 's'}` : 'View documents'}
-                          </button>
+                          {readOnly && row.kind === 'payroll' ? (
+                            <span className="project-code">Payroll files: not shown</span>
+                          ) : (
+                            <button type="button" className="ld-link" onClick={() => setDocsFor(row)}>
+                              {row.documents_count > 0 ? `${row.documents_count} document${row.documents_count === 1 ? '' : 's'}` : 'View documents'}
+                            </button>
+                          )}
                           {row.kind !== 'payroll' && row.receipts_count === 0 && <div className="project-code">No receipt</div>}
                         </td>
                       </tr>
