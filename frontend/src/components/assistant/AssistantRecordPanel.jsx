@@ -5,6 +5,7 @@ import { formatDate, formatDateTime } from '../../lib/datetime';
 import DocumentList from '../leader/DocumentList';
 import { peso } from '../money';
 import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
+import PurchaseRequestDownload from '../PurchaseRequestDownload';
 import StagePill from './StagePill';
 
 function fieldValue(field) {
@@ -82,6 +83,11 @@ export default function AssistantRecordPanel({ projectId, target, refreshKey, ac
             </dl>
             {Array.isArray(item.pr_items) && (
               <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(item.workflow_status)} />
+            )}
+            {item.type === 'purchase_request' && (
+              <div className="ld-panel-actions pr-download">
+                <PurchaseRequestDownload requestId={item.id} reference={item.reference} />
+              </div>
             )}
 
             <h3 className="ld-panel-sub">Documents</h3>

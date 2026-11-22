@@ -6,6 +6,8 @@
 .env
 .env.backup
 .phpunit.result.cache
+# Local MySQL test config (FormInsertsTest on a scratch database); holds a DB password.
+/phpunit.mysql.xml
 docker-compose.override.yml
 Homestead.json
 Homestead.yaml

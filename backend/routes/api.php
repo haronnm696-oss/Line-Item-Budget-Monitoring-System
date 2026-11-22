@@ -114,6 +114,9 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::post('/purchase-requests/{purchaseRequest}/cancel', [PurchaseRequestController::class, 'cancel']);
     // Finance/Admin: PR, SAI and ALOBS numbers and dates of an approved request.
     Route::patch('/purchase-requests/{purchaseRequest}/numbers', [PurchaseRequestController::class, 'numbers']);
+    // MSU Purchase Request form (PDF print view and CSV); not for Researchers.
+    Route::get('/purchase-requests/{purchaseRequest}/form', [PurchaseRequestController::class, 'form']);
+    Route::get('/purchase-requests/{purchaseRequest}/form/csv', [PurchaseRequestController::class, 'formCsv']);
 
     // Budget requests from the Project Leader to the Program Leader.
     Route::get('/projects/{project}/budget-requests', [BudgetRequestController::class, 'index']);

@@ -26,7 +26,7 @@ class DashboardController extends Controller
         return response()->json($this->dashboard->trancheRows($project));
     }
 
-    /** Burn-rate and forecast indicator. */
+    /** Burn rate: share of budget spent against share of time elapsed. */
     public function burnRate(Project $project)
     {
         return response()->json($this->dashboard->burnRate($project));

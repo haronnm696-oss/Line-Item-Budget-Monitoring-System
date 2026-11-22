@@ -5,6 +5,7 @@ import { formatDate } from '../../lib/datetime';
 import LoadState from '../LoadState';
 import StagePill from '../assistant/StagePill';
 import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
+import PurchaseRequestDownload from '../PurchaseRequestDownload';
 import { peso } from '../money';
 
 const NUMBERS = [['pr', 'PR'], ['sai', 'SAI'], ['alobs', 'ALOBS']];
@@ -57,6 +58,7 @@ export default function PurchaseRequestsSection({ projectId }) {
                     <button type="button" className="program-btn" aria-expanded={open.has(row.id)} onClick={() => toggle(row.id)}>
                       {open.has(row.id) ? 'Hide items' : 'Show items'}
                     </button>
+                    <PurchaseRequestDownload requestId={row.id} reference={row.pr_no || `PR-${row.id}`} />
                   </div>
                 </div>
                 {open.has(row.id) && (

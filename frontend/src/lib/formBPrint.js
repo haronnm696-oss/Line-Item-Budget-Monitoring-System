@@ -5,20 +5,10 @@
  * in the document change. Black and white, portrait, ruled like the form.
  */
 
-/** "1,058,376.00"; zero prints as "-"; null (a heading row) is blank. */
-export function formBAmount(value) {
-  if (value === null || value === undefined || value === '') return '';
-  const number = Number(value);
-  if (!Number.isFinite(number) || Math.abs(number) < 0.005) return '-';
-  return number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { escapeHtml as defaultEscape, FORM_MARGIN, formAmount, printFormHtml, signatoriesHtml } from './printForm.js';
 
-const defaultEscape = (value) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+/** "1,058,376.00"; zero prints as "-"; null (a heading row) is blank. */
+export const formBAmount = formAmount;
 
 /** A4 or Legal (portrait), as chosen by the backend for one page. */
 export function formBPaper(doc) {
@@ -40,8 +30,8 @@ export function formBTitle(doc) {
   return code ? `Form B - ${code}` : 'Form B';
 }
 
-/** The form's own margins; the page margin is 0 so the browser prints no headers/footers. */
-export const FORM_B_MARGIN = { top: '1.2cm', side: '1.4cm' };
+/** The form's own margins (shared by every printed form, lib/printForm.js). */
+export const FORM_B_MARGIN = FORM_MARGIN;
 
 /** The whole print document (HTML string) for the browser's "Save as PDF". */
 export function formBHtml(doc, escapeHtml = defaultEscape) {
@@ -57,36 +47,12 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
     </tr>`).join('');
   const [col0, col1, col2] = doc.columns ?? ['', '', ''];
   const footer = doc.footer ?? { title: '', columns: [], values: [] };
-  const signatories = (doc.signatories ?? []).map((s) => `
-    <div class="sig">
-      <div class="sig-label">${e(s.label)}</div>
-      <div class="sig-line"></div>
-      ${s.name ? `<div class="sig-name">${e(s.name)}</div>` : ''}
-      ${s.position ? `<div class="sig-pos">${e(s.position)}</div>` : ''}
-    </div>`).join('');
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>${e(formBTitle(doc))}</title>
-<style>
-  /* Margin 0: Chrome and Edge then have no room for their date/title/URL/page
-     headers and footers. The form keeps its own margins: side padding on the
-     body, and top/bottom spacer rows that repeat on every printed page. */
-  @page { size: ${legal ? 'legal' : 'A4'} portrait; margin: 0; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: ${legal ? '9.5pt' : '9pt'}; color: #000; background: #fff; padding: 0 ${FORM_B_MARGIN.side}; line-height: 1.25; }
-  .page { width: 100%; border-collapse: collapse; }
-  .page > thead > tr > td, .page > tfoot > tr > td { height: ${FORM_B_MARGIN.top}; padding: 0; border: 0; }
-  .page > tbody > tr > td { padding: 0; border: 0; }
+  const css = `
   .form-id { font-size: 8.5pt; font-style: italic; margin-bottom: 4px; }
   .head { text-align: center; margin-bottom: 10px; }
   .head div { font-weight: bold; }
   .head .agency { font-size: 11pt; }
   .head .year { font-weight: normal; }
-  table { width: 100%; border-collapse: collapse; }
   .details { margin-bottom: 8px; }
   .details th { text-align: left; font-weight: bold; width: 22%; padding: 1px 6px 1px 0; vertical-align: top; }
   .details td { padding: 1px 0; border-bottom: 1px solid #000; }
@@ -94,31 +60,20 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
   .lib th { border: 1px solid #000; padding: 4px 6px; font-weight: bold; text-align: center; vertical-align: middle; }
   .lib td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 1.5px 6px; vertical-align: top; }
   .lib col.amt { width: 20%; }
-  .r { text-align: right; white-space: nowrap; }
   .k-section td { font-weight: bold; padding-top: 5px; }
   .k-cost td:first-child { font-weight: bold; }
   .k-group td:first-child, .k-subgroup td:first-child { font-style: italic; }
   .k-subtotal td { font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; }
   .k-grand td { font-weight: bold; border-top: 3px double #000; border-bottom: 1px solid #000; padding-top: 3px; padding-bottom: 3px; }
-  tr { page-break-inside: avoid; }
   .fill-row { margin-top: 12px; display: flex; align-items: flex-end; gap: 16px; }
   .fill { width: 60%; flex: none; }
   .fill-note { font-style: italic; padding-bottom: 4px; }
   .fill caption { text-align: left; font-style: italic; padding-bottom: 3px; }
   .fill th, .fill td { border: 1px solid #000; padding: 3px 6px; }
   .fill th { text-align: center; }
-  .sigs { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 22px; page-break-inside: avoid; }
-  .sig-label { margin-bottom: 26px; }
-  .sig-line { border-bottom: 1px solid #000; width: 85%; }
-  .sig-name { font-weight: bold; text-transform: uppercase; margin-top: 2px; }
-  .sig-pos { margin-top: 1px; }
-</style>
-</head>
-<body>
-<table class="page" role="presentation">
-<thead><tr><td></td></tr></thead>
-<tfoot><tr><td></td></tr></tfoot>
-<tbody><tr><td>
+  .sigs { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 22px; page-break-inside: avoid; }`;
+
+  const body = `
   <div class="form-id">${e(doc.header?.form)}</div>
   <div class="head">
     <div class="agency">${e(doc.header?.agency)}</div>
@@ -139,9 +94,13 @@ export function formBHtml(doc, escapeHtml = defaultEscape) {
     </table>
     ${footer.note ? `<div class="fill-note">${e(footer.note)}</div>` : ''}
   </div>
-  <div class="sigs">${signatories}</div>
-</td></tr></tbody>
-</table>
-</body>
-</html>`;
+  <div class="sigs">${signatoriesHtml(doc.signatories, e)}</div>`;
+
+  return printFormHtml({
+    title: formBTitle(doc),
+    paper: legal ? 'legal' : 'A4',
+    fontSize: legal ? '9.5pt' : '9pt',
+    css,
+    body,
+  }, e);
 }

@@ -12,6 +12,7 @@ import LoadState from '../../components/LoadState';
 import ProjectLine from '../../components/ProjectLine';
 import StagePill from '../../components/assistant/StagePill';
 import PurchaseRequestItemsTable from '../../components/PurchaseRequestItemsTable';
+import PurchaseRequestDownload from '../../components/PurchaseRequestDownload';
 import { peso } from '../../components/money';
 
 const STATUS = [
@@ -109,6 +110,7 @@ export default function FinancePurchaseRequests() {
                       {NUMBERS.some(([key]) => numberText(row, key)) ? 'Edit PR / SAI / ALOBS' : 'Set PR / SAI / ALOBS'}
                     </button>
                   )}
+                  <PurchaseRequestDownload requestId={row.id} reference={row.pr_no || `PR-${row.id}`} align="start" />
                 </div>
                 {expanded.has(row.id) && <PurchaseRequestItemsTable items={row.items} total={row.total} />}
               </section>

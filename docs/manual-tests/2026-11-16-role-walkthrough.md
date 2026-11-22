@@ -1,5 +1,7 @@
 # Manual test: one expense and one payroll batch through every role
 
+> **Superseded by [2026-11-22-full-walkthrough.md](2026-11-22-full-walkthrough.md).** This file describes payroll deductions, pay-rate setup and "payroll is not part of LIB spent"; none of these is true any more (honoraria have no deductions, and verified payroll counts as spent).
+
 Walks one expense and one payroll batch from the Research Assistant to the
 Project Leader (with a Return), to Finance/Admin (with a Reject), back
 again, and to verified. After each step it lists what every role should

@@ -310,7 +310,7 @@ class DemoDatasetSeeder extends Seeder
                 'key' => 'weaving',
                 'code' => 'MOST-RD-2025-001',
                 'title' => 'Meranaw Weaving Heritage Digital Archive',
-                'description' => 'MOST-BARMM project digitizing Meranaw weaving heritage. The project is completed and every released tranche has been fully liquidated.',
+                'description' => 'MOST-BARMM project digitizing Meranaw weaving heritage. The project is completed and every fund release has been fully liquidated.',
                 'funder' => 'MOST-BARMM',
                 'budget' => 940000.00,
                 'counterpart' => 0.00,

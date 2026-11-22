@@ -44,7 +44,6 @@ class ProgramDashboardService
         $verifiedCount = (int) $rows->sum('verified_count');
         $receiptCount = (int) $rows->sum('receipts_count');
         $oldestWaiting = (int) ($approvals->max('days_waiting') ?? 0);
-        $forecast = $this->forecast($projects, $today);
         $budget = round((float) $rows->sum('budget'), 2);
         $spent = round((float) $rows->sum('spent'), 2);
         $released = round((float) $rows->sum('released'), 2);
@@ -86,12 +85,9 @@ class ProgramDashboardService
             // The dashboard inbox is intentionally short; the Approvals page
             // exposes the full queue.
             'approvals' => $approvals->take(3)->values()->all(),
-            'forecast' => $forecast,
-            'scheduled_releases' => $forecast,
             'funders' => $this->funderOptions(),
             'funding_sources' => $this->fundingSources($rows),
             'deadlines' => $this->deadlines($projects, $today),
-            'exceptions' => $this->exceptions($projects, $rows),
             'monthly_expenses' => $this->monthlyExpenses($projects, $today),
             'category_summary' => $this->categorySummary($projects, $budget),
         ];
@@ -978,57 +974,6 @@ class ProgramDashboardService
     /**
      * @return array<int, array<string, mixed>>
      */
-    protected function forecast(Collection $projects, Carbon $today): array
-    {
-        $months = collect(range(0, 3))
-            ->map(fn (int $offset) => $today->copy()->startOfMonth()->addMonths($offset));
-        $totals = $months
-            ->mapWithKeys(fn (Carbon $month) => [$month->format('Y-m') => 0.0])
-            ->all();
-        $releases = $months
-            ->mapWithKeys(fn (Carbon $month) => [$month->format('Y-m') => []])
-            ->all();
-
-        foreach ($projects as $project) {
-            foreach ($project->tranches as $tranche) {
-                if ($tranche->status === 'released') {
-                    continue;
-                }
-
-                $overdue = $tranche->planned_release_date
-                    && $tranche->planned_release_date->lt($today->copy()->startOfMonth());
-                $month = $tranche->planned_release_date
-                    && ! $overdue
-                    ? $tranche->planned_release_date->copy()->startOfMonth()
-                    : $today->copy()->startOfMonth();
-
-                $key = $month->format('Y-m');
-                if (array_key_exists($key, $totals)) {
-                    $totals[$key] += (float) $tranche->amount;
-                    $releases[$key][] = [
-                        'id' => $tranche->id,
-                        'name' => $tranche->releaseLabel(),
-                        'project' => $project->title,
-                        'project_code' => $project->code,
-                        'amount' => round((float) $tranche->amount, 2),
-                        'planned_release_date' => $tranche->planned_release_date?->toDateString(),
-                        'overdue' => $overdue,
-                    ];
-                }
-            }
-        }
-
-        return $months->map(fn (Carbon $month) => [
-            'month' => $month->format('Y-m'),
-            'label' => $month->format('M'),
-            'amount' => round($totals[$month->format('Y-m')], 2),
-            'releases' => $releases[$month->format('Y-m')],
-        ])->all();
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
     protected function funderOptions(): array
     {
         return FundingAgency::query()
@@ -1171,92 +1116,6 @@ class ProgramDashboardService
             'status' => $status,
             'tone' => $tone,
             '_date' => $date->timestamp,
-        ];
-    }
-
-    /**
-     * @return array<string, array<int, array<string, mixed>>>
-     */
-    protected function exceptions(Collection $projects, Collection $rows): array
-    {
-        $rowMap = $rows->keyBy('id');
-        $selfBenefiting = collect();
-        $unused = collect();
-        $realignments = collect();
-
-        foreach ($projects as $project) {
-            $row = $rowMap->get($project->id);
-            $timePct = (float) ($row['time_pct'] ?? 0);
-
-            foreach ($project->libCategories as $category) {
-                $name = (string) $category->line_item_name;
-                $spent = $category->spentAmount();
-                $allocated = (float) $category->allocated_amount;
-
-                $isSelfBenefiting = preg_match('/program\s*leader/i', $name)
-                    && preg_match('/honorar/i', $name);
-
-                if ($isSelfBenefiting) {
-                    $selfBenefiting->push([
-                        'project' => $project->title,
-                        'project_id' => $project->id,
-                        'line_item' => $name,
-                        'allocated' => round($allocated, 2),
-                        'spent' => round($spent, 2),
-                        'spent_pct' => $this->pct($spent, $allocated),
-                    ]);
-                    continue;
-                }
-
-                if ($spent <= 0 && $timePct > 50) {
-                    $unused->push([
-                        'project' => $project->title,
-                        'project_id' => $project->id,
-                        'line_item' => $name,
-                        'allocated' => round($allocated, 2),
-                        'spent' => round($spent, 2),
-                        'spent_pct' => $this->pct($spent, $allocated),
-                        'time_pct' => $timePct,
-                    ]);
-                }
-            }
-
-            $categories = $project->libCategories->keyBy('id');
-
-            foreach ($project->approvalRequests as $approval) {
-                if ($approval->type !== 'budget_realignment') {
-                    continue;
-                }
-
-                $payload = $approval->payload ?? [];
-                $source = $categories->get((int) ($payload['from_lib_category_id'] ?? 0));
-                $target = $categories->get((int) ($payload['to_lib_category_id'] ?? 0));
-                $amount = (float) ($payload['amount'] ?? $approval->amount ?? 0);
-
-                if (! $source || $amount <= 0) {
-                    continue;
-                }
-
-                $threshold = (float) $source->allocated_amount * 0.10;
-                if ($amount >= $threshold) {
-                    $realignments->push([
-                        'id' => $approval->id,
-                        'project' => $project->title,
-                        'project_id' => $project->id,
-                        'amount' => round($amount, 2),
-                        'source' => $source->line_item_name,
-                        'source_allocated' => round((float) $source->allocated_amount, 2),
-                        'target' => $target?->line_item_name,
-                        'threshold_pct' => 10,
-                    ]);
-                }
-            }
-        }
-
-        return [
-            'self_benefiting' => $selfBenefiting->values()->all(),
-            'unused_line_items' => $unused->values()->all(),
-            'realignments' => $realignments->values()->all(),
         ];
     }
 

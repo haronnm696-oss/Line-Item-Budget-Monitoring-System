@@ -184,8 +184,13 @@ class ProgramUserController extends Controller
 
         $user = $this->users->addUser($data, $request->user());
 
+        $emailed = $this->users->setupEmailSent();
+
         return response()->json([
-            'message' => 'Account created. A password setup link has been emailed to the user.',
+            'message' => $emailed
+                ? 'Account created. A password setup link has been emailed to the user.'
+                : 'Account created, but the setup email could not be sent. Ask the user to use "Forgot password" on the sign-in page.',
+            'setup_email_sent' => $emailed,
             'user' => $this->userPayload($user),
         ], 201);
     }
