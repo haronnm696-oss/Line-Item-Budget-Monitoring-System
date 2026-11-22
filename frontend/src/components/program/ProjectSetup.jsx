@@ -138,6 +138,18 @@ const FORM_B_SIGNATORIES = [
 const MOA_FIELDS = ['moa_number', 'moa_date', 'rd_committee_approved_date', 'fund_source'];
 const MOA_LIMITS = { moa_number: 100, fund_source: 255 };
 const FORM_B_FIELDS = ['implementing_agency_name', 'monitoring_agency', ...FORM_B_SIGNATORIES.flatMap(([prefix]) => [`${prefix}_name`, `${prefix}_position`])];
+/**
+ * Printed on purchase requests (MSU Purchase Request form), all optional:
+ * Requested by always prints the project's Project Leader, so only its
+ * position is set here; Noted by and Approved by have a name and position.
+ */
+const PR_SIGNATORIES = [
+  ['pr_requested_by', 'Requested by', false],
+  ['pr_noted_by', 'Noted by', true],
+  ['pr_approved_by', 'Approved by', true],
+];
+const PR_FIELDS = PR_SIGNATORIES.flatMap(([prefix, , named]) => [...(named ? [`${prefix}_name`] : []), `${prefix}_position`]);
+const PRINT_FIELDS = [...FORM_B_FIELDS, ...PR_FIELDS];
 
 const PROJECT_SAVE_ERROR = 'The project could not be saved. Please try again; if it keeps failing, tell the system administrator.';
 
@@ -159,6 +171,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     // The funder's grant per the MOA (projects.funding_agency_amount); blank = not entered.
     funding_agency_amount: setup?.funder_grant ? moneyText(setup.funder_grant) : '',
     ...Object.fromEntries(FORM_B_FIELDS.map((key) => [key, setup?.form_b?.[key] ?? ''])),
+    ...Object.fromEntries(PR_FIELDS.map((key) => [key, setup?.purchase_request?.[key] ?? ''])),
   });
   const [local, setLocal] = useState({});
   const { busy, error, serverErrors, save } = useSave(onSaved, { failText: PROJECT_SAVE_ERROR });
@@ -193,7 +206,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
       }
     }
     if (!form.project_leader_id) next.project_leader_id = 'Choose the Project Leader.';
-    for (const key of FORM_B_FIELDS) {
+    for (const key of PRINT_FIELDS) {
       if (String(form[key] ?? '').trim().length > 255) next[key] = 'Use 255 characters or fewer.';
     }
     setLocal(next);
@@ -212,7 +225,7 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
     if (creating) {
       save('post', ENDPOINTS.programProjects, { ...body, title: form.title.trim(), code: form.code.trim() }, 'Project created.');
     } else {
-      const printed = Object.fromEntries(FORM_B_FIELDS.map((key) => [key, String(form[key] ?? '').trim() || null]));
+      const printed = Object.fromEntries(PRINT_FIELDS.map((key) => [key, String(form[key] ?? '').trim() || null]));
       save('patch', ENDPOINTS.programProject(projectId), { ...body, ...printed }, 'Project details saved.');
     }
   }
@@ -285,6 +298,22 @@ export function ProjectFormDialog({ mode, projectId = null, setup = null, onClos
               {FORM_B_SIGNATORIES.map(([prefix, label]) => (
                 <Fragment key={prefix}>
                   {text(`${prefix}_name`, `${label}: name`)}
+                  {text(`${prefix}_position`, `${label}: position`)}
+                </Fragment>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {!creating && (
+          <fieldset className="ps-formb">
+            <legend>Printed on purchase requests <span className="pu-hint">(optional)</span></legend>
+            <p className="pu-hint">Requested by always prints the project's Project Leader. Names and positions print under blank signature lines; blank ones stay blank.</p>
+            <div className="program-form-grid">
+              {PR_SIGNATORIES.map(([prefix, label, named]) => (
+                <Fragment key={prefix}>
+                  {named
+                    ? text(`${prefix}_name`, `${label}: name`)
+                    : <Field id={`ps-${prefix}_name`} label={`${label}: name`} hint="The Project Leader chosen above">{(a11y) => <input {...a11y} className="program-input" value={leaders.find((leader) => String(leader.id) === String(form.project_leader_id))?.name ?? ''} readOnly disabled />}</Field>}
                   {text(`${prefix}_position`, `${label}: position`)}
                 </Fragment>
               ))}

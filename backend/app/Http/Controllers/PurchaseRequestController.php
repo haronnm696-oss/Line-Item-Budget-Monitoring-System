@@ -9,7 +9,10 @@ use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
 use App\Rules\DateInRange;
 use App\Support\PurchaseRequestItems;
+use App\Services\PurchaseRequestFormService;
 use App\Services\PurchaseRequestService;
+use App\Support\Csv;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,8 +20,39 @@ use Illuminate\Validation\Rule;
 /** Purchase request API (through PurchaseRequestService; project-scoped). */
 class PurchaseRequestController extends Controller
 {
-    public function __construct(private PurchaseRequestService $requests)
+    public function __construct(private PurchaseRequestService $requests, private PurchaseRequestFormService $form)
     {
+    }
+
+    /**
+     * GET /api/purchase-requests/{id}/form — the request in MSU's Purchase
+     * Request form (the PDF print view). The project's Research Assistant,
+     * Project Leader, Finance/Admin and the Program Leader; Researchers 403.
+     */
+    public function form(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->requirePrintAccess($request, $purchaseRequest);
+
+        return response()->json($this->form->build($purchaseRequest));
+    }
+
+    /** GET /api/purchase-requests/{id}/form/csv — the same form as CSV (plain numbers). */
+    public function formCsv(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->requirePrintAccess($request, $purchaseRequest);
+        $doc = $this->form->build($purchaseRequest);
+        $filename = Str::slug($doc['title']) . '.csv';
+
+        return response(Csv::render($this->form->csvRows($doc)), 200, Csv::headers($filename));
+    }
+
+    private function requirePrintAccess(Request $request, PurchaseRequest $purchaseRequest): void
+    {
+        abort_unless(
+            PurchaseRequestFormService::canPrint($request->user(), $purchaseRequest),
+            403,
+            'Only the Research Assistant, Project Leader and Finance/Admin staff of this project, or the Program Leader, can download purchase requests.'
+        );
     }
 
     /** GET /api/projects/{project}/purchase-requests?workflow_status= */

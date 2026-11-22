@@ -80,10 +80,10 @@ class ProgramProjectSetupController extends Controller
         ];
     }
 
-    /** Optional printed Form B fields: Monitoring Agency and signatory names and positions. */
+    /** Optional printed Form B and purchase request fields: Monitoring Agency and signatory names and positions. */
     private function formBPrintRules(): array
     {
-        return collect(Project::formBPrintFields())
+        return collect(array_merge(Project::formBPrintFields(), Project::purchaseRequestPrintFields()))
             ->mapWithKeys(fn ($field) => [$field => ['sometimes', 'nullable', 'string', 'max:255']])
             ->all();
     }

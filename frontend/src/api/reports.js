@@ -19,12 +19,26 @@ export function fetchFormB(projectId) {
 }
 
 /** A report CSV built by the backend: { blob, filename }. */
-export async function downloadReportCsv(projectId, type, params = {}) {
-  const response = await client.get(ENDPOINTS.report(projectId, type), {
+export function downloadReportCsv(projectId, type, params = {}) {
+  return downloadCsv(ENDPOINTS.report(projectId, type), `${type}.csv`, params);
+}
+
+/** One purchase request in MSU's Purchase Request form (the PDF print view). */
+export function fetchPurchaseRequestForm(id) {
+  return apiGet(ENDPOINTS.purchaseRequestForm(id));
+}
+
+/** The same purchase request form as CSV: { blob, filename }. */
+export function downloadPurchaseRequestCsv(id) {
+  return downloadCsv(ENDPOINTS.purchaseRequestFormCsv(id), `purchase-request-${id}.csv`);
+}
+
+async function downloadCsv(url, fallbackName, params = {}) {
+  const response = await client.get(url, {
     params: Object.fromEntries(Object.entries(params).filter(([, value]) => value)),
     responseType: 'blob',
   });
   const disposition = response.headers?.['content-disposition'] ?? '';
   const match = /filename="?([^";]+)"?/i.exec(disposition);
-  return { blob: response.data, filename: match?.[1] ?? `${type}.csv` };
+  return { blob: response.data, filename: match?.[1] ?? fallbackName };
 }

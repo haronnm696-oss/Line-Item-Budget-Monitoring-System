@@ -145,6 +145,16 @@
  *         footer, signatories: [{ label, name, position }], paper: A4|Legal }
  *       Same rows as the /reports/form-b CSV. Funder names come from the project (never hard-coded).
  *       (percent cells are plain numbers, never "<0.1")
+ *   GET /api/purchase-requests/:id/form      -> one purchase request in MSU's Purchase Request form (PDF print view):
+ *       { id, project_code, reference, title ("PR - <code> - <PR No. or id>"), draft (not approved yet),
+ *         header { title, university, city }, office_unit, department,
+ *         numbers: [{ label: PR No.|SAI No.|ALOBS No., value, date }] (null = blank line),
+ *         columns, rows: [{ item_no, quantity, unit, description, unit_cost, estimated_cost }], total,
+ *         purpose, chargeable, project_title,
+ *         signatories: [{ label: Requested by:|Noted by:|Approved by:, name, position }] }
+ *       Requested by = the project's Project Leader; Noted/Approved by from Edit project details.
+ *       RA, PL, FIN of the project and the Program Leader; Researchers 403.
+ *   GET /api/purchase-requests/:id/form/csv  -> the same rows as CSV (plain numbers)
  *   GET /api/projects/:id/payroll-register?period=all|year|90d&month=YYYY-MM
  *       -> { project, period, period_label, has_recorded_deductions,
  *            months: [{ month, month_label, months, batch_id, verified_at, verified_by, rows, totals }], totals }
@@ -290,6 +300,8 @@ export const ENDPOINTS = {
   purchaseRequest: (id) => `/api/purchase-requests/${id}`,
   purchaseRequestStep: (id, action) => `/api/purchase-requests/${id}/${action}`,
   purchaseRequestDocuments: (id) => `/api/purchase-requests/${id}/documents`,
+  purchaseRequestForm: (id) => `/api/purchase-requests/${id}/form`,
+  purchaseRequestFormCsv: (id) => `/api/purchase-requests/${id}/form/csv`,
   budgetRequests: (projectId) => `/api/projects/${projectId}/budget-requests`,
   resubmitBudgetRequest: (id) => `/api/budget-requests/${id}/resubmit`,
   withdrawBudgetRequest: (id) => `/api/budget-requests/${id}/withdraw`,

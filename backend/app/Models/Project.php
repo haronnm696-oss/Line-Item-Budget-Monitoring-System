@@ -23,7 +23,35 @@ class Project extends Model implements HasDocuments
         'recommending_approval_name', 'recommending_approval_position',
         'approved_by_name', 'approved_by_position',
         'moa_number', 'moa_date', 'rd_committee_approved_date', 'fund_source',
+        'pr_requested_by_position',
+        'pr_noted_by_name', 'pr_noted_by_position',
+        'pr_approved_by_name', 'pr_approved_by_position',
     ];
+
+    /**
+     * Purchase request signatories: column prefix => printed label. The
+     * Requested by name is always the project's Project Leader (only its
+     * position is stored); the others have <prefix>_name and <prefix>_position.
+     */
+    public const PR_SIGNATORIES = [
+        'pr_requested_by' => 'Requested by:',
+        'pr_noted_by' => 'Noted by:',
+        'pr_approved_by' => 'Approved by:',
+    ];
+
+    /** The optional "Printed on purchase requests" fields (Edit project details). */
+    public static function purchaseRequestPrintFields(): array
+    {
+        $fields = [];
+        foreach (array_keys(self::PR_SIGNATORIES) as $prefix) {
+            if ($prefix !== 'pr_requested_by') {
+                $fields[] = "{$prefix}_name";
+            }
+            $fields[] = "{$prefix}_position";
+        }
+
+        return $fields;
+    }
 
     /** Optional fields from the Memorandum of Agreement (Program Leader). */
     public const MOA_FIELDS = ['moa_number', 'moa_date', 'rd_committee_approved_date', 'fund_source'];

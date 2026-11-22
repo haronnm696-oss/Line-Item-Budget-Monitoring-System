@@ -17,8 +17,20 @@ use Tests\TestCase;
  * New project, line item, release, personnel, expense and purchase request.
  * Production MySQL runs in strict mode, so an insert that leaves a NOT NULL
  * column without a default unset fails there (SQLSTATE 1364) while SQLite
- * may not notice. Run it on MySQL too:
- *   DB_CONNECTION=mysql DB_DATABASE=<scratch db> php artisan test --filter=FormInsertsTest
+ * may not notice. Run it on MySQL too, against a scratch database (never
+ * the real one: RefreshDatabase wipes it). Setting DB_CONNECTION=mysql on
+ * the command line does NOT work: the <server> entries in phpunit.xml
+ * override it and the test quietly runs on SQLite. Instead:
+ *   1. Create an empty scratch database (utf8mb4) on a MySQL in strict mode.
+ *   2. Copy backend/phpunit.xml to backend/phpunit.mysql.xml (same folder, so
+ *      its relative paths still work; it holds a password, so it is
+ *      git-ignored in backend/.gitignore)
+ *      and replace the DB_CONNECTION / DB_DATABASE <server> entries with
+ *      DB_CONNECTION=mysql, DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD and
+ *      DB_DATABASE=<scratch db>.
+ *   3. From backend/: php vendor/bin/phpunit -c phpunit.mysql.xml --filter=FormInsertsTest
+ *   4. Drop the scratch database afterwards.
+ * To check that MySQL was really used, the scratch database has the tables after the run.
  */
 class FormInsertsTest extends TestCase
 {

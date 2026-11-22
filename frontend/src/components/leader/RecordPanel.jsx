@@ -4,6 +4,7 @@ import ProgramPill from '../program/ProgramPill';
 import DocumentList from './DocumentList';
 import { peso } from '../money';
 import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
+import PurchaseRequestDownload from '../PurchaseRequestDownload';
 import { formatDate, formatDateTime } from '../../lib/datetime';
 
 function fieldValue(field) {
@@ -90,6 +91,11 @@ export default function RecordPanel({ projectId, target, refreshKey, busyKey, on
             </dl>
             {Array.isArray(item.pr_items) && (
               <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(item.workflow_status)} />
+            )}
+            {item.type === 'purchase_request' && (
+              <div className="ld-panel-actions pr-download">
+                <PurchaseRequestDownload requestId={item.id} reference={item.reference ?? `PR-${item.id}`} />
+              </div>
             )}
 
             <h3 className="ld-panel-sub">Documents</h3>

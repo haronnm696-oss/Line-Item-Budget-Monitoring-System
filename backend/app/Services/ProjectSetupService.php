@@ -130,7 +130,7 @@ class ProjectSetupService
 
             $print = array_map(
                 fn ($value) => ($value = trim((string) $value)) === '' ? null : $value,
-                array_intersect_key($data, array_flip(Project::formBPrintFields()))
+                array_intersect_key($data, array_flip(array_merge(Project::formBPrintFields(), Project::purchaseRequestPrintFields())))
             );
             $locked->update(array_intersect_key($data, array_flip([
                 'funding_agency_id', 'funder_reference', 'start_date', 'end_date', 'total_approved_budget',
@@ -527,6 +527,8 @@ class ProjectSetupService
             'agreement' => $project->agreement(),
             // Printed on R&D Form B (optional; blank Monitoring Agency = the funder's name).
             'form_b' => $project->only(Project::formBPrintFields()),
+            // Printed on purchase requests (optional; Requested by is always the Project Leader).
+            'purchase_request' => $project->only(Project::purchaseRequestPrintFields()),
             'total_budget' => round((float) $project->total_approved_budget, 2),
             'allocated' => round((float) $project->libCategories()->sum('allocated_amount'), 2),
             // Funder and counterpart totals are the line-item sums.
@@ -751,7 +753,7 @@ class ProjectSetupService
             'rd_committee_approved_date' => $project->rd_committee_approved_date?->toDateString(),
             'fund_source' => $project->fund_source,
             'funding_agency_amount' => round((float) $project->funding_agency_amount, 2),
-        ] + $project->only(Project::formBPrintFields());
+        ] + $project->only(Project::formBPrintFields()) + $project->only(Project::purchaseRequestPrintFields());
     }
 
     private function lineItemSnapshot(LibCategory $item): array
