@@ -175,10 +175,11 @@ export function AuthBrandPanel({
   );
 }
 
-export function AuthPage({ brand, variant, children }) {
+export function AuthPage({ brand, variant, backdrop = null, children }) {
   const isForm = variant === 'register';
   return (
     <div className={`signin-page${isForm ? ' signin-page--tall' : ''}`}>
+      {backdrop}
       <div className={`signin-card${isForm ? ' signin-card--wide' : ''}`}>
         <AuthBrandPanel {...brand} />
         <main className={`signin-main${isForm ? ' signin-main--form' : ''}`}>
