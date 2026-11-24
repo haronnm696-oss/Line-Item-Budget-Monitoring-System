@@ -122,9 +122,8 @@ class ProgramUserController extends Controller
 
         abort_if($user->role_id === null, 422, 'Pending registrations are reviewed above, not edited here.');
 
-        // Legacy values (e.g. a gmail.com address or "MSU-DEMO01") are kept as
-        // they are; the format rules apply only to a value that is changed.
-        $emailChanged = $request->input('email') !== strtolower(trim((string) $user->email));
+        // Legacy values (e.g. "MSU-DEMO01") are kept as they are; the format
+        // rules apply only to a value that is changed.
         $idChanged = $request->input('employee_id') !== (strtoupper(trim((string) $user->employee_id)) ?: null);
         // Same for the contact number: a saved number that does not match is
         // kept only while unchanged; a new or changed one must match.
@@ -135,10 +134,7 @@ class ProgramUserController extends Controller
         $data = AcademicUnits::validateRequest($request, [
             'name' => ['required', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],
-            'email' => array_merge(
-                ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-                $emailChanged ? ['regex:/^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i'] : []
-            ),
+            'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'employee_id' => array_merge(
                 [$idChanged ? 'required' : 'nullable', 'string', 'max:50', Rule::unique('users', 'employee_id')->ignore($user->id)],
                 $idChanged ? ['regex:/^MSU-\d{5}$/'] : []
@@ -147,7 +143,6 @@ class ProgramUserController extends Controller
             'contact_number' => $contactChanged ? array_merge(['sometimes'], User::contactNumberRules()) : ['sometimes', 'nullable', 'string', 'max:50'],
         ], User::contactNumberMessages() + [
             'email.unique' => 'Another account already uses this email.',
-            'email.regex' => 'A new email must end with @msumain.edu.ph.',
             'employee_id.unique' => 'Another account already uses this employee ID.',
             'employee_id.required' => 'A new employee ID must use the format MSU-00000.',
             'employee_id.regex' => 'A new employee ID must use the format MSU-00000.',
@@ -173,7 +168,6 @@ class ProgramUserController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'email' => [
                 'required', 'email:rfc', 'max:255',
-                'regex:/^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i',
                 'unique:users,email',
             ],
             'employee_id' => ['required', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],

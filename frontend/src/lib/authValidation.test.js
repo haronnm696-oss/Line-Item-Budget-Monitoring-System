@@ -5,42 +5,33 @@ import {
   friendlyRegisterError,
   isPersonalPassword,
   isValidEmployeeId,
+  isEmailFormat,
   isValidLoginEmail,
-  isValidMsuEmail,
   contactNumberCounter,
   contactNumberError,
   CONTACT_NUMBER_MESSAGE,
   isValidContactNumber,
-  isValidStudentEmail,
   mapRegisterFieldErrors,
   pasteContactNumber,
   sanitizeContactNumber,
   passwordRules,
 } from './authValidation.js';
 
-test('student registration accepts only @s.msumain.edu.ph email addresses', () => {
-  assert.equal(isValidStudentEmail('name@s.msumain.edu.ph'), true);
-  assert.equal(isValidStudentEmail('NAME@S.MSUMAIN.EDU.PH'), true);
-  assert.equal(isValidStudentEmail('name@msumain.edu.ph'), false);
-  assert.equal(isValidStudentEmail('name@gmail.com'), false);
-  assert.equal(isValidStudentEmail('name@s.msumain.edu.ph.evil.com'), false);
-  assert.equal(isValidStudentEmail(''), false);
+test('registration and admin-created accounts accept any valid email address', () => {
+  for (const email of ['name@s.msumain.edu.ph', 'name@msumain.edu.ph', 'name@gmail.com', 'name@yahoo.com']) {
+    assert.equal(isEmailFormat(email), true, email);
+  }
+  assert.equal(isEmailFormat('not-an-email'), false);
+  assert.equal(isEmailFormat('name@nodot'), false);
+  assert.equal(isEmailFormat(''), false);
 });
 
-test('admin-created accounts accept both MSU student and staff domains', () => {
-  assert.equal(isValidMsuEmail('name@s.msumain.edu.ph'), true);
-  assert.equal(isValidMsuEmail('name@msumain.edu.ph'), true);
-  assert.equal(isValidMsuEmail('NAME@MSUMAIN.EDU.PH'), true);
-  assert.equal(isValidMsuEmail('name@gmail.com'), false);
-  assert.equal(isValidMsuEmail('name@msumain.edu.ph.evil.com'), false);
-  assert.equal(isValidMsuEmail(''), false);
-});
-
-test('login accepts Gmail and both MSU email domains', () => {
+test('login accepts any valid email address', () => {
   assert.equal(isValidLoginEmail('name@gmail.com'), true);
+  assert.equal(isValidLoginEmail('name@yahoo.com'), true);
   assert.equal(isValidLoginEmail('name@s.msumain.edu.ph'), true);
   assert.equal(isValidLoginEmail('name@msumain.edu.ph'), true);
-  assert.equal(isValidLoginEmail('name@msumain.edu.ph.evil.com'), false);
+  assert.equal(isValidLoginEmail('not-an-email'), false);
   assert.equal(isValidLoginEmail(''), false);
 });
 
@@ -121,7 +112,7 @@ test('maps duplicate server messages to clear field errors', () => {
   );
   assert.equal(
     friendlyRegisterError('email', 'The email field format is invalid.'),
-    'Use your @s.msumain.edu.ph student email address.',
+    'Enter a valid email address.',
   );
   assert.equal(friendlyRegisterError('first_name', 'The first name is required.'), 'The first name is required.');
 });

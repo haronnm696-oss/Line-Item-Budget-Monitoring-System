@@ -86,7 +86,7 @@ export default function Login() {
     <AuthPage brand={BRAND} backdrop={<OrbitBackground />}>
       <div className="signin-head">
         <h1 className="signin-title">Sign in</h1>
-        <p className="signin-subtitle">Use your MSU email to continue.</p>
+        <p className="signin-subtitle">Use your email address to continue.</p>
       </div>
 
       {error && <AuthAlert>{error}</AuthAlert>}
@@ -99,7 +99,7 @@ export default function Login() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@s.msumain.edu.ph"
+            placeholder="name@example.com"
             autoComplete="email"
             required
           />

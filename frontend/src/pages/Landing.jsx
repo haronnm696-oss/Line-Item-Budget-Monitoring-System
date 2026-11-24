@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 const SUPPORT_EMAIL = (import.meta.env.VITE_SUPPORT_EMAIL || '').trim();
 
 const STEPS = [
-  { title: 'Request access', text: 'Register with your MSU email.' },
+  { title: 'Request access', text: 'Register with your email address.' },
   {
     title: 'Get approved',
     text: 'The Program Leader reviews your request and assigns your role.',

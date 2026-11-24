@@ -15,7 +15,7 @@ import OrbitBackground from '../components/OrbitBackground';
 
 const BRAND_FORM = {
   title: 'Reset your password',
-  lead: 'Enter your MSU email and we will send you a secure link to choose a new password.',
+  lead: 'Enter your email address and we will send you a secure link to choose a new password.',
   cta: { to: '/login', label: 'Back to sign in' },
 };
 
@@ -62,7 +62,7 @@ export default function ForgotPassword() {
 
     const cleanEmail = normalizeEmail(email);
     if (!isValidLoginEmail(cleanEmail)) {
-      setEmailError('Enter a valid MSU-Main or Gmail email address.');
+      setEmailError('Enter a valid email address.');
       return;
     }
 
@@ -141,7 +141,7 @@ export default function ForgotPassword() {
       <div className="signin-head">
         <h1 className="signin-title">Forgot password?</h1>
         <p className="signin-subtitle">
-          Enter your MSU email. If it matches an account, we will send you a link to reset your password.
+          Enter your email address. If it matches an account, we will send you a link to reset your password.
         </p>
       </div>
 
@@ -158,7 +158,7 @@ export default function ForgotPassword() {
               setEmail(event.target.value);
               if (emailError) setEmailError('');
             }}
-            placeholder="name@s.msumain.edu.ph"
+            placeholder="name@example.com"
             autoComplete="email"
             aria-invalid={Boolean(emailError)}
             aria-describedby={emailError ? 'forgot-email-error' : undefined}

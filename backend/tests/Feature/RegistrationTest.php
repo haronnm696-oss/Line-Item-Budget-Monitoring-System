@@ -66,10 +66,21 @@ class RegistrationTest extends TestCase
             ->assertJsonPath('message', 'Your account is awaiting Program Leader approval.');
     }
 
-    public function test_registration_requires_the_student_email_domain(): void
+    public function test_registration_accepts_any_valid_email_domain(): void
+    {
+        foreach (['new.user@gmail.com', 'new.user@yahoo.com', 'new.user@msumain.edu.ph'] as $i => $email) {
+            $this->postJson('/api/register', $this->payload([
+                'email' => $email,
+                'employee_id' => 'MSU-9000' . $i,
+                'contact_number' => '0909625404' . $i,
+            ]))->assertCreated();
+        }
+    }
+
+    public function test_registration_rejects_a_malformed_email(): void
     {
         $this->postJson('/api/register', $this->payload([
-            'email' => 'new.user@msumain.edu.ph',
+            'email' => 'not-an-email',
         ]))
             ->assertStatus(422)
             ->assertJsonValidationErrors('email');

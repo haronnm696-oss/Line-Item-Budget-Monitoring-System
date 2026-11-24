@@ -15,7 +15,7 @@ import {
   contactNumberCounter,
   contactNumberError,
   isValidEmployeeId,
-  isValidStudentEmail,
+  isEmailFormat,
   mapRegisterFieldErrors,
   passwordRules,
 } from '../lib/authValidation';
@@ -30,7 +30,7 @@ const BRAND = {
   title: 'Request access',
   lead: 'Create an account to monitor externally funded research at Mindanao State University – Main Campus.',
   steps: [
-    'Register with your MSU email',
+    'Register with your email address',
     'The Program Leader reviews your request and assigns your role',
     'Sign in once you are approved',
   ],
@@ -83,7 +83,7 @@ function fieldError(name, data, units) {
       return value ? '' : 'Enter your last name.';
     case 'email':
       if (!value) return 'Enter your email address.';
-      return isValidStudentEmail(value) ? '' : 'Use your @s.msumain.edu.ph student email address.';
+      return isEmailFormat(value) ? '' : 'Enter a valid email address.';
     case 'contactNumber':
       return contactNumberError(value, { required: true });
     case 'employeeId':
@@ -355,7 +355,7 @@ export default function Register() {
                 value={formData.email}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                placeholder="name@s.msumain.edu.ph"
+                placeholder="name@example.com"
                 autoComplete="email"
                 aria-invalid={Boolean(errorFor('email'))}
                 aria-describedby={describedBy('email', 'reg-email-error')}

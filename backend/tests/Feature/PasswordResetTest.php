@@ -152,6 +152,25 @@ class PasswordResetTest extends TestCase
         Notification::assertNothingSent();
     }
 
+    public function test_forgot_and_reset_password_accept_any_valid_email_domain(): void
+    {
+        Notification::fake();
+        $user = $this->activeUser(['email' => 'maria.santos@yahoo.com']);
+
+        $this->forgot($user->email)->assertStatus(202);
+        Notification::assertSentToTimes($user, ResetPasswordNotification::class, 1);
+
+        $newPassword = 'N3w!Secure2026';
+        $this->postJson('/api/reset-password', [
+            'email' => $user->email,
+            'token' => Password::createToken($user),
+            'password' => $newPassword,
+            'password_confirmation' => $newPassword,
+        ])->assertOk();
+
+        $this->assertTrue(Hash::check($newPassword, $user->refresh()->password));
+    }
+
     public function test_forgot_password_rejects_an_invalid_email_format(): void
     {
         $this->postJson('/api/forgot-password', ['email' => 'not-an-email'])

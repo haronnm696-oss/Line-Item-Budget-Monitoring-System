@@ -3,7 +3,7 @@ import { ENDPOINTS } from './endpoints';
 import { ROLE_MAP, normalizeRole } from '../lib/roles';
 import {
   isValidLoginEmail,
-  isValidStudentEmail,
+  isEmailFormat,
   mapRegisterFieldErrors,
   sanitizeContactNumber,
 } from '../lib/authValidation';
@@ -15,7 +15,6 @@ export function normalizeEmail(raw) {
 }
 
 export function isValidEmail(raw) {
-  // Keep this aligned with the backend login rule: Gmail demo accounts plus
   // the student (@s.) and faculty/staff MSU domains.
   return isValidLoginEmail(normalizeEmail(raw));
 }
@@ -53,7 +52,7 @@ function toMockUser(code, email) {
 export async function login(email, password) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail || !isValidEmail(cleanEmail)) {
-    throw new Error('Enter a valid Gmail or MSU-Main email address.');
+    throw new Error('Enter a valid email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -99,8 +98,8 @@ export async function register({ name: _name, email, password, first_name, last_
   if (!cleanFirstName || !cleanLastName) {
     throw new Error('First and last name are required.');
   }
-  if (!cleanEmail || !isValidStudentEmail(cleanEmail)) {
-    throw new Error('Please use your @s.msumain.edu.ph student email address.');
+  if (!cleanEmail || !isEmailFormat(cleanEmail)) {
+    throw new Error('Enter a valid email address.');
   }
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters.');
@@ -179,7 +178,7 @@ export async function register({ name: _name, email, password, first_name, last_
 export async function forgotPassword(email) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail || !isValidLoginEmail(cleanEmail)) {
-    throw new Error('Enter a valid MSU-Main or Gmail email address.');
+    throw new Error('Enter a valid email address.');
   }
 
   if (USE_MOCK) {
