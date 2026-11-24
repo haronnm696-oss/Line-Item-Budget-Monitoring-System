@@ -52,11 +52,11 @@ class LoginTest extends TestCase
         }
     }
 
-    public function test_student_and_staff_email_domains_can_sign_in(): void
+    public function test_any_valid_email_domain_can_sign_in(): void
     {
         $role = Role::where('slug', 'researcher')->firstOrFail();
 
-        foreach (['student@s.msumain.edu.ph', 'staff@msumain.edu.ph'] as $email) {
+        foreach (['student@s.msumain.edu.ph', 'staff@msumain.edu.ph', 'personal@gmail.com', 'personal@yahoo.com'] as $email) {
             User::create([
                 'name' => 'Domain Test User',
                 'email' => $email,

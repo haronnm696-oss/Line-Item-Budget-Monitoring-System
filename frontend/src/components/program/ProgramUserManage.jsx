@@ -1,13 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
-import { contactNumberCounter, contactNumberError } from '../../lib/authValidation';
+import { contactNumberCounter, contactNumberError, isEmailFormat } from '../../lib/authValidation';
 import ContactNumberInput from '../ContactNumberInput';
 import AcademicUnitFields from '../AcademicUnitFields';
 import { academicUnitErrors, academicUnitPayload, unitFormFromUser } from '../../lib/academicUnits';
 import { useAcademicUnits } from '../../lib/useAcademicUnits';
 
-const MSU_EMAIL = /^[^@\s]+@(?:s\.)?msumain\.edu\.ph$/i;
 const MSU_EMPLOYEE_ID = /^MSU-\d{5}$/i;
 
 /**
@@ -184,7 +183,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
     const idChanged = employeeId !== String(user.employee_id ?? '').trim().toUpperCase();
     if (!form.name.trim()) next.name = 'Name is required.';
     if (!email) next.email = 'Email is required.';
-    else if (emailChanged && !MSU_EMAIL.test(email)) next.email = 'A new email must end with @msumain.edu.ph.';
+    else if (emailChanged && !isEmailFormat(email)) next.email = 'Enter a valid email address.';
     if (idChanged && !MSU_EMPLOYEE_ID.test(employeeId)) next.employee_id = 'A new employee ID must use the format MSU-00000.';
     // Optional; an unchanged legacy number is kept, a new or changed one must match.
     const contactError = contactNumberError(form.contact_number, { original: user.contact_number ?? '' });
@@ -227,7 +226,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
         {error && <div className="program-banner error" role="alert">{error}</div>}
         {field('name', 'Name')}
         {field('position', 'Position / office', 'text', 'Optional')}
-        {field('email', 'Email', 'email', 'A new email must end with @msumain.edu.ph. An unchanged email is kept as it is.')}
+        {field('email', 'Email', 'email', 'Enter a valid email address. An unchanged email is kept as it is.')}
         {field('employee_id', 'Employee ID', 'text', 'A new employee ID must use the format MSU-00000. An unchanged ID is kept as it is.')}
         <div className="program-field">
           <label htmlFor="pu-edit-contact_number">Contact number (optional)</label>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { contactNumberCounter, contactNumberError, isValidMsuEmail } from '../../lib/authValidation';
+import { contactNumberCounter, contactNumberError, isEmailFormat } from '../../lib/authValidation';
 import ContactNumberInput from '../ContactNumberInput';
 import AcademicUnitFields from '../AcademicUnitFields';
 import { academicUnitErrors, academicUnitPayload } from '../../lib/academicUnits';
@@ -43,8 +43,8 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
       setLocalError('First name, last name, email, employee ID, position and role are required.');
       return;
     }
-    if (!isValidMsuEmail(form.email.trim())) {
-      setLocalError('Email must be a valid MSU-Main address (@s.msumain.edu.ph or @msumain.edu.ph).');
+    if (!isEmailFormat(form.email.trim())) {
+      setLocalError('Enter a valid email address.');
       return;
     }
     if (!/^MSU-\d{5}$/i.test(form.empId.trim())) {
@@ -101,8 +101,8 @@ export default function ProgramAddUserModal({ open, busy = false, error = '', on
               <input id="pu-last" className="program-input" value={form.lastName} disabled={busy} onChange={(event) => setForm({ ...form, lastName: event.target.value })} placeholder="Dela Cruz" autoComplete="family-name" />
             </div>
             <div className="program-field">
-              <label htmlFor="pu-email">MSU email</label>
-              <input id="pu-email" className="program-input" type="email" value={form.email} disabled={busy} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="j.dela.cruz@s.msumain.edu.ph" autoComplete="email" />
+              <label htmlFor="pu-email">Email address</label>
+              <input id="pu-email" className="program-input" type="email" value={form.email} disabled={busy} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="name@example.com" autoComplete="email" />
             </div>
             <div className="program-field">
               <label htmlFor="pu-emp">Employee ID</label>

@@ -1,6 +1,3 @@
-const STUDENT_EMAIL_RE = /^[^\s@]+@s\.msumain\.edu\.ph$/i;
-const MSU_EMAIL_RE = /^[^\s@]+@(?:s\.)?msumain\.edu\.ph$/i;
-const LOGIN_EMAIL_RE = /^[^\s@]+@(?:gmail\.com|(?:s\.)?msumain\.edu\.ph)$/i;
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMPLOYEE_ID_RE = /^MSU-\d{5}$/;
 
@@ -54,16 +51,8 @@ export function contactNumberError(value, { required = false, original } = {}) {
   return isValidContactNumber(text) ? '' : CONTACT_NUMBER_MESSAGE;
 }
 
-export function isValidStudentEmail(value) {
-  return STUDENT_EMAIL_RE.test(String(value || '').trim());
-}
-
-export function isValidMsuEmail(value) {
-  return MSU_EMAIL_RE.test(String(value || '').trim());
-}
-
 export function isValidLoginEmail(value) {
-  return LOGIN_EMAIL_RE.test(String(value || '').trim());
+  return EMAIL_FORMAT_RE.test(String(value || '').trim());
 }
 
 export function isValidEmployeeId(value) {
@@ -116,7 +105,7 @@ export function friendlyRegisterError(field, message) {
       return 'An account with this email already exists.';
     }
     if (/msumain|institutional|domain|format|regex/i.test(text)) {
-      return 'Use your @s.msumain.edu.ph student email address.';
+      return 'Enter a valid email address.';
     }
     return text || 'Enter a valid email address.';
   }

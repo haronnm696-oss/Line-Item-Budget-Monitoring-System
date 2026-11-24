@@ -325,7 +325,7 @@ class ProgramUsersDirectoryTest extends TestCase
         $this->assertSame(['position'], array_keys(AuditTrail::sole()->new_values));
     }
 
-    public function test_a_changed_email_or_employee_id_must_use_the_msu_formats(): void
+    public function test_a_changed_email_must_be_valid_and_a_changed_employee_id_must_use_the_msu_format(): void
     {
         $person = AuditLogger::muted(function () {
             $person = $this->person('researcher', 'Legacy Person', 'MSU-DEMO04');
@@ -335,9 +335,9 @@ class ProgramUsersDirectoryTest extends TestCase
         });
 
         $this->actingAs($this->leader)
-            ->patchJson("/api/program/users/{$person->id}", ['name' => 'Legacy Person', 'email' => 'new@gmail.com', 'employee_id' => 'MSU-DEMO04'])
+            ->patchJson("/api/program/users/{$person->id}", ['name' => 'Legacy Person', 'email' => 'not-an-email', 'employee_id' => 'MSU-DEMO04'])
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['email' => 'A new email must end with @msumain.edu.ph.'])
+            ->assertJsonValidationErrors('email')
             ->assertJsonMissingValidationErrors(['employee_id']);
 
         foreach (['MSU-123', 'EMP-12345', ''] as $badId) {

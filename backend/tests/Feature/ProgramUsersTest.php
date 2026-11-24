@@ -308,7 +308,22 @@ class ProgramUsersTest extends TestCase
         ]);
     }
 
-    public function test_add_user_validates_msu_email_and_unique_employee_id(): void
+    public function test_add_user_accepts_a_personal_email_domain(): void
+    {
+        Notification::fake();
+        $leader = $this->userWithRole('program-leader');
+
+        $this->actingAs($leader)
+            ->postJson('/api/program/users', array_merge($this->addUserPayload(), [
+                'email' => 'new.person@yahoo.com',
+                'employee_id' => 'MSU-54323',
+            ]))
+            ->assertCreated();
+
+        $this->assertDatabaseHas('users', ['email' => 'new.person@yahoo.com']);
+    }
+
+    public function test_add_user_validates_email_format_and_unique_employee_id(): void
     {
         $leader = $this->userWithRole('program-leader');
         $existing = $this->userWithRole('researcher');
@@ -316,7 +331,7 @@ class ProgramUsersTest extends TestCase
 
         $this->actingAs($leader)
             ->postJson('/api/program/users', array_merge($this->addUserPayload(), [
-                'email' => 'someone@gmail.com',
+                'email' => 'not-an-email',
             ]))
             ->assertStatus(422)
             ->assertJsonValidationErrors('email');
