@@ -11,6 +11,7 @@ import {
   AuthPage,
   AuthPillButton,
 } from '../components/auth/AuthPage';
+import OrbitBackground from '../components/OrbitBackground';
 
 const BRAND_FORM = {
   title: 'Reset your password',
@@ -102,7 +103,7 @@ export default function ForgotPassword() {
 
   if (view === 'sent') {
     return (
-      <AuthPage brand={BRAND_SENT}>
+      <AuthPage brand={BRAND_SENT} backdrop={<OrbitBackground />}>
         <div className="signin-state" role="status" aria-live="polite">
           <div className="signin-state__icon signin-state__icon--success" aria-hidden="true">
             <AuthIcon name="mail" className="signin-state__glyph" />
@@ -136,7 +137,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <AuthPage brand={BRAND_FORM}>
+    <AuthPage brand={BRAND_FORM} backdrop={<OrbitBackground />}>
       <div className="signin-head">
         <h1 className="signin-title">Forgot password?</h1>
         <p className="signin-subtitle">
