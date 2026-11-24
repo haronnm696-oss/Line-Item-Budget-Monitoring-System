@@ -10,6 +10,7 @@ import {
   AuthSection,
   CheckIcon,
 } from '../components/auth/AuthPage';
+import OrbitBackground from '../components/OrbitBackground';
 import {
   contactNumberCounter,
   contactNumberError,
@@ -262,7 +263,7 @@ export default function Register() {
 
   if (success) {
     return (
-      <AuthPage variant="register" brand={BRAND}>
+      <AuthPage variant="register" brand={BRAND} backdrop={<OrbitBackground />}>
         <div className="signin-success">
           <div className="signin-success__icon" aria-hidden="true">
             <CheckIcon />
@@ -285,7 +286,7 @@ export default function Register() {
   }
 
   return (
-    <AuthPage variant="register" brand={BRAND}>
+    <AuthPage variant="register" brand={BRAND} backdrop={<OrbitBackground />}>
       <div className="signin-head">
         <h1 className="signin-title">Create account</h1>
         <p className="signin-subtitle">Your role is assigned by the Program Leader after review.</p>
