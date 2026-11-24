@@ -9,6 +9,7 @@ import {
   AuthPage,
   AuthPillButton,
 } from '../components/auth/AuthPage';
+import OrbitBackground from '../components/OrbitBackground';
 
 function getDashboardPath(roleCode) {
   return ROUTE_BY_ROLE[roleCode] || '/dashboard';
@@ -82,7 +83,7 @@ export default function Login() {
   }
 
   return (
-    <AuthPage brand={BRAND}>
+    <AuthPage brand={BRAND} backdrop={<OrbitBackground />}>
       <div className="signin-head">
         <h1 className="signin-title">Sign in</h1>
         <p className="signin-subtitle">Use your MSU email to continue.</p>
