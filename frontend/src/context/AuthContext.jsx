@@ -76,6 +76,12 @@ export function AuthProvider({ children }) {
     return await resetPasswordApi(payload);
   }, []);
 
+  // After a profile change (e.g. the photo), keep the signed-in user in step
+  // with the server's payload.
+  const updateUser = useCallback((serverUser) => {
+    if (serverUser) persistUser(serverUser);
+  }, []);
+
   useEffect(() => {
     const onUnauthorized = () => { setUser(null); sessionStorage.removeItem(STORAGE_KEY); };
     window.addEventListener('lib:unauthorized', onUnauthorized);
@@ -87,7 +93,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, roleInfo, checking, signIn, signOut, signUp, requestPasswordReset, verifyResetCode, resetPassword }}
+      value={{ user, roleInfo, checking, signIn, signOut, signUp, requestPasswordReset, verifyResetCode, resetPassword, updateUser }}
     >
       {children}
     </AuthContext.Provider>

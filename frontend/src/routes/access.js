@@ -20,6 +20,8 @@ const ALL = ['PRG', 'PL', 'RA', 'FIN', 'RES'];
 export const ROUTE_ROLES = {
   // Redirects to the user's own dashboard.
   '/dashboard': ALL,
+  // Own profile (photo), every role.
+  '/profile': ALL,
 
   // Program Leader shell.
   '/program-dashboard': ['PRG'],

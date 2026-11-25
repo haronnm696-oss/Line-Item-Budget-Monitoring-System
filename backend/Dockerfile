@@ -9,11 +9,16 @@ RUN apt-get update \
         openssl \
         libonig-dev \
         libzip-dev \
+        libjpeg62-turbo-dev \
+        libpng-dev \
+        libwebp-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql \
         mbstring \
         bcmath \
         zip \
+        gd \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 

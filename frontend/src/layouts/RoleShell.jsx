@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { formatInManila } from '../lib/datetime';
 import { greetingText, msUntilNextGreeting } from '../lib/greeting';
 import PageErrorBoundary from '../components/program/PageErrorBoundary';
 import NotificationBell from '../components/NotificationBell';
+import UserAvatar from '../components/UserAvatar';
 
 const stroke = {
   fill: 'none',
@@ -109,6 +110,12 @@ const ICONS = {
   menu: (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke}>
       <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  ),
+  profile: (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...stroke}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
     </svg>
   ),
   logout: (
@@ -390,7 +397,7 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
               aria-expanded={profileOpen}
               onClick={() => setProfileOpen((open) => !open)}
             >
-              <span className="program-avatar" aria-hidden="true">{initials}</span>
+              <UserAvatar avatarUrl={user?.avatar_url} initials={initials} />
               <span className="program-user-chip-text">
                 <b>{user?.name ?? fallbackName}</b>
                 <span>{roleLabel}</span>
@@ -401,13 +408,17 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
             {profileOpen && (
               <div className="program-user-dropdown" role="menu">
                 <div className="program-user-dropdown-head">
-                  <span className="program-avatar" aria-hidden="true">{initials}</span>
+                  <UserAvatar avatarUrl={user?.avatar_url} initials={initials} />
                   <div>
                     <b>{user?.name ?? fallbackName}</b>
                     <span>{user?.email ?? ''}</span>
                     <em>{roleLabel}</em>
                   </div>
                 </div>
+                <Link to="/profile" className="program-user-menu-item" role="menuitem">
+                  {ICONS.profile}
+                  <span>Profile</span>
+                </Link>
                 <button
                   type="button"
                   className="program-user-menu-item danger"

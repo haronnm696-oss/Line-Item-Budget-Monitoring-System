@@ -448,6 +448,7 @@ class ProgramUserService
             'role_label' => self::ROLE_LABELS[$slug] ?? $user->primaryRole?->name,
             'status' => $user->is_active ? 'Active' : 'Inactive',
             'is_active' => (bool) $user->is_active,
+            'avatar_url' => AvatarStorage::url($user),
             'is_self' => (int) $user->id === (int) $actor->id,
             'last_login_at' => $user->last_login_at?->toIso8601String(),
             // Program Leaders oversee all projects; any assignment rows they
@@ -1136,6 +1137,7 @@ class ProgramUserService
             'role_label' => $user->primaryRole?->name,
             'status' => $user->is_active ? 'Active' : 'Inactive',
             'is_active' => (bool) $user->is_active,
+            'avatar_url' => AvatarStorage::url($user),
             'last_login_at' => $user->last_login_at?->toIso8601String(),
             'assignments' => $user->projectUsers->map(fn (ProjectUser $assignment) => [
                 'project_id' => $assignment->project_id,

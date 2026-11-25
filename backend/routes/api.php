@@ -15,6 +15,7 @@ use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PersonnelController;
+use App\Http\Controllers\ProfileAvatarController;
 use App\Http\Controllers\ProgramApprovalController;
 use App\Http\Controllers\ProgramAuditController;
 use App\Http\Controllers\ProgramDashboardController;
@@ -236,6 +237,14 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::patch('/program/assignments/{user}/{project}', [ProgramUserController::class, 'updateAssignment']);
         Route::delete('/program/assignments/{user}/{project}', [ProgramUserController::class, 'removeAssignment']);
     });
+});
+
+// Profile photo: upload/remove act on the signed-in user only; any signed-in
+// user may view a photo.
+Route::middleware(['auth:sanctum', 'active.account'])->group(function () {
+    Route::post('/profile/avatar', [ProfileAvatarController::class, 'store'])->middleware('throttle:20,1');
+    Route::delete('/profile/avatar', [ProfileAvatarController::class, 'destroy']);
+    Route::get('/users/{user}/avatar', [ProfileAvatarController::class, 'show']);
 });
 
 Route::middleware(['auth:sanctum', 'active.account'])->get('/user', function (Request $request) {

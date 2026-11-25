@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Services\AvatarStorage;
 use App\Services\ProgramUserService;
 use App\Support\AcademicUnits;
 use Illuminate\Http\Request;
@@ -345,6 +346,7 @@ class ProgramUserController extends Controller
             'role_label' => $user->primaryRole?->name,
             'status' => $user->is_active ? 'Active' : 'Inactive',
             'is_active' => (bool) $user->is_active,
+            'avatar_url' => AvatarStorage::url($user),
         ];
     }
 

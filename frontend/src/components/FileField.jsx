@@ -14,9 +14,11 @@ import { formatBytes } from '../lib/imagePrep';
  * onChange(value, problem): value is the prepared File (or File[] with
  * `multiple`), null / [] when nothing usable was chosen; problem is the
  * message to show, or null. onPreparing(bool) is optional (disable submit
- * while photos are being compressed).
+ * while photos are being compressed). `accept` and `prepare` default to the
+ * document rules; the profile photo passes its own (JPG/PNG/WebP, 2 MB, no
+ * compression: it is cropped on the page).
  */
-export default function FileField({ id, label, multiple = false, disabled = false, onChange, onPreparing, hint = FILE_HINT }) {
+export default function FileField({ id, label, multiple = false, disabled = false, onChange, onPreparing, hint = FILE_HINT, accept = FILE_ACCEPT, prepare = prepareUpload }) {
   const [items, setItems] = useState([]);
   const [names, setNames] = useState([]);
   const [preparing, setPreparing] = useState(false);
@@ -36,7 +38,7 @@ export default function FileField({ id, label, multiple = false, disabled = fals
     setPreparing(true);
     onPreparing?.(true);
     onChange(multiple ? [] : null, null);
-    const results = await Promise.all(chosen.map((file) => prepareUpload(file)));
+    const results = await Promise.all(chosen.map((file) => prepare(file)));
     if (attempt !== run.current) return; // a newer choice replaced this one
     setPreparing(false);
     onPreparing?.(false);
@@ -57,7 +59,7 @@ export default function FileField({ id, label, multiple = false, disabled = fals
     <>
       <label htmlFor={id}>{label} <span className="ld-muted">· {hint}{multiple ? ' each' : ''}</span></label>
       <div className={`file-field${disabled ? ' is-disabled' : ''}`}>
-        <input id={id} className="file-field-input" type="file" accept={FILE_ACCEPT} multiple={multiple} onChange={choose} disabled={disabled} aria-describedby={`${id}-name ${id}-sizes`} />
+        <input id={id} className="file-field-input" type="file" accept={accept} multiple={multiple} onChange={choose} disabled={disabled} aria-describedby={`${id}-name ${id}-sizes`} />
         {/* aria-hidden keeps this text out of the field's name; aria-describedby still reads the chosen file. */}
         <label htmlFor={id} className="file-field-control">
           <span className="program-btn sm file-field-button" aria-hidden="true">{multiple ? 'Choose files' : 'Choose file'}</span>
