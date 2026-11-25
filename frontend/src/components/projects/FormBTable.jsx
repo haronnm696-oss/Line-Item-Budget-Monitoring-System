@@ -4,6 +4,7 @@ import { RowMenu } from '../ActionMenu';
 import { peso } from '../money';
 import { lineItemActions, menuOptions } from '../../lib/projectRowActions';
 import { sourceLabels } from '../../lib/fundingSource';
+import Tip from '../Tip';
 
 /** Verified spending under one Form B node (a group, cost type, section…). */
 function spentOf(node) {
@@ -139,7 +140,7 @@ export default function FormBTable({ formB, setup = null, onOpen, remaining = fa
             <th scope="col" className="num">{labels.implementing_agency}</th>
             <th scope="col" className="num">{labels.funder}</th>
             <th scope="col" className="num">Total</th>
-            <th scope="col" className="num">Spent</th>
+            <th scope="col" className="num"><Tip>Spent</Tip></th>
             {remaining && <th scope="col" className="num">Remaining</th>}
             {setup && <th scope="col"><span className="pa-sr-only">Actions</span></th>}
           </tr>

@@ -234,7 +234,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
     });
   }
 
-  const field = (key, label, type = 'text', hint = null) => (
+  const field = (key, label, type = 'text', hint = null, placeholder = undefined) => (
     <div className="program-field">
       <label htmlFor={`pu-edit-${key}`}>{label}</label>
       <input
@@ -242,6 +242,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
         className="program-input"
         type={type}
         value={form[key]}
+        placeholder={placeholder}
         disabled={busy}
         aria-invalid={Boolean(errors[key]) || undefined}
         aria-describedby={errors[key] ? `pu-edit-${key}-error` : (hint ? `pu-edit-${key}-hint` : undefined)}
@@ -258,8 +259,8 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
         {error && <div className="program-banner error" role="alert">{error}</div>}
         {field('name', 'Name')}
         {field('position', 'Position / office', 'text', 'Optional')}
-        {field('email', 'Email', 'email', 'Enter a valid email address. An unchanged email is kept as it is.')}
-        {field('employee_id', 'Employee ID', 'text', 'A new employee ID must use the format MSU-00000. An unchanged ID is kept as it is.')}
+        {field('email', 'Email', 'email')}
+        {field('employee_id', 'Employee ID', 'text', null, 'MSU-00000')}
         <div className="program-field">
           <label htmlFor="pu-edit-contact_number">Contact number (optional)</label>
           <ContactNumberInput
@@ -636,7 +637,7 @@ export function AssignmentsDialog({ user, onAdd, onFix, onRemove, onChanged, onC
           </div>
         )}
         {!user.program_wide && (
-          <p className="au-muted">Each project uses {user.name}&apos;s account role ({user.role_label}). To change it, use Change account role.</p>
+          <p className="au-muted">Uses the account role ({user.role_label}).</p>
         )}
         <div aria-live="polite">
           {notice && <div className="program-banner ok">{notice}</div>}

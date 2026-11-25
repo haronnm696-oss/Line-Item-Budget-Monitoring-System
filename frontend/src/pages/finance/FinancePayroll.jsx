@@ -36,9 +36,8 @@ export default function FinancePayroll() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Payroll</h1>
-          <ProjectLine picker={picker} detail="One batch per pay period; no deductions or allowances. Spent = verified expenses and verified payroll" />
+          <ProjectLine picker={picker} />
         </div>
       </div>
 
@@ -73,7 +72,7 @@ export default function FinancePayroll() {
                         <StagePill status={batch.workflow_status} />
                         {batch.blocked_text
                           ? <div className="ra-next fin-blocked">⊘ {batch.blocked_text}</div>
-                          : <div className="ra-next">{batch.can_verify ? 'Waiting for you to verify' : batch.next_step}</div>}
+                          : !batch.can_verify && batch.next_step && <div className="ra-next">{batch.next_step}</div>}
                       </td>
                     </tr>
                   ))}

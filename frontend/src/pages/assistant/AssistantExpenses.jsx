@@ -44,9 +44,8 @@ export default function AssistantExpenses() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Expenses and receipts</h1>
-          <ProjectLine picker={picker} detail="Only verified expenses count as spent; each one needs a receipt" />
+          <ProjectLine picker={picker} />
         </div>
         {projectId && (
           <div className="pl-head-actions">
@@ -65,7 +64,6 @@ export default function AssistantExpenses() {
             <div className="program-card-head">
               <div>
                 <div className="program-card-title">My expenses</div>
-                <div className="program-card-sub">Expenses you recorded, newest first</div>
               </div>
               <div className="program-field ra-inline-field">
                 <label htmlFor="ra-expenses-status">Status</label>
@@ -90,7 +88,6 @@ export default function AssistantExpenses() {
             <div className="program-card-head">
               <div>
                 <div className="program-card-title">Missing receipts</div>
-                <div className="program-card-sub">Verified expenses of the project without a receipt</div>
               </div>
             </div>
             {compliance.status === 'error' && (
@@ -104,7 +101,7 @@ export default function AssistantExpenses() {
                 {missing.map((row) => (
                   <li key={row.id}>
                     <div>
-                      <b>{row.reference_no || `EXP-${row.id}`} · {peso(row.amount)}</b>
+                      <b>{row.reference_no ? `${row.reference_no} · ` : ''}{peso(row.amount)}</b>
                       <span>{row.description}{row.category ? ` · ${row.category}` : ''}</span>
                     </div>
                     <button
@@ -112,7 +109,7 @@ export default function AssistantExpenses() {
                       className="program-btn sm"
                       onClick={() => actions.upload({
                         key: `expense-${row.id}`, type: 'expense', id: row.id, type_label: 'Expense',
-                        reference: row.reference_no || `EXP-${row.id}`, title: row.description, amount: row.amount,
+                        reference: row.reference_no || null, title: row.description, amount: row.amount,
                       }, { types: ['receipt'], title: 'Upload missing receipt' })}
                     >
                       Upload
@@ -121,7 +118,7 @@ export default function AssistantExpenses() {
                 ))}
               </ul>
             )}
-            {missingCount > missing.length && <p className="ld-muted">{missingCount - missing.length} more not shown; the oldest are listed last.</p>}
+            {missingCount > missing.length && <p className="ld-muted">+{missingCount - missing.length} more</p>}
           </section>
         </div>
 

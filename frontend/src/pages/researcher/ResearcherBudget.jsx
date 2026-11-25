@@ -2,8 +2,6 @@ import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
-import { sourceLabels } from '../../lib/fundingSource';
-import { RESEARCHER_EYEBROW } from '../../lib/pageHead';
 import LoadState from '../../components/LoadState';
 import PageTitle from '../../components/PageTitle';
 import ProjectLine from '../../components/ProjectLine';
@@ -22,14 +20,13 @@ export default function ResearcherBudget() {
   const detail = useApiData(picker.projectId ? ENDPOINTS.project(picker.projectId) : null);
   const formB = detail.data?.form_b ?? null;
   const sections = Array.isArray(formB?.sections) ? formB.sections : [];
-  const labels = sourceLabels(formB?.labels);
 
   return (
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <PageTitle eyebrow={RESEARCHER_EYEBROW} title="Budget" readOnly />
-          <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll" />
+          <PageTitle title="Budget" readOnly />
+          <ProjectLine picker={picker} />
         </div>
       </div>
 
@@ -39,9 +36,6 @@ export default function ResearcherBudget() {
             <div className="program-card-head">
               <div>
                 <div className="program-card-title">Line-item budget (Form B)</div>
-                <div className="program-card-sub">
-                  PS and MOOE, direct and indirect cost, by expense group: {labels.implementing_agency} counterpart and {labels.funder} amounts, with verified spending and what remains
-                </div>
               </div>
             </div>
             <FormBTable formB={formB} remaining />

@@ -6,7 +6,6 @@ import ProgramPill from '../../components/program/ProgramPill';
 import { LineItemDialog, ProjectFormDialog, RemoveDialog, TrancheDialog } from '../../components/program/ProjectSetup';
 import { formatPct, peso } from '../../components/money';
 import { formatDate, formatDateTime } from '../../lib/datetime';
-import { sourceLabels } from '../../lib/fundingSource';
 import FundingWarnings from '../../components/program/FundingWarnings';
 import FormBTable from '../../components/projects/FormBTable';
 import PersonnelSection from '../../components/personnel/PersonnelSection';
@@ -21,6 +20,7 @@ import { RowMenu } from '../../components/ActionMenu';
 import ProgramAssignUserModal from '../../components/program/ProgramAssignUserModal';
 import { canAssignTo } from '../../lib/assignForm';
 import { activityTitle, menuOptions, trancheActions } from '../../lib/projectRowActions';
+import Tip from '../../components/Tip';
 
 const LIQUIDATION_TONE = { Approved: 'healthy', Pending: 'watch', Rejected: 'risk', 'Not submitted': 'watch' };
 
@@ -95,7 +95,6 @@ export default function ProgramProjectDetail() {
   const project = data.project;
   const formB = data.form_b ?? null;
   const sections = formB?.sections ?? [];
-  const labels = sourceLabels(formB?.labels);
   const tranches = data.tranches ?? [];
   const expenses = data.expenses ?? [];
   const team = data.team ?? [];
@@ -210,7 +209,7 @@ export default function ProgramProjectDetail() {
           <div className="pl-kpi-value pd-kpi-value">{peso(project.budget)}</div>
         </section>
         <section className="program-card pl-kpi">
-          <div className="pl-kpi-label">Spent</div>
+          <div className="pl-kpi-label"><Tip>Spent</Tip></div>
           <div className="pl-kpi-value pd-kpi-value">{peso(project.spent)}</div>
           <div className="pl-kpi-sub">{formatPct(project.spent_pct)} of the budget</div>
         </section>
@@ -231,9 +230,6 @@ export default function ProgramProjectDetail() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Line-item budget (Form B)</div>
-            <div className="program-card-sub">
-              PS and MOOE, direct and indirect cost, by expense group: {labels.implementing_agency} counterpart and {labels.funder} amounts, with verified spending
-            </div>
           </div>
           {setup && (
             <button type="button" className="program-btn" onClick={() => openDialog({ kind: 'line' })}>Add line item</button>
@@ -241,16 +237,15 @@ export default function ProgramProjectDetail() {
         </div>
         {setup && (
           <p className={`ld-hint${left < 0 ? ' is-risk' : ''}`} role="status">
-            Line items: {peso(setup.allocated)} of the {peso(setup.total_budget)} total budget
-            {left >= 0 ? ` · ${peso(left)} left to allocate` : ` · ⚠ ${peso(-left)} over the total budget`}
-            {setup.allocations_locked ? ' · Verified expenses or payroll exist: allocated amounts change only through a realignment request.' : ''}
-          </p>
-        )}
-        {setup?.funding_totals && (
-          <p className="ld-hint" role="status">
-            {labels.implementing_agency} counterpart {peso(setup.funding_totals.implementing_agency)}
-            {' + '}{labels.funder} {peso(setup.funding_totals.funder)}
-            {' = '}{peso(setup.funding_totals.total)} (sums of the line items)
+            {left >= 0 ? `${peso(left)} left to allocate` : `⚠ ${peso(-left)} over the total budget`}
+            {setup.allocations_locked && (
+              <>
+                {' · '}
+                <Tip text="Verified expenses or payroll exist: allocated amounts change only through a realignment request.">
+                  <span aria-hidden="true">🔒 </span>Locked
+                </Tip>
+              </>
+            )}
           </p>
         )}
         <FundingWarnings warnings={formB?.warnings} />
@@ -265,15 +260,22 @@ export default function ProgramProjectDetail() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Releases</div>
-            <div className="program-card-sub">Portions of the funder&apos;s grant released to the project, as set in the MOA. Purchases go through purchase requests.</div>
-            <div className="program-card-sub">Listed by planned date, with their liquidation. A release keeps its number once it is requested or released. Releasing the funds goes through the fund release approval.</div>
+            <div className="program-card-sub">Per the MOA</div>
           </div>
           {setup && (
             <div className="program-head-actions">
               {tranches.length === 0 && funderTotal > 0 && (
-                <button type="button" className="program-btn" disabled={splitBusy} onClick={splitReleases} aria-describedby="pd-split-hint">
-                  {splitBusy ? 'Adding…' : 'Split 70% / 30%'}
-                </button>
+                <span className="pd-split">
+                  <button type="button" className="program-btn" disabled={splitBusy} onClick={splitReleases} aria-describedby="pd-split-hint">
+                    {splitBusy ? 'Adding…' : 'Split 70% / 30%'}
+                  </button>
+                  <Tip
+                    icon
+                    id="pd-split-hint"
+                    label="About Split 70% / 30%"
+                    text={`Adds the first two releases (${peso(splitPreview[0])} and ${peso(splitPreview[1])}) on the project start date and halfway through the period, with the project's next release numbers. You can edit both afterwards.`}
+                  />
+                </span>
               )}
               <button type="button" className="program-btn" onClick={() => { setSplitError(''); openDialog({ kind: 'tranche' }); }}>Add release</button>
             </div>
@@ -295,18 +297,11 @@ export default function ProgramProjectDetail() {
             <button type="button" className="link-btn pd-hint-link" onClick={() => openDialog({ kind: 'details' })}>Edit details</button>
           </p>
         )}
-        {setup && tranches.length === 0 && funderTotal > 0 && (
-          <p className="pu-hint" id="pd-split-hint">
-            Split 70% / 30% adds the first two releases ({peso(splitPreview[0])} and {peso(splitPreview[1])}) on the project start date and halfway through the period, with the project&apos;s next release numbers. You can edit both afterwards.
-          </p>
-        )}
         {setup?.can_renumber_releases && (
           <p className="pu-hint" id="pd-renumber-hint">
-            Every release is still scheduled and none was ever requested.{' '}
             <button type="button" className="link-btn pd-hint-link" disabled={renumberBusy} onClick={renumberReleases}>
-              {renumberBusy ? 'Renumbering…' : 'Renumber planned releases'}
+              {renumberBusy ? 'Renumbering…' : 'Renumber by planned date'}
             </button>
-            {' '}to number them 1, 2, … by planned date; milestones that name an old number are updated.
           </p>
         )}
         {tranches.length === 0 ? (
@@ -373,7 +368,6 @@ export default function ProgramProjectDetail() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Team</div>
-            <div className="program-card-sub">People assigned to this project, in their account roles. Add someone here before listing them under Personnel.</div>
           </div>
           <div className="program-head-actions">
             <Link className="program-card-link" to="/program-users">Users and roles</Link>
@@ -407,7 +401,6 @@ export default function ProgramProjectDetail() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Recent verified expenses</div>
-            <div className="program-card-sub">Latest 10 verified records</div>
           </div>
         </div>
         {expenses.length === 0 ? (
@@ -429,12 +422,12 @@ export default function ProgramProjectDetail() {
                   <tr key={expense.id}>
                     <td>{formatDate(expense.date)}</td>
                     <td>
-                      <div>{expense.line_item || '—'}</div>
+                      <div>{expense.line_item}</div>
                       <div className="project-code">{expense.description}</div>
                     </td>
-                    <td>{expense.payee || '—'}</td>
+                    <td>{expense.payee}</td>
                     <td className="num">{peso(expense.amount)}</td>
-                    <td>{expense.reference_no || '—'}</td>
+                    <td>{expense.reference_no}</td>
                   </tr>
                 ))}
               </tbody>
@@ -447,7 +440,6 @@ export default function ProgramProjectDetail() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title">Recent activity</div>
-            <div className="program-card-sub">Latest 10 audit-trail entries</div>
           </div>
           <Link className="program-card-link" to={`/program-audit?project=${project.id}`}>Audit trail</Link>
         </div>
@@ -459,7 +451,7 @@ export default function ProgramProjectDetail() {
               <li key={entry.id}>
                 <b>{activityTitle(entry)}</b>
                 <span>
-                  {entry.record_type ? `${entry.record_type} · ` : ''}{entry.user} · {formatDateTime(entry.created_at)}
+                  {entry.user} · {formatDateTime(entry.created_at)}
                   {entry.reason ? ` · ${entry.reason}` : ''}
                 </span>
               </li>

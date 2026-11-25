@@ -45,7 +45,6 @@ export default function Projects() {
       <div className="page-head">
         <div>
           <h2>Projects</h2>
-          <p>Externally funded research projects you have access to</p>
         </div>
         <div className="actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select
@@ -99,7 +98,7 @@ export default function Projects() {
               <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
                 <td className="num mono-b">{p.code}</td>
                 <td>{p.title}</td>
-                <td>{p.program || '—'}</td>
+                <td>{p.program}</td>
                 <td>{p.agency}</td>
                 <td className="r num">{peso(p.budget)}</td>
                 <td><UtilBar pct={p.utilization_pct ?? (p.budget > 0 ? (p.spent / p.budget) * 100 : 0)} /></td>

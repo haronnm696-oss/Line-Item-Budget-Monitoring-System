@@ -63,9 +63,8 @@ export default function Documents() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Documents</h1>
-          <ProjectLine picker={picker} detail="Receipts, quotations, invoices and payroll files of the project" />
+          <ProjectLine picker={picker} />
         </div>
       </div>
 
@@ -136,7 +135,7 @@ export default function Documents() {
               <div className="program-card-head">
                 <div>
                   <div className="program-card-title">Preview</div>
-                  <div className="program-card-sub">{preview ? preview.file_name : 'Choose Preview on an image or PDF'}</div>
+                  {preview && <div className="program-card-sub">{preview.file_name}</div>}
                 </div>
               </div>
               {preview ? (
@@ -148,7 +147,7 @@ export default function Documents() {
                   )}
                 </div>
               ) : (
-                <p className="ld-empty">Nothing selected.</p>
+                <p className="ld-empty">Nothing selected</p>
               )}
             </section>
           </div>

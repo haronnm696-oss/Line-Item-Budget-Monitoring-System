@@ -6,7 +6,6 @@ import DocumentList from '../leader/DocumentList';
 import { peso } from '../money';
 import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
 import PurchaseRequestDownload from '../PurchaseRequestDownload';
-import ProgramPill from '../program/ProgramPill';
 import DetailModal, { DetailNote } from '../DetailModal';
 import StagePill from './StagePill';
 
@@ -80,10 +79,7 @@ export default function AssistantRecordPanel({ projectId, target, refreshKey, ac
       eyebrow={item ? `${item.type_label} · ${item.reference}` : 'Record'}
       icon={TYPE_ICON[item?.type ?? target.type] ?? '▤'}
       chips={item && (
-        <>
-          <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} fulfilment={item.fulfilment} />
-          {item.type_label && <ProgramPill value={item.type_label} />}
-        </>
+        <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} fulfilment={item.fulfilment} />
       )}
       amount={item?.amount ?? null}
       hint={returned ? 'Fix what was returned, then resubmit.' : 'Nothing is sent until you submit.'}

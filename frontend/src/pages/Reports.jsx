@@ -11,7 +11,7 @@ import { statusTone } from '../components/Chip';
 import DownloadMenu from '../components/DownloadMenu';
 import { useAuth } from '../context/AuthContext';
 import { normalizeRole } from '../lib/roles';
-import { canSeePayrollRegister, reportDownloadOptions, reportsEyebrow, reportTypesFor, showReportProjectField } from '../lib/reportDownloads';
+import { canSeePayrollRegister, reportDownloadOptions, reportTypesFor, showReportProjectField } from '../lib/reportDownloads';
 import { isReadOnlyRole } from '../lib/pageHead';
 import PageTitle from '../components/PageTitle';
 import { NO_ACTIVE_PROJECT_TEXT } from '../lib/leaderRule';
@@ -23,31 +23,31 @@ const REPORT_TYPES = [
     key: 'form-b',
     icon: '▤',
     title: 'Form B (Project Line-Item Budget)',
-    desc: "Official Form B layout for the project's funder: PS and MOOE, Direct and Indirect cost, counterpart and funder columns, and signatories.",
+    desc: 'Official funder layout',
   },
   {
     key: 'utilization',
     icon: '▦',
     title: 'Budget utilization report',
-    desc: 'Allocated vs spent vs remaining per LIB line item, with PS/MOOE subtotals. For funding agency submission.',
+    desc: 'Allocated, spent, remaining per line item',
   },
   {
     key: 'ledger',
     icon: '₱',
     title: 'Expense ledger',
-    desc: 'Chronological list of expenses and verified payroll with reference numbers and attachments index. Spent = verified expenses and verified payroll.',
+    desc: 'Expenses and payroll by date',
   },
   {
     key: 'payroll-register',
     icon: '▥',
     title: 'Payroll register',
-    desc: 'Verified payroll per pay period and person: monthly honorarium x months effective, gross and net pay (no deductions or allowances).',
+    desc: 'Verified payroll per person',
   },
   {
     key: 'monthly-summary',
     icon: '▨',
     title: 'Monthly financial summary',
-    desc: 'One-page snapshot: expense trend, category comparison, and alerts for the selected month.',
+    desc: 'One-month snapshot',
   },
 ];
 
@@ -655,8 +655,8 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     )
     : registerStatus === 'loading' ? <p className="rp-note">Loading payroll…</p>
       : register && register.months.length === 0
-        ? <p className="rp-note">No verified payroll for this period. Draft, waiting and returned batches are not included.</p>
-        : register ? <p className="rp-note">{register.months.length} verified {register.months.length === 1 ? 'pay period' : 'pay periods'} · verified batches only</p>
+        ? <p className="rp-note">No verified payroll for this period.</p>
+        : register ? <p className="rp-note">{register.months.length} verified {register.months.length === 1 ? 'pay period' : 'pay periods'}</p>
           : null;
 
   // ?report=<key>&format=pdf|csv (the PDF / CSV buttons on the role
@@ -682,11 +682,10 @@ export default function Reports({ programMode = false, initialCode = '' }) {
       {!programMode && (
         <div className="pl-head">
           <div>
-            <PageTitle eyebrow={reportsEyebrow(roleCode)} title="Reports" readOnly={isReadOnlyRole(roleCode)} />
-            <p className="program-sub">
-              {!showProjectField && listRow ? `${listRow.title} · ${listRow.code} · ` : ''}
-              Generated from verified expenses and verified payroll · Form B
-            </p>
+            <PageTitle title="Reports" readOnly={isReadOnlyRole(roleCode)} />
+            {!showProjectField && listRow && (
+              <p className="program-sub">{`${listRow.title} · ${listRow.code}`}</p>
+            )}
           </div>
         </div>
       )}
@@ -703,9 +702,6 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           <div className="program-card-head">
             <div>
               <div className="program-card-title">Per-project reports</div>
-              <div className="program-card-sub">
-                Choose a project and period first. Every report below uses this selection and the same verified data as the dashboard.
-              </div>
             </div>
           </div>
 
@@ -714,8 +710,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
           </div>
           {detailError}
 
-          <div className="prr-label" id="prr-reports">Reports for this project</div>
-          <ul className="prr-list" aria-labelledby="prr-reports">
+          <ul className="prr-list" aria-label="Reports for this project">
             {reportTypes.map((r) => (
               <li className="prr-row" key={r.key}>
                 <span className="prr-ic" aria-hidden="true">{r.icon}</span>

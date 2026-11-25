@@ -75,12 +75,10 @@ export default function MyRequests() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Review · Project Leader</div>
           <h1 className="program-h1">My requests</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}
-            Fund releases, realignments and liquidations sent to the Program Leader
-          </p>
+          {picker.project && (
+            <p className="program-sub">{`${picker.project.title} · ${picker.project.code}`}</p>
+          )}
         </div>
         <div className="pl-head-actions">
           {picker.projectId && (
@@ -124,15 +122,15 @@ export default function MyRequests() {
                         {row.status === 'withdrawn' && row.withdrawn_at && <div className="project-code">on {formatDate(row.withdrawn_at)}</div>}
                         {row.status === 'pending' && row.resubmitted_at && <div className="project-code">resubmitted {formatDate(row.resubmitted_at)}</div>}
                       </td>
-                      <td className="num">{row.amount != null ? peso(row.amount) : '—'}</td>
-                      <td>{row.status === 'pending' ? '—' : row.reviewed_by ?? '—'}</td>
-                      <td>{row.status === 'pending' ? '—' : formatDate(row.reviewed_at)}</td>
+                      <td className="num">{row.amount != null ? peso(row.amount) : ''}</td>
+                      <td>{row.status === 'pending' ? '' : row.reviewed_by}</td>
+                      <td>{row.status === 'pending' ? '' : formatDate(row.reviewed_at, '')}</td>
                       <td className="ld-remark">
                         {row.review_notes
                           ? <>{row.status === 'returned' || row.status === 'withdrawn' ? <b>Reason: </b> : null}“{row.review_notes}”</>
                           : row.status === 'pending' && row.last_return_reason
                             ? <span className="muted">Returned earlier: “{row.last_return_reason}”</span>
-                            : <span className="muted">No remark</span>}
+                            : null}
                       </td>
                       <td>
                         {row.can_resubmit && confirmWithdraw !== row.id && (

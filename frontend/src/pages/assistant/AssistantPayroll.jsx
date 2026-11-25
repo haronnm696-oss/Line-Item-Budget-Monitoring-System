@@ -128,9 +128,8 @@ export default function AssistantPayroll() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Payroll</h1>
-          <ProjectLine picker={picker} detail="Monthly honorarium x months effective, from Personnel; no deductions or allowances. Spent = verified expenses and verified payroll" />
+          <ProjectLine picker={picker} />
         </div>
         {projectId && (
           <div className="pl-head-actions">
@@ -158,13 +157,13 @@ export default function AssistantPayroll() {
             <>
               {notEffective.length > 0 && (
                 <div className="program-banner info" role="status">
-                  <b><span aria-hidden="true">ⓘ</span> Not included: appointment not effective</b> in {label}: {notEffective.map((person) => person.name).join(', ')}. Their Special Order does not cover any month of this period.
+                  <b><span aria-hidden="true">ⓘ</span> Not included (appointment not effective in {label}):</b> {notEffective.map((person) => person.name).join(', ')}
                 </div>
               )}
 
               {zeroPay.length > 0 && (
                 <div className="program-banner info" role="status">
-                  <b><span aria-hidden="true">ⓘ</span> Not included (honorarium ₱0.00): {zeroPay.map((person) => person.name).join(', ')}.</b> They get no payroll row (never ₱0.00) until the Program Leader sets their honorarium under Personnel.
+                  <b><span aria-hidden="true">ⓘ</span> Not included (no honorarium set):</b> {zeroPay.map((person) => person.name).join(', ')}. Ask the Program Leader.
                 </div>
               )}
 
@@ -186,7 +185,7 @@ export default function AssistantPayroll() {
                   <div className="program-card-head">
                     <div>
                       <div className="program-card-title">Prepare the {label} payroll</div>
-                      <div className="program-card-sub">One row per person whose appointment is effective in the period: monthly honorarium x months effective</div>
+                      <div className="program-card-sub">Honorarium × months effective</div>
                     </div>
                   </div>
                   {run.overlap_text ? (
@@ -237,7 +236,7 @@ export default function AssistantPayroll() {
                         </button>
                       </div>
                     )}
-                    {!verified && <p className="ld-hint">The payroll register for {label} can be downloaded once this payroll is verified.</p>}
+                    {!verified && <p className="ld-hint">Payroll register: available once verified.</p>}
 
                     <div className="ra-payroll-totals">
                       <div className="ra-balance"><span>Gross</span><b>{peso(run.totals.gross)}</b></div>
@@ -262,7 +261,7 @@ export default function AssistantPayroll() {
                           {rows.map((row) => (
                             <tr key={row.id}>
                               <td>
-                                <div className="project-name">{row.name ?? '—'}</div>
+                                <div className="project-name">{row.name}</div>
                                 <div className="project-code">{[row.position, row.category].filter(Boolean).join(' · ')}</div>
                               </td>
                               <td>{row.computation}</td>
@@ -309,7 +308,6 @@ export default function AssistantPayroll() {
                     <div className="program-card-head">
                       <div>
                         <div className="program-card-title">Payroll documents</div>
-                        <div className="program-card-sub">The signed payroll file and supporting documents</div>
                       </div>
                     </div>
                     <DocumentList key={`${batch.id}#${refreshKey}`} type="payroll" id={batch.id} />

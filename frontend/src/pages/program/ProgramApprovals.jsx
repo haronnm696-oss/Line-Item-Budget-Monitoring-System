@@ -23,13 +23,6 @@ const EMPTY = {
   withdrawn: 'No withdrawn requests.',
 };
 
-// Decided rows: status text plus icon.
-const DECIDED = {
-  approved: ['is-approved', '✓', 'Approved'],
-  returned: ['is-rejected', '↩', 'Returned'],
-  withdrawn: ['is-rejected', '⊘', 'Withdrawn'],
-};
-
 const PAGE_SIZE = 20;
 
 const TYPE_PILL = {
@@ -42,41 +35,37 @@ const TYPE_PILL = {
   expense: 'Expense verification',
 };
 
+/** Only when there are attachments: "2 attachments". */
 function documentsText(count) {
-  if (!count) return 'No attachments';
-  return `${count} attachment${count === 1 ? '' : 's'}`;
+  if (!count) return '';
+  return ` · ${count} attachment${count === 1 ? '' : 's'}`;
 }
 
 function RemarkBox({ text }) {
   const value = typeof text === 'string' ? text.trim() : '';
-  return value
-    ? <p className="pa-remark">“{value}”</p>
-    : <p className="pa-remark is-empty">No remark</p>;
+  return value ? <p className="pa-remark">“{value}”</p> : null;
 }
 
-function DecidedRow({ approval, onOpen }) {
-  const [tone, icon, label] = DECIDED[approval.status] ?? DECIDED.returned;
+// Each decided tab holds one status, so the row does not repeat it (the tab says it).
+function DecidedRow({ approval, onOpen, showProject }) {
+  const withdrawn = approval.status === 'withdrawn';
   return (
     <li className="pa-decided-row">
       <div className="pa-decided-main">
         <div className="pa-decided-title">
-          <span className={`pa-status ${tone}`}>
-            <span aria-hidden="true">{icon}</span>
-            {label}
-          </span>
           <b>{approval.title}</b>
           <span className="pa-type">{TYPE_PILL[approval.type] ?? approval.type_label}</span>
         </div>
         <div className="pa-meta">
-          {approval.project ?? 'Unknown project'}
-          {approval.amount != null && <> · <b>{peso(approval.amount)}</b></>}
-          {' · requested by '}{approval.requested_by ?? 'Unknown user'}
-          {' on '}{formatDate(approval.created_at)}
+          {showProject && <>{approval.project ?? 'Unknown project'} · </>}
+          {approval.amount != null && <><b>{peso(approval.amount)}</b> · </>}
+          {approval.requested_by ?? 'Unknown user'}
+          {' · '}{formatDate(approval.created_at)}
         </div>
         <div className="pa-meta">
-          {approval.status === 'approved' ? 'Approved' : 'Returned'} by {approval.reviewed_by ?? 'Unknown user'} on {formatDate(approval.reviewed_at)}
-          {approval.status === 'withdrawn' && approval.withdrawn_at ? ` · withdrawn by the requester on ${formatDate(approval.withdrawn_at)}` : ''}
-          {approval.status === 'returned' ? ' · waiting for the requester to edit and resubmit' : ''}
+          {withdrawn ? 'Returned by ' : ''}{approval.reviewed_by ?? 'Unknown user'} · {formatDate(approval.reviewed_at)}
+          {withdrawn && approval.withdrawn_at ? ` · withdrawn ${formatDate(approval.withdrawn_at)}` : ''}
+          {approval.status === 'returned' ? ' · awaiting resubmission' : ''}
         </div>
         <RemarkBox text={approval.review_notes} />
       </div>
@@ -139,14 +128,14 @@ function ListSkeleton({ status }) {
   );
 }
 
-function DecidedList({ approvals, onOpen }) {
+function DecidedList({ approvals, onOpen, showProject }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   return (
     <section className="program-card">
       <ul className="pa-decided-list">
         {approvals.slice(0, visibleCount).map((approval) => (
-          <DecidedRow key={approval.id} approval={approval} onOpen={onOpen} />
+          <DecidedRow key={approval.id} approval={approval} onOpen={onOpen} showProject={showProject} />
         ))}
       </ul>
       {approvals.length > visibleCount && (
@@ -292,11 +281,7 @@ export default function ProgramApprovals() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">Approvals · Program Leader</div>
           <h1 className="program-h1">Approval requests</h1>
-          <p className="program-sub">
-            Fund releases, realignments, and liquidations from every project.
-          </p>
         </div>
       </div>
 
@@ -406,12 +391,13 @@ export default function ProgramApprovals() {
                       <ProgramPill value={approval.type_label} />
                     </div>
                     <div className="program-row-sub">
-                      {approval.project}
-                      {approval.amount != null ? ` · ${peso(approval.amount)}` : ''}
-                      {` · waiting ${approval.days_waiting ?? 0} days`}
-                      {approval.requested_by ? ` · requested by ${approval.requested_by_role ?? 'user'}` : ''}
-                      {approval.requested_by ? ` (${approval.requested_by})` : ''}
-                      {` · ${documentsText(approval.documents_count)}`}
+                      {[
+                        project ? null : approval.project,
+                        approval.amount != null ? peso(approval.amount) : null,
+                        `waiting ${approval.days_waiting ?? 0} days`,
+                        approval.requested_by,
+                      ].filter(Boolean).join(' · ')}
+                      {documentsText(approval.documents_count)}
                     </div>
                     {approval.justification?.trim() && (
                       <p className="pa-remark">“{approval.justification.trim()}”</p>
@@ -441,7 +427,7 @@ export default function ProgramApprovals() {
         </section>
       ) : (
         // Keyed so "Load more" resets to 20 rows when the tab or filters change.
-        <DecidedList key={`${status}|${type}|${project}|${funder}`} approvals={approvals} onOpen={openPanel} />
+        <DecidedList key={`${status}|${type}|${project}|${funder}`} approvals={approvals} onOpen={openPanel} showProject={!project} />
       )}
 
       <ApprovalPanel key={openId ?? 'closed'} approvalId={openId} onClose={closePanel} onDecided={handleDecided} />

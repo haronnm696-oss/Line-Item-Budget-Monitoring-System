@@ -43,9 +43,7 @@ export default function ResearchAssistantDashboard() {
           <ProjectLine
             picker={picker}
             project={data?.project ?? picker.project}
-            detail={data?.project.project_leader
-              ? `Project Leader: ${data.project.project_leader}`
-              : (picker.project ? null : 'Expenses, purchase requests and payroll you encode')}
+            detail={data?.project.project_leader ? `Project Leader: ${data.project.project_leader}` : null}
           />
         </div>
       </div>
@@ -59,18 +57,17 @@ export default function ResearchAssistantDashboard() {
           {data && (
             <>
               <div className="pl-kpi-grid">
-                <Kpi hero to={`/my-submissions${q}${q ? '&' : '?'}tab=drafts`} label="Drafts" value={data.kpis.drafts} sub="Not yet submitted" />
-                <Kpi to={`/my-submissions${q}`} label="Waiting for Project Leader" value={data.kpis.waiting} sub="Submitted, not yet approved" />
+                <Kpi hero to={`/my-submissions${q}${q ? '&' : '?'}tab=drafts`} label="Drafts" value={data.kpis.drafts} />
+                <Kpi to={`/my-submissions${q}`} label="Waiting for Project Leader" value={data.kpis.waiting} />
                 <Kpi alert={data.kpis.returned > 0} to={`/my-submissions${q}${q ? '&' : '?'}tab=returned`} label="Returned to you" value={data.kpis.returned}
-                  sub={data.kpis.returned > 0 ? '⚠ Needs your correction' : 'Nothing to correct'} />
-                <Kpi to={`/expenses${q}`} label="Missing receipts" value={data.kpis.missing_receipts} sub="Verified expenses without a receipt" />
+                  sub={data.kpis.returned > 0 ? '⚠ Needs your correction' : null} />
+                <Kpi to={`/expenses${q}`} label="Missing receipts" value={data.kpis.missing_receipts} />
               </div>
 
               <section className="program-card">
                 <div className="program-card-head">
                   <div>
                     <div className="program-card-title">My submissions</div>
-                    <div className="program-card-sub">Every record you encoded, and who has it now</div>
                   </div>
                   <Link className="program-card-link" to={`/my-submissions${q}`}>View all</Link>
                 </div>
@@ -95,12 +92,12 @@ export default function ResearchAssistantDashboard() {
   );
 }
 
-function Kpi({ label, value, sub, to, hero = false, alert = false }) {
+function Kpi({ label, value, sub = null, to, hero = false, alert = false }) {
   return (
     <Link to={to} className={`program-card pl-kpi ra-kpi${hero ? ' pl-kpi-hero' : ''}${alert ? ' ra-kpi-alert' : ''}`}>
       <div className="pl-kpi-head"><span className="pl-kpi-label">{label}</span></div>
       <div className="pl-kpi-value"><AnimatedNumber value={value} /></div>
-      <div className="pl-kpi-sub">{sub}</div>
+      {sub && <div className="pl-kpi-sub">{sub}</div>}
     </Link>
   );
 }

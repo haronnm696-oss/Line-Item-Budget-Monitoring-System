@@ -32,7 +32,6 @@ export default function PurchaseRequestsSection({ projectId }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Purchase requests</div>
-          <div className="program-card-sub">Submitted requests with their items; each item is charged to its own line item. Drafts are not shown.</div>
         </div>
       </div>
       <LoadState state={list} loadingText="Loading purchase requests…" emptyText="No purchase request has been submitted." isEmpty={rows.length === 0}>
@@ -46,7 +45,7 @@ export default function PurchaseRequestsSection({ projectId }) {
               <li key={row.id} className="pr-item">
                 <div className="pl-head">
                   <div>
-                    <b>PR-{row.id} · {row.purpose ?? row.description}</b>
+                    <b>{row.purpose ?? row.description}</b>
                     <div className="ld-muted">
                       {count} {count === 1 ? 'item' : 'items'} · {row.line_item}{row.requested_by?.name ? ` · by ${row.requested_by.name}` : ''}
                       {numbers.length > 0 ? ` · ${numbers.join(' · ')}` : ''}
@@ -58,7 +57,7 @@ export default function PurchaseRequestsSection({ projectId }) {
                     <button type="button" className="program-btn" aria-expanded={open.has(row.id)} onClick={() => toggle(row.id)}>
                       {open.has(row.id) ? 'Hide items' : 'Show items'}
                     </button>
-                    <PurchaseRequestDownload requestId={row.id} reference={row.pr_no || `PR-${row.id}`} />
+                    <PurchaseRequestDownload requestId={row.id} reference={row.pr_no || row.purpose || row.description} />
                   </div>
                 </div>
                 {open.has(row.id) && (

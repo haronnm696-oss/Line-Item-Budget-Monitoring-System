@@ -214,7 +214,7 @@ function todayLabel() {
 
 /**
  * The shared shell for every role: sidebar (270px, section labels, active
- * state, gold badge counts, Help & guide, Collapse with saved state, 76px
+ * state, gold badge counts, Collapse with saved state, 76px
  * rail), header (greeting, Philippine date, bell, user chip and menu) and
  * a per-page error boundary. The browser tab title is the current page name.
  *
@@ -343,16 +343,7 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
         </nav>
 
         <div className="program-side-foot">
-          <a
-            className="program-help-link"
-            href="#"
-            title={collapsed ? 'Help & guide' : undefined}
-            aria-label={collapsed ? 'Help & guide' : undefined}
-          >
-            {ICONS.help}
-            <span className="program-help-text">Help &amp; guide</span>
-          </a>
-
+          {/* "Help & guide" (ICONS.help, .program-help-link) comes back once its page exists; the link went nowhere. */}
           <button
             type="button"
             className="program-collapse"

@@ -56,7 +56,7 @@ export default function PersonnelSection({ projectId, teamCount }) {
         <div>
           <div className="program-card-title" id="personnel-title">Personnel</div>
           <div className="program-card-sub">
-            Project team appointed by Special Order, paid PS honoraria through payroll. Job Order and professional-services staff are paid through expenses.
+            Appointed by Special Order; paid through Payroll. Job Order staff are paid through expenses.
             {access === 'view' && ' Read only; the Program Leader keeps this list.'}
             {access === 'limited' && ' Positions and periods only.'}
           </div>
@@ -86,7 +86,7 @@ export default function PersonnelSection({ projectId, teamCount }) {
               {records.map((record) => (
                 <tr key={record.id}>
                   <td>
-                    <div className="project-name">{record.name ?? '—'}</div>
+                    <div className="project-name">{record.name}</div>
                     <div className="project-code">{record.position}</div>
                   </td>
                   <td>{periodText(record.effective_from, record.effective_to, formatDate)}</td>
@@ -105,7 +105,7 @@ export default function PersonnelSection({ projectId, teamCount }) {
                   )}
                   {full && <td>{record.line_item ?? <span className="project-code">⚠ Not linked</span>}</td>}
                   {full && <td className="num">{peso(record.monthly_honorarium)}</td>}
-                  {full && <td className="num">{record.bank_account_masked ?? '—'}</td>}
+                  {full && <td className="num">{record.bank_account_masked}</td>}
                   {editable && (
                     <td className="pd-actions">
                       <RowMenu name={record.name ?? record.position} options={menuOptions(personnelActions(record), openDialog)} />
@@ -230,7 +230,7 @@ function PersonnelDialog({ projectId, data, teamCount, record, onClose, onSaved 
           {input('special_order_no', 'Special Order number', { full: true, hint: 'For example "SO No. 1111-OP s. 2025"' })}
           {input('effective_from', 'Effective from', { hint: periodHint }, 'date')}
           {input('effective_to', 'Effective to', {}, 'date')}
-          {input('monthly_honorarium', 'Monthly honorarium (₱)', { hint: 'Zero or more, at most two decimals, e.g. 7,500.00' }, 'money')}
+          {input('monthly_honorarium', 'Monthly honorarium (₱)', { hint: 'e.g. 7,500.00' }, 'money')}
           {input('bank_account', 'Bank account number (optional)', {
             hint: record?.bank_account_masked
               ? `Stored: ${record.bank_account_masked}. Leave blank to keep it.`

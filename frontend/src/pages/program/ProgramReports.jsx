@@ -31,9 +31,7 @@ export default function ProgramReports() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">Reports · Program Leader</div>
           <h1 className="program-h1">Reports</h1>
-          <p className="program-sub">Reporting across all projects, for every funder.</p>
         </div>
       </div>
 
@@ -41,9 +39,6 @@ export default function ProgramReports() {
         <div className="program-card-head">
           <div>
             <div className="program-card-title" id="executive-report-title">Executive report</div>
-            <div className="program-card-sub">
-              Program-wide summary of all projects and funders, for printing or submission.
-            </div>
           </div>
         </div>
 

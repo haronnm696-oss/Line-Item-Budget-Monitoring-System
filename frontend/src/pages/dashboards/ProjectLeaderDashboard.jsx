@@ -10,6 +10,7 @@ import ProgramPill from '../../components/program/ProgramPill';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
 import ReviewRow from '../../components/leader/ReviewRow';
+import Tip from '../../components/Tip';
 import { formatPct, peso } from '../../components/money';
 import { REQUEST_STATUS } from '../../lib/budgetRequestForm';
 import { spendingAlert } from '../../lib/leaderOverview';
@@ -64,7 +65,6 @@ export default function ProjectLeaderDashboard() {
                   <div className="program-card-head">
                     <div>
                       <div className="program-card-title">Submissions to review</div>
-                      <div className="program-card-sub">Expenses, payroll and purchase requests, oldest first</div>
                     </div>
                     <Link className="program-card-link" to={`/submissions${projectQuery}`}>View all</Link>
                   </div>
@@ -118,7 +118,7 @@ function PastProjects({ projects }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title" id="pl-past-title">Past projects</div>
-          <div className="program-card-sub">Completed projects you led · view only</div>
+          <div className="program-card-sub">View only</div>
         </div>
       </div>
       <ul className="ld-mini-list">
@@ -128,7 +128,6 @@ function PastProjects({ projects }) {
               <Link to={`/projects/${project.id}`}><b>{project.title}</b></Link>
               <span>{[project.code, project.agency, project.period].filter(Boolean).join(' · ')}</span>
             </div>
-            <div className="ld-mini-side"><ProgramPill value="Completed" label="Completed" tone="neutral" icon="✓" /></div>
           </li>
         ))}
       </ul>
@@ -162,13 +161,12 @@ function Kpis({ kpis, funder, agency }) {
           {funder || 'Funder'} {peso(kpis.funder_share)} + {agency || 'Implementing agency'} counterpart {peso(kpis.counterpart)}
         </div>
         <div className="pl-track pl-track-gold"><span style={{ width: `${clampPct(utilization)}%` }} /></div>
-        <div className="pl-kpi-foot">{formatPct(utilization)} spent</div>
       </section>
 
       <section className="program-card pl-kpi">
-        <div className="pl-kpi-head"><span className="pl-kpi-label">Total spent</span></div>
+        <div className="pl-kpi-head"><span className="pl-kpi-label"><Tip>Total spent</Tip></span></div>
         <div className="pl-kpi-value"><AnimatedNumber value={kpis.total_spent} format={peso} /></div>
-        <div className="pl-kpi-sub">{formatPct(utilization)} of the total budget · verified expenses and verified payroll</div>
+        <div className="pl-kpi-sub">{formatPct(utilization)} of budget</div>
         <div className="pl-track"><span style={{ width: `${clampPct(utilization)}%` }} /></div>
       </section>
 
@@ -214,7 +212,6 @@ function BudgetAlerts({ alerts, projectQuery }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Budget alerts</div>
-          <div className="program-card-sub">Spending, releases and receipts</div>
         </div>
       </div>
 
@@ -255,7 +252,7 @@ function BudgetAlerts({ alerts, projectQuery }) {
             )}
           </p>
         ) : (
-          <p className="ld-muted">{noTranches ? 'No releases set yet. The Program Leader schedules them on the project page.' : 'All released. Every release of this project has been paid out.'}</p>
+          noTranches && <p className="ld-muted">No releases set yet. The Program Leader schedules them on the project page.</p>
         )}
       </AlertRow>
 
@@ -274,9 +271,7 @@ function BudgetAlerts({ alerts, projectQuery }) {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="ld-muted">Every verified expense has a receipt document.</p>
-        )}
+        ) : null}
       </AlertRow>
     </section>
   );
@@ -288,7 +283,6 @@ function TransactionSummary({ rows, projectQuery }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Transaction summary</div>
-          <div className="program-card-sub">Latest verified expenses and payroll</div>
         </div>
         <Link className="program-card-link" to={`/transactions${projectQuery}`}>View transaction history</Link>
       </div>
@@ -300,7 +294,7 @@ function TransactionSummary({ rows, projectQuery }) {
             <li key={row.id}>
               <div>
                 <b>{row.description}</b>
-                <span>{formatDate(row.date)} · {row.line_item ?? '—'}</span>
+                <span>{[formatDate(row.date), row.line_item].filter(Boolean).join(' · ')}</span>
               </div>
               <b className="ld-amount">{peso(row.amount)}</b>
             </li>
@@ -319,7 +313,6 @@ function RequestSummary({ requests, nextTranche, projectQuery }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">My requests</div>
-          <div className="program-card-sub">Budget requests to the Program Leader</div>
         </div>
         <Link className="program-card-link" to={`/my-requests${projectQuery}`}>View all</Link>
       </div>

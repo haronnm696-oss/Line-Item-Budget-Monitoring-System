@@ -73,11 +73,10 @@ export default function RecordPanel({ projectId, target, refreshKey, busyKey, on
         <>
           <ProgramPill value={item.workflow_label} />
           {item.can_review && <span className="dm-wait">{waitedText(item.submitted_at)}</span>}
-          {item.type_label && <ProgramPill value={item.type_label} />}
         </>
       )}
       amount={item?.amount ?? null}
-      hint={reviewActions ? 'Check the documents before you decide.' : editAction ? 'Fix what was returned, then resubmit.' : 'Cancelling asks you for a reason first.'}
+      hint={!reviewActions && editAction ? 'Fix what was returned, then resubmit.' : ''}
       actions={hasActions ? <>{editAction}{reviewActions}{cancelAction}</> : null}
       onClose={onClose}
     >
@@ -106,7 +105,7 @@ export default function RecordPanel({ projectId, target, refreshKey, busyKey, on
           )}
           {item.type === 'purchase_request' && (
             <div className="ld-panel-actions pr-download">
-              <PurchaseRequestDownload requestId={item.id} reference={item.reference ?? `PR-${item.id}`} />
+              <PurchaseRequestDownload requestId={item.id} reference={item.reference ?? item.title} />
             </div>
           )}
 

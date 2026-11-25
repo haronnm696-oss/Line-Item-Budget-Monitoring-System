@@ -8,6 +8,7 @@ import ProgramPill from '../../components/program/ProgramPill';
 import ApprovalPanel from '../../components/program/ApprovalPanel';
 import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
+import Tip from '../../components/Tip';
 import { compactPeso, formatPct, peso } from '../../components/money';
 import { projectCardRows } from '../../lib/programOverview';
 
@@ -156,8 +157,7 @@ export default function ProgramLeaderDashboard() {
         <div>
           <h1 className="program-h1">Externally funded research</h1>
           <p className="program-sub">
-            {projectCount} project{projectCount === 1 ? '' : 's'} · {peso(spent)} spent of{' '}
-            {peso(budget)} · {pending} waiting for your approval
+            {projectCount} project{projectCount === 1 ? '' : 's'}
           </p>
         </div>
 
@@ -227,21 +227,15 @@ export default function ProgramLeaderDashboard() {
               <div className="pl-kpi-value">
                 <AnimatedNumber value={budget} format={peso} />
               </div>
-              <div className="pl-kpi-sub">
-                {projectCount} project{projectCount === 1 ? '' : 's'} across all funders
-              </div>
               <div className="pl-track pl-track-gold">
                 <span style={{ width: `${clampPct(utilization)}%` }} />
-              </div>
-              <div className="pl-kpi-foot">
-                <AnimatedNumber value={utilization} format={formatPct} /> spent
               </div>
             </section>
 
             <section className="program-card pl-kpi">
               <div className="pl-kpi-head">
                 <span className="pl-kpi-ic">{KPI_ICONS.spent}</span>
-                <span className="pl-kpi-label">Total spent</span>
+                <span className="pl-kpi-label"><Tip>Total spent</Tip></span>
               </div>
               <div className="pl-kpi-value">
                 <AnimatedNumber value={spent} format={peso} />
@@ -286,13 +280,12 @@ export default function ProgramLeaderDashboard() {
             <div className="program-card-head">
               <div>
                 <div className="program-card-title">Approval inbox</div>
-                <div className="program-card-sub">All projects, oldest first</div>
               </div>
               <Link className="program-card-link" to="/program-approvals">View all</Link>
             </div>
 
             {approvals.length === 0 ? (
-              <p className="pl-inbox-empty">All caught up. No pending approvals.</p>
+              <p className="pl-inbox-empty">No pending approvals.</p>
             ) : (
               <div className="pl-approval-list">
                 {approvals.map((approval) => {
@@ -314,7 +307,7 @@ export default function ProgramLeaderDashboard() {
                           {approval.amount != null && <span className="amt">{peso(approval.amount)}</span>}
                           <span>{approval.days_waiting ?? 0}d waiting</span>
                           {approval.requested_by && (
-                            <span>{approval.requested_by_role ?? approval.requested_by}</span>
+                            <span>{approval.requested_by}</span>
                           )}
                         </div>
                         {isOwn && (
@@ -345,7 +338,6 @@ export default function ProgramLeaderDashboard() {
               <div className="program-card-head">
                 <div>
                   <div className="program-card-title" id="pl-projects-title">Projects</div>
-                  <div className="program-card-sub">Spent versus elapsed time, health, releases and receipts, largest projects first</div>
                 </div>
                 <Link className="program-card-link" to="/program-projects">View projects</Link>
               </div>
@@ -382,10 +374,11 @@ export default function ProgramLeaderDashboard() {
                       {project.tranche_status && (
                         <ProgramPill value={project.tranche_status} label={`Releases: ${project.tranche_status}`} />
                       )}
-                      <span className="pl-spend-receipts">
-                        Receipts{' '}
-                        <b>{project.receipt_compliance_pct != null ? formatPct(project.receipt_compliance_pct) : '—'}</b>
-                      </span>
+                      {project.receipt_compliance_pct != null && (
+                        <span className="pl-spend-receipts">
+                          Receipts <b>{formatPct(project.receipt_compliance_pct)}</b>
+                        </span>
+                      )}
                       <span>{compactPeso(project.budget)}</span>
                     </div>
                   </li>
@@ -397,7 +390,6 @@ export default function ProgramLeaderDashboard() {
                 <div className="program-card-head">
                   <div>
                     <div className="program-card-title">Funding sources</div>
-                    <div className="program-card-sub">{fundingSources.length} active funder{fundingSources.length === 1 ? '' : 's'}</div>
                   </div>
                 </div>
 

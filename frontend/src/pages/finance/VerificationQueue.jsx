@@ -56,9 +56,8 @@ export default function VerificationQueue() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Verify · Finance/Admin</div>
           <h1 className="program-h1">Verification queue</h1>
-          <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll" />
+          <ProjectLine picker={picker} />
         </div>
       </div>
 
@@ -93,7 +92,8 @@ export default function VerificationQueue() {
 
         <LoadState state={list} loadingText="Loading the queue…" emptyText={EMPTY[tab]} isEmpty={items.length === 0}>
           <section className="program-card ld-list-card">
-            <QueueTable items={items} showActions={tab === 'waiting'} caption="Verification queue" onOpen={(item) => update({ open: item.key })} />
+            {/* "Verified by you" and "Rejected by you" hold one status each: the tab says it. */}
+            <QueueTable items={items} showActions={tab === 'waiting'} showStage={tab === 'waiting'} caption="Verification queue" onOpen={(item) => update({ open: item.key })} />
           </section>
         </LoadState>
 

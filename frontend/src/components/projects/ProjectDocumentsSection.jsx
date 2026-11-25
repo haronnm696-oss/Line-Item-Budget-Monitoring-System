@@ -53,10 +53,6 @@ export default function ProjectDocumentsSection({ projectId }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title" id="project-docs-title">Project documents</div>
-          <div className="program-card-sub">
-            Memorandum of Agreement, Form A (proposal), Form B (line-item budget) and Form C (work plan).
-            {access === 'download' && ' The Program Leader uploads these.'}
-          </div>
         </div>
         {manage && (
           <button type="button" className="program-btn" onClick={() => { setNotice(''); setDialog({ kind: 'upload' }); }}>Upload document</button>
@@ -114,7 +110,7 @@ export default function ProjectDocumentsSection({ projectId }) {
       {dialog?.kind === 'remove' && (
         <RemoveDialog
           title={`Remove ${dialog.doc.file_name}`}
-          text="The file is removed from the project documents. This is recorded in the audit log."
+          text="Remove this file?"
           url={dialog.url}
           onClose={() => setDialog(null)}
           onSaved={() => done('Document removed.')}

@@ -8,8 +8,9 @@ import StagePill from './StagePill';
  * Clicking the reference opens the record's side panel (onOpen). A returned
  * record its maker may edit shows "Edit and resubmit" in the row (onResubmit).
  * `pillType` = 'purchase_request' uses the purchase request stage names.
+ * `showStage` = false hides the status pill (a tab that holds one status says it).
  */
-export default function SubmissionTable({ items, onOpen, onResubmit, busyKey = null, showType = false, pillType = null, caption }) {
+export default function SubmissionTable({ items, onOpen, onResubmit, busyKey = null, showType = false, pillType = null, caption, showStage = true }) {
   return (
     <div className="ra-table-wrap">
       <table className="program-table ld-table ra-table">
@@ -35,9 +36,9 @@ export default function SubmissionTable({ items, onOpen, onResubmit, busyKey = n
                   <div className="ra-desc">{item.title}</div>
                   {item.details && <div className="ra-details">{item.details}</div>}
                 </td>
-                <td data-label="Amount" className="num ld-amount">{item.amount != null ? peso(item.amount) : '—'}</td>
+                <td data-label="Amount" className="num ld-amount">{item.amount != null ? peso(item.amount) : ''}</td>
                 <td data-label="Status">
-                  <StagePill status={item.workflow_status} type={pillType ?? (item.type === 'purchase_request' ? 'purchase_request' : null)} fulfilment={item.fulfilment} />
+                  {showStage && <StagePill status={item.workflow_status} type={pillType ?? (item.type === 'purchase_request' ? 'purchase_request' : null)} fulfilment={item.fulfilment} />}
                   {returned
                     ? <div className="ra-next is-returned">{returned}</div>
                     : item.next_step && <div className="ra-next">{item.next_step}</div>}

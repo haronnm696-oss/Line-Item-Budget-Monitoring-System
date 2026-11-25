@@ -3779,3 +3779,16 @@ select.signin-input:disabled{
   background:var(--signin-success-bg);
   color:var(--signin-success);
 }
+
+/* Tip: an explanation on a word ("Spent"); opens on hover, focus and tap. */
+.tip{position:relative;display:inline-flex;align-items:center}
+.tip-btn{border:0;padding:0;margin:0;background:transparent;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;cursor:help;text-decoration:underline dotted;text-underline-offset:3px}
+.tip-btn.is-icon{text-decoration:none;margin-left:4px;min-width:24px;min-height:24px;justify-content:center;display:inline-flex;align-items:center;color:var(--pg-muted, #6B5F5F)}
+.tip-btn:focus-visible{outline:2px solid var(--pg-brand, #6F1D2A);outline-offset:2px;border-radius:3px}
+.tip-bubble{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:40;width:max-content;max-width:240px;padding:6px 10px;border-radius:6px;background:#2B2023;color:#fff;font-size:12px;font-weight:500;line-height:1.4;text-transform:none;letter-spacing:normal;white-space:normal;text-align:left;box-shadow:0 6px 16px -8px rgba(0,0,0,.4)}
+.tip-bubble.is-open{display:block}
+.num .tip-bubble,th.r .tip-bubble{left:auto;right:0}
+.pd-split{display:inline-flex;align-items:center}
+.program-shell .ra-kpi-link{display:block;color:inherit;text-decoration:none;border-radius:6px}
+.program-shell .ra-kpi-link:focus-visible{outline:2px solid var(--pg-brand);outline-offset:2px}
+.program-shell .ra-kpi-split:hover{border-color:#D9C9B0}

@@ -42,9 +42,8 @@ export default function PurchaseRequests() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Encode · Research Assistant</div>
           <h1 className="program-h1">Purchase requests</h1>
-          <ProjectLine picker={picker} detail="An approved request holds its amount on the line item until an expense is linked" />
+          <ProjectLine picker={picker} />
         </div>
         {projectId && (
           <div className="pl-head-actions">
