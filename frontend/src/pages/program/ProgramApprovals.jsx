@@ -286,8 +286,6 @@ export default function ProgramApprovals() {
       </div>
 
       <div className="program-filter-row pa-controls">
-        <span className="spacer" />
-
         <div className="program-field">
           <label htmlFor="approval-status">Status</label>
           <select

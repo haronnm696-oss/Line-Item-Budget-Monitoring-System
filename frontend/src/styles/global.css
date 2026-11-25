@@ -3138,7 +3138,6 @@ select.signin-input:disabled{
 .program-shell .program-card[tabindex="-1"]:focus{outline:none}
 
 /* Program Approvals page (/program-approvals) */
-.pa-controls{justify-content:space-between}
 .program-shell .program-card.pa-empty{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:0;
   padding:16px 20px;font-size:14px;color:#4A4040;
