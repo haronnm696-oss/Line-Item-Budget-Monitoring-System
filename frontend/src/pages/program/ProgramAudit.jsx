@@ -3,6 +3,8 @@ import { DATE_MAX, DATE_MIN, inDateRange } from '../../lib/dateRange';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchProgramAudit } from '../../api/program';
 import { PH_TIME_LABEL, formatDateTime } from '../../lib/datetime';
+import { projectCode, recordTypeLine, visibleChanges, visibleEntries } from '../../lib/auditDisplay';
+import Tip from '../../components/Tip';
 
 const FILTERS = ['action', 'project', 'user', 'from', 'to'];
 
@@ -28,7 +30,7 @@ function recordHref(link) {
 }
 
 function ChangeList({ changes, reason }) {
-  if (!changes.length && !reason) return <span className="au-muted">—</span>;
+  if (!changes.length && !reason) return null;
   return (
     <ul className="au-changes">
       {changes.map((change, index) => (
@@ -46,8 +48,10 @@ function ChangeList({ changes, reason }) {
   );
 }
 
-function AuditRow({ entry }) {
+// Display only (lib/auditDisplay.js): the API and the stored entries are unchanged.
+function AuditRow({ entry, projects }) {
   const href = recordHref(entry.record?.link);
+  const code = projectCode(entry.project, projects);
   return (
     <tr>
       <td className="au-time">
@@ -57,13 +61,10 @@ function AuditRow({ entry }) {
         {entry.actor ? (
           <>
             <Link className="au-link" to={`/program-users?user=${entry.actor.id}`}>{entry.actor.name}</Link>
-            <div className="au-sub">{entry.actor.role ?? 'No role'}</div>
+            <Tip icon label={`Role of ${entry.actor.name}`} text={entry.actor.role ?? 'No role'} />
           </>
         ) : (
-          <>
-            <span className="au-strong">System</span>
-            <div className="au-sub">Automated</div>
-          </>
+          <Tip text="Automated">System</Tip>
         )}
       </td>
       <td>
@@ -78,16 +79,21 @@ function AuditRow({ entry }) {
         ) : (
           <span className="au-strong">{entry.record?.label}</span>
         )}
-        <div className="au-sub">{entry.record?.type}</div>
+        <div className="au-sub">{recordTypeLine(entry.record?.type)}</div>
       </td>
       <td>
-        {entry.project ? (
-          <Link className="au-link" to={`/program-projects/${entry.project.id}`}>{entry.project.title}</Link>
-        ) : (
-          <span className="au-muted">—</span>
+        {entry.project && (
+          code ? (
+            <>
+              <Link className="au-link" to={`/program-projects/${entry.project.id}`}>{code}</Link>
+              <Tip icon label={`Project title for ${code}`} text={entry.project.title} />
+            </>
+          ) : (
+            <Link className="au-link" to={`/program-projects/${entry.project.id}`}>{entry.project.title}</Link>
+          )
         )}
       </td>
-      <td><ChangeList changes={entry.changes ?? []} reason={entry.reason} /></td>
+      <td><ChangeList changes={visibleChanges(entry)} reason={entry.reason} /></td>
     </tr>
   );
 }
@@ -179,11 +185,7 @@ export default function ProgramAudit() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">Audit trail · Program Leader</div>
           <h1 className="program-h1">Audit trail</h1>
-          <p className="program-sub">
-            Every add, edit, delete and approval, with who did it and what changed.
-          </p>
         </div>
       </div>
 
@@ -270,7 +272,7 @@ export default function ProgramAudit() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((entry) => <AuditRow key={entry.id} entry={entry} />)}
+                  {visibleEntries(entries).map((entry) => <AuditRow key={entry.id} entry={entry} projects={projectOptions} />)}
                 </tbody>
               </table>
             </div>
