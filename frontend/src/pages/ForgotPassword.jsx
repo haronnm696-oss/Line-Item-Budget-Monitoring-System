@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { normalizeEmail } from '../api/auth';
 import { isValidLoginEmail, passwordRules } from '../lib/authValidation';
@@ -22,7 +22,7 @@ import {
 import {
   AuthAlert,
   AuthField,
-  AuthNote,
+  AuthHead,
   AuthPage,
   AuthPasswordFeedback,
   AuthPillButton,
@@ -31,22 +31,17 @@ import CodeInput from '../components/auth/CodeInput';
 import OrbitBackground from '../components/OrbitBackground';
 
 const BRAND = {
-  [STEPS.EMAIL]: {
-    title: 'Reset your password',
-    lead: 'Enter your email address and we will send you a 6-digit code to reset your password.',
-    cta: { to: '/login', label: 'Back to sign in' },
-  },
-  [STEPS.CODE]: {
-    title: 'Check your email',
-    lead: 'Enter the 6-digit code we sent you. It expires in 10 minutes.',
-    cta: { to: '/login', label: 'Back to sign in' },
-  },
-  [STEPS.PASSWORD]: {
-    title: 'Choose a new password',
-    lead: 'Pick a strong password that you do not use anywhere else.',
-    cta: { to: '/login', label: 'Back to sign in' },
-  },
+  cta: { to: '/login', label: 'Back to sign in' },
 };
+
+const EYEBROW = 'Account recovery';
+
+/** "jane.doe@gmail.com" -> "ja***@gmail.com", for display only. */
+function maskEmail(value) {
+  const [local, domain] = String(value || '').split('@');
+  if (!domain) return value;
+  return `${local.slice(0, local.length > 2 ? 2 : 1)}***@${domain}`;
+}
 
 /** Re-renders every second while `active`, for the countdowns. */
 function useNow(active) {
@@ -253,13 +248,10 @@ export default function ForgotPassword() {
     const describedBy = ['reset-code-status', codeError ? 'reset-code-error' : null].filter(Boolean).join(' ');
 
     return (
-      <AuthPage brand={BRAND[STEPS.CODE]} backdrop={<OrbitBackground />}>
-        <div className="signin-head">
-          <h1 className="signin-title">Enter the code</h1>
-          <p className="signin-subtitle">
-            Code sent to <strong>{submittedEmail}</strong>. If an account exists for this address, the email arrives within a minute.
-          </p>
-        </div>
+      <AuthPage brand={BRAND} backdrop={<OrbitBackground />}>
+        <AuthHead eyebrow={EYEBROW} title="Check your email">
+          We sent a 6-digit code to <strong>{maskEmail(submittedEmail)}</strong>. It expires in 10 minutes.
+        </AuthHead>
 
         {error && <AuthAlert>{error}</AuthAlert>}
         {info && <AuthAlert tone="success">{info}</AuthAlert>}
@@ -273,7 +265,7 @@ export default function ForgotPassword() {
           }}
         >
           <div className="signin-field">
-            <label className="signin-label" id="reset-code-label" htmlFor="reset-code">6-digit code</label>
+            <label className="signin-label" id="reset-code-label" htmlFor="reset-code">Enter code</label>
             <CodeInput
               id="reset-code"
               digits={digits}
@@ -294,48 +286,39 @@ export default function ForgotPassword() {
                 ? 'Expired. Request a new code.'
                 : `Code expires in ${formatCountdown(codeSecondsLeft)}`}
             </p>
+            <div className="signin-row signin-code__help">
+              <span>Didn&apos;t get it? Check spam.</span>
+              <button
+                type="button"
+                className="signin-link signin-link--button signin-resend"
+                onClick={handleResend}
+                disabled={resendSecondsLeft > 0 || resending}
+              >
+                {resendLabel(resendSecondsLeft, resending)}
+              </button>
+            </div>
           </div>
 
           <AuthPillButton type="submit" disabled={submitting || codeExpired || !isCodeComplete(digits)}>
-            {submitting ? 'Checking…' : 'Continue'}
+            {submitting ? 'Checking…' : 'Verify code'}
           </AuthPillButton>
-
-          <button
-            type="button"
-            className="signin-secondary"
-            onClick={handleResend}
-            disabled={resendSecondsLeft > 0 || resending}
-          >
-            {resendLabel(resendSecondsLeft, resending)}
-          </button>
 
           <p className="signin-switch">
             <button type="button" className="signin-link signin-link--button" onClick={() => startOver()}>
               Use a different email
             </button>
-            {' · '}
-            <Link to="/login" className="signin-link">Back to sign in</Link>
           </p>
-
-          <AuthNote>
-            Did not get it? Check your spam folder. After 5 wrong tries the code stops working and you need a new one.
-          </AuthNote>
         </form>
       </AuthPage>
     );
   }
 
   if (step === STEPS.PASSWORD) {
-    const showPasswordFeedback = password.length > 0;
-
     return (
-      <AuthPage brand={BRAND[STEPS.PASSWORD]} backdrop={<OrbitBackground />}>
-        <div className="signin-head">
-          <h1 className="signin-title">Choose a new password</h1>
-          <p className="signin-subtitle">
-            Create a new password for <strong>{submittedEmail}</strong>.
-          </p>
-        </div>
+      <AuthPage brand={BRAND} backdrop={<OrbitBackground />}>
+        <AuthHead eyebrow={EYEBROW} title="Set a new password">
+          Choose a new password for <strong>{maskEmail(submittedEmail)}</strong>.
+        </AuthHead>
 
         {error && <AuthAlert>{error}</AuthAlert>}
 
@@ -355,8 +338,8 @@ export default function ForgotPassword() {
               aria-invalid={Boolean(passwordError)}
               aria-describedby={[
                 passwordError ? 'reset-password-error' : null,
-                showPasswordFeedback ? 'reset-password-rules' : null,
-              ].filter(Boolean).join(' ') || undefined}
+                'reset-password-rules',
+              ].filter(Boolean).join(' ')}
               required
             />
             <button
@@ -370,6 +353,8 @@ export default function ForgotPassword() {
               {showPasswords ? 'Hide' : 'Show'}
             </button>
           </AuthField>
+
+          <AuthPasswordFeedback rules={rules} id="reset-password-rules" variant="checklist" />
 
           <AuthField id="reset-confirm-password" label="Confirm new password" icon="lock" error={confirmError}>
             <input
@@ -394,28 +379,19 @@ export default function ForgotPassword() {
             />
           </AuthField>
 
-          {showPasswordFeedback && <AuthPasswordFeedback rules={rules} id="reset-password-rules" />}
-
           <AuthPillButton type="submit" disabled={submitting}>
-            {submitting ? 'Resetting…' : 'Reset password'}
+            {submitting ? 'Resetting…' : 'Save new password'}
           </AuthPillButton>
-
-          <p className="signin-switch">
-            <Link to="/login" className="signin-link">Back to sign in</Link>
-          </p>
         </form>
       </AuthPage>
     );
   }
 
   return (
-    <AuthPage brand={BRAND[STEPS.EMAIL]} backdrop={<OrbitBackground />}>
-      <div className="signin-head">
-        <h1 className="signin-title">Forgot password?</h1>
-        <p className="signin-subtitle">
-          Enter your email address. If it matches an account, we will send you a 6-digit code to reset your password.
-        </p>
-      </div>
+    <AuthPage brand={BRAND} backdrop={<OrbitBackground />}>
+      <AuthHead eyebrow={EYEBROW} title="Forgot your password?">
+        Enter the email you use for LIB. We&apos;ll send you a 6-digit code to reset your password.
+      </AuthHead>
 
       {error && <AuthAlert>{error}</AuthAlert>}
 
@@ -441,14 +417,6 @@ export default function ForgotPassword() {
         <AuthPillButton type="submit" disabled={submitting}>
           {submitting ? 'Sending…' : 'Send code'}
         </AuthPillButton>
-
-        <p className="signin-switch">
-          <Link to="/login" className="signin-link">Back to sign in</Link>
-        </p>
-
-        <AuthNote>
-          For your security, we show the same message whether or not the email is registered. The code expires in 10 minutes.
-        </AuthNote>
       </form>
     </AuthPage>
   );

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import '@fontsource/fraunces/600.css';
 
 const ICONS = {
   user: (
@@ -94,71 +95,43 @@ export function CheckIcon({ className = 'signin-success__check' }) {
   );
 }
 
-export function AuthWordmark() {
+export function AuthBrandLogos() {
   return (
-    <img
-      className="signin-brand__wordmark"
-      src="/brand/lib-wordmark-white.png"
-      alt="LIB Monitoring System"
-    />
-  );
-}
-
-export function AuthFooterLogos() {
-  return (
-    <span className="signin-brand__footer-logos">
+    <div className="signin-brand__logos">
       <img
-        src="/images/msu-seal-outline.png"
+        className="signin-brand__logo signin-brand__logo--lib"
+        src="/brand/lib-icon-white.png"
+        alt="LIB Monitoring System"
+      />
+      <span className="signin-brand__divider" aria-hidden="true" />
+      <img
+        className="signin-brand__logo"
+        src="/images/msu-seal.png"
         alt="Mindanao State University seal"
         onError={hideBrokenImage}
       />
       <img
-        src="/images/client-logo-outline.png"
-        alt="Partner logo"
+        className="signin-brand__logo"
+        src="/images/client-logo.png"
+        alt="OVCRED logo"
         onError={hideBrokenImage}
       />
-    </span>
-  );
-}
-
-export function AuthMobileHead() {
-  return (
-    <div className="signin-mobile-head">
-      <img
-        src="/brand/lib-icon.png"
-        alt=""
-        onError={hideBrokenImage}
-      />
-      <span>LIB Monitoring System</span>
     </div>
   );
 }
 
-export function AuthBrandPanel({
-  title,
-  lead,
-  steps = [],
-  cta,
-  footer = 'MSU–Main Campus · Authorized personnel only',
-}) {
+export function AuthBrandPanel({ cta }) {
   return (
     <aside className="signin-brand">
-      <div className="signin-brand__inner">
-        <AuthWordmark />
+      <span className="signin-brand__ring" aria-hidden="true" />
+      <AuthBrandLogos />
 
-        <h2 className="signin-brand__title">{title}</h2>
-        <p className="signin-brand__lead">{lead}</p>
-
-        {steps.length > 0 && (
-          <ol className="signin-brand__steps">
-            {steps.map((step, index) => (
-              <li className="signin-brand__step" key={step}>
-                <span className="signin-brand__step-number" aria-hidden="true">{index + 1}</span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
-        )}
+      <div className="signin-brand__body">
+        <p className="signin-brand__eyebrow">MSU–Main Campus · OVCRED</p>
+        <h2 className="signin-brand__title">Every peso, accounted for</h2>
+        <p className="signin-brand__lead">
+          Track line-item budgets, releases and expenses of externally funded research projects.
+        </p>
 
         {cta && (
           <Link to={cta.to} className="signin-brand__cta">
@@ -166,11 +139,6 @@ export function AuthBrandPanel({
           </Link>
         )}
       </div>
-
-      <p className="signin-brand__footer">
-        <AuthFooterLogos />
-        <span>{footer}</span>
-      </p>
     </aside>
   );
 }
@@ -183,10 +151,20 @@ export function AuthPage({ brand, variant, backdrop = null, children }) {
       <div className={`signin-card${isForm ? ' signin-card--wide' : ''}`}>
         <AuthBrandPanel {...brand} />
         <main className={`signin-main${isForm ? ' signin-main--form' : ''}`}>
-          <AuthMobileHead />
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+/** Eyebrow, serif heading and subtitle at the top of the form side. */
+export function AuthHead({ eyebrow, title, children }) {
+  return (
+    <div className="signin-head">
+      {eyebrow && <p className="signin-eyebrow">{eyebrow}</p>}
+      <h1 className="signin-title">{title}</h1>
+      {children && <p className="signin-subtitle">{children}</p>}
     </div>
   );
 }
@@ -253,10 +231,6 @@ export function AuthAlert({ tone = 'error', children }) {
   );
 }
 
-export function AuthNote({ children }) {
-  return <div className="signin-note">{children}</div>;
-}
-
 export function AuthPillButton({ className = '', children, ...props }) {
   return (
     <button className={`signin-submit${className ? ` ${className}` : ''}`} {...props}>
@@ -265,17 +239,20 @@ export function AuthPillButton({ className = '', children, ...props }) {
   );
 }
 
-export function AuthPasswordFeedback({ rules, id }) {
+export function AuthPasswordFeedback({ rules, id, variant = 'meter' }) {
+  const checklist = variant === 'checklist';
   return (
-    <div className="signin-password-feedback" id={id}>
-      <div className="signin-strength" aria-hidden="true">
-        {rules.map((rule) => (
-          <span
-            className={`signin-strength__segment${rule.met ? ' is-met' : ''}`}
-            key={rule.key}
-          />
-        ))}
-      </div>
+    <div className={`signin-password-feedback${checklist ? ' signin-password-feedback--checklist' : ''}`} id={id}>
+      {!checklist && (
+        <div className="signin-strength" aria-hidden="true">
+          {rules.map((rule) => (
+            <span
+              className={`signin-strength__segment${rule.met ? ' is-met' : ''}`}
+              key={rule.key}
+            />
+          ))}
+        </div>
+      )}
       <ul className="signin-rules" aria-label="Password requirements">
         {rules.map((rule) => (
           <li className={`signin-rule${rule.met ? ' is-met' : ''}`} key={rule.key}>
