@@ -1443,8 +1443,14 @@ select.signin-input:disabled{
   font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;
   color:var(--pg-muted);margin-bottom:4px;
 }
-.program-h1{font-size:26px;font-weight:700;line-height:1.2;color:var(--pg-ink)}
+/* Every page title, for every role, uses the Overview heading's type
+   ("Externally funded research"); narrow screens scale it down below. */
+.program-h1{
+  font-size:clamp(34px,3.6vw,46px);font-weight:700;letter-spacing:-.045em;
+  line-height:1.02;color:var(--pg2-ink,var(--pg-ink));overflow-wrap:break-word;
+}
 .program-sub{font-size:13px;color:var(--pg-muted);margin-top:4px}
+.program-page-head .program-sub{margin-top:10px}
 .program-head-actions{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
 .program-head-actions .pd-form-b-blocked{flex-basis:100%;margin:0}
 .program-field{display:flex;flex-direction:column;gap:6px}
@@ -1638,7 +1644,6 @@ select.signin-input:disabled{
   .program-pending-actions .program-field{flex:1}
 }
 @media (max-width: 560px){
-  .program-h1{font-size:22px}
   .program-card{padding:16px}
   .program-bar{width:34px}
 }
@@ -1928,10 +1933,6 @@ select.signin-input:disabled{
 /* Dashboard head — reference type scale */
 .pl-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .pl-greeting{font-size:14px;color:var(--pg2-muted);margin-bottom:6px;font-weight:450}
-.pl-head .program-h1{
-  font-size:clamp(34px,3.6vw,46px);font-weight:700;letter-spacing:-.045em;
-  line-height:1.02;color:var(--pg2-ink);
-}
 .pl-head .program-sub{margin-top:10px;font-size:14px;color:var(--pg2-muted);max-width:780px;letter-spacing:-.006em}
 .pl-head-actions{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
 .pl-head-actions .program-field{min-width:190px}
@@ -2399,7 +2400,7 @@ select.signin-input:disabled{
 }
 @media (max-width: 640px){
   .pl-kpi-grid{grid-template-columns:1fr}
-  .pl-head .program-h1{font-size:30px}
+  .program-h1{font-size:30px}
   .pl-spend-row{flex-wrap:wrap}
   .pl-spend-side{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;width:100%}
   .pl-approval{flex-wrap:wrap}
