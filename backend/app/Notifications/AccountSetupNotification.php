@@ -2,16 +2,17 @@
 
 namespace App\Notifications;
 
+use App\Mail\AccountReadyMail;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
+/** "Your account is ready" email for a user a Program Leader added. */
 class AccountSetupNotification extends Notification
 {
     use Queueable;
 
-    public function __construct(public User $user, public string $setupUrl)
+    public function __construct(public User $user, public string $roleLabel)
     {
     }
 
@@ -20,13 +21,9 @@ class AccountSetupNotification extends Notification
         return ['mail'];
     }
 
-    public function toMail($notifiable): MailMessage
+    public function toMail($notifiable)
     {
-        return (new MailMessage)
-            ->subject('Set up your LIB Monitoring System password')
-            ->line('A Program Leader created an account for you.')
-            ->line('Choose your password using the button below. The link expires in 60 minutes.')
-            ->action('Set your password', $this->setupUrl)
-            ->line('If you did not expect this email, contact the Program Leader.');
+        return (new AccountReadyMail($this->user->name, $this->user->email, $this->roleLabel))
+            ->to($notifiable->routeNotificationFor('mail', $this));
     }
 }

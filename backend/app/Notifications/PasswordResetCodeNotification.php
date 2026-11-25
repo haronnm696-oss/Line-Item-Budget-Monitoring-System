@@ -2,15 +2,16 @@
 
 namespace App\Notifications;
 
-use App\Mail\ResetPasswordMail;
+use App\Mail\PasswordResetCodeMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
-class ResetPasswordNotification extends Notification
+/** Sent synchronously (not queued) so the code is never written to a jobs table. */
+class PasswordResetCodeNotification extends Notification
 {
     use Queueable;
 
-    public function __construct(public string $token)
+    public function __construct(public string $code)
     {
     }
 
@@ -21,9 +22,7 @@ class ResetPasswordNotification extends Notification
 
     public function toMail($notifiable)
     {
-        $email = $notifiable->getEmailForPasswordReset();
-
-        return (new ResetPasswordMail($this->token, $email))
+        return (new PasswordResetCodeMail($this->code))
             ->to($notifiable->routeNotificationFor('mail', $this));
     }
 }

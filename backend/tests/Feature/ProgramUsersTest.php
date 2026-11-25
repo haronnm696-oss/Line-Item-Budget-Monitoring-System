@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\AccountApprovedNotification;
 use App\Notifications\AccountRejectedNotification;
+use App\Mail\AccountReadyMail;
 use App\Notifications\AccountSetupNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -281,13 +282,56 @@ class ProgramUsersTest extends TestCase
         $this->assertTrue($user->is_active);
         $this->assertNotEmpty($user->password);
         $this->assertFalse(Hash::check('temporary-password', $user->password));
-        $this->assertDatabaseHas('password_resets', ['email' => $user->email]);
+        // No reset token is created: the email sends them to Forgot password.
+        $this->assertDatabaseMissing('password_resets', ['email' => $user->email]);
         $this->assertDatabaseHas('audit_trails', [
             'action' => 'created',
             'model_type' => 'User',
             'model_id' => $user->id,
         ]);
         Notification::assertSentTo($user, AccountSetupNotification::class);
+    }
+
+    public function test_the_account_ready_email_links_to_forgot_password_without_a_token(): void
+    {
+        Notification::fake();
+        config(['app.frontend_url' => 'https://lib.example.edu']);
+        $leader = $this->userWithRole('program-leader');
+
+        $this->actingAs($leader)
+            ->postJson('/api/program/users', $this->addUserPayload())
+            ->assertCreated();
+
+        $user = User::where('email', 'new.leader@msumain.edu.ph')->firstOrFail();
+
+        Notification::assertSentTo($user, AccountSetupNotification::class, function (AccountSetupNotification $notification) use ($user) {
+            $mail = $notification->toMail($user);
+            $html = $mail->render();
+            $text = view($mail->textView, $mail->buildViewData())->render();
+
+            foreach ([$html, $text] as $body) {
+                $this->assertStringContainsString('New Leader', $body);
+                $this->assertStringContainsString('Project Leader', $body);
+                $this->assertStringContainsString('new.leader@msumain.edu.ph', $body);
+                $this->assertStringContainsString('https://lib.example.edu/forgot-password', $body);
+                $this->assertStringContainsString('6-digit code', $body);
+                $this->assertStringNotContainsString('token', strtolower($body));
+                $this->assertStringNotContainsString('reset-password', $body);
+            }
+
+            // The only links go to /forgot-password, with no query string.
+            preg_match_all('/href="([^"]+)"/', $html, $links);
+            $this->assertNotEmpty($links[1]);
+            foreach ($links[1] as $href) {
+                $this->assertSame('https://lib.example.edu/forgot-password', $href);
+            }
+
+            return $mail instanceof AccountReadyMail
+                && $mail->hasTo($user->email)
+                && $mail->subject === 'Your LIB Monitoring System account is ready'
+                && $mail->logoUrl === 'https://lib.example.edu/brand/lib-wordmark-white.png'
+                && str_contains($html, 'alt="LIB Monitoring System"');
+        });
     }
 
     public function test_add_user_accepts_the_student_msu_domain(): void
