@@ -47,7 +47,9 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('web',
 // The one list of MSU-Main colleges / units and departments (public: Create account needs it).
 Route::get('/academic-units', fn () => response()->json(\App\Support\AcademicUnits::payload()))->middleware('throttle:60,1');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('web', 'throttle:5,1');
-Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('web');
+// Password reset by emailed 6-digit code: request -> verify -> new password.
+Route::post('/forgot-password/verify', [AuthController::class, 'verifyResetCode'])->middleware('web', 'throttle:10,1');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('web', 'throttle:10,1');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('web');
 Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum', 'active.account');
 

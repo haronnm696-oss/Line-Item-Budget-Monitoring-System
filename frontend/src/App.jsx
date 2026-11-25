@@ -8,7 +8,6 @@ import { COMING_SOON_PATHS } from './layouts/roleNav';
 import ProgramLayout from './layouts/ProgramLayout';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
 import Policy from './pages/Policy';
 import Dashboard from './pages/Dashboard';
@@ -95,7 +94,8 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Password reset is by emailed code now; old reset links land on step 1. */}
+          <Route path="/reset-password" element={<Navigate to="/forgot-password" replace />} />
           <Route path="/terms" element={<Policy type="terms" />} />
           <Route path="/privacy" element={<Policy type="privacy" />} />
 

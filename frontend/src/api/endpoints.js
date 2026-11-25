@@ -213,7 +213,12 @@ export const ENDPOINTS = {
   academicUnits: '/api/academic-units',
   logout: '/api/logout',
   me: '/api/me',
+  // Password reset by emailed 6-digit code:
+  //   POST forgot-password        { email }                 -> 202 { message, code_expires_in, resend_in } (same for any address)
+  //   POST forgot-password/verify { email, code }           -> { reset_token, expires_in } | 422 errors.code "Invalid or expired code"
+  //   POST reset-password         { email, reset_token, password, password_confirmation } -> { message } | 422 errors.reset_token / errors.password
   forgotPassword: '/api/forgot-password',
+  verifyResetCode: '/api/forgot-password/verify',
   resetPassword: '/api/reset-password',
   programLeaderDashboard: (projectId) =>
     `/api/dashboard/program-leader${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`,

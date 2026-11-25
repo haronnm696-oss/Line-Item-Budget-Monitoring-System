@@ -7,7 +7,9 @@ use App\Models\AuditTrail;
 use App\Models\User;
 use App\Notifications\NewRegistrationPendingNotification;
 use App\Notifications\PasswordChangedNotification;
+use App\Notifications\PasswordResetCodeNotification;
 use App\Rules\StrongPassword;
+use App\Services\PasswordResetCodeService;
 use App\Support\AcademicUnits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +17,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -206,7 +207,11 @@ class AuthController extends Controller
         return response()->json(null, 204);
     }
 
-    public function forgotPassword(Request $request)
+    /**
+     * Step 1 of the password reset: email a 6-digit code. The response is the
+     * same whether or not the account exists (no enumeration).
+     */
+    public function forgotPassword(Request $request, PasswordResetCodeService $codes)
     {
         $data = $request->validate([
             'email' => ['required', 'email:rfc', 'max:255'],
@@ -240,15 +245,12 @@ class AuthController extends Controller
         RateLimiter::hit($cooldownKey, 60);
 
         $user = User::where('email', $email)->first();
-        $eligible = $user
-            && $user->is_active
-            && $user->role_id !== null
-            && $user->registration_rejected_at === null;
 
-        if ($eligible) {
-            // Create the token and send the mail after the response has gone
-            // out, so active and unknown addresses take the same time.
-            app()->terminating(function () use ($email) {
+        if (PasswordResetCodeService::isEligible($user)) {
+            // Create the code and send the mail after the response has gone
+            // out, so active and unknown addresses take the same time. A new
+            // code replaces the previous one.
+            app()->terminating(function () use ($user, $codes) {
                 static $sent = false;
 
                 if ($sent) {
@@ -258,36 +260,63 @@ class AuthController extends Controller
                 $sent = true;
 
                 try {
-                    Password::sendResetLink(['email' => $email]);
+                    $user->notify(new PasswordResetCodeNotification($codes->issue($user)));
                 } catch (\Throwable $e) {
-                    // Never log the token, password, or whether the address exists.
-                    Log::error('Password reset notification failed.');
+                    // Never log the code or whether the address exists.
+                    Log::error('Password reset code notification failed.');
                 }
             });
         }
 
         return response()->json([
-            'message' => 'If an account exists for that address, a password reset link has been sent.',
+            'message' => self::RESET_CODE_SENT_MESSAGE,
+            'code_expires_in' => PasswordResetCodeService::CODE_TTL_MINUTES * 60,
+            'resend_in' => 60,
         ], 202);
     }
 
-    public function resetPassword(Request $request)
+    /** Step 2: exchange the right code for a short-lived, single-use reset token. */
+    public function verifyResetCode(Request $request, PasswordResetCodeService $codes)
     {
         $data = $request->validate([
             'email' => ['required', 'email:rfc', 'max:255'],
-            'token' => ['required', 'string'],
+            'code' => ['required', 'string', 'max:32'],
         ]);
 
         $email = strtolower(trim($data['email']));
-        $token = $data['token'];
+        $code = preg_replace('/\s+/', '', $data['code']);
+
+        $token = $codes->verify(User::where('email', $email)->first(), $code);
+
+        if ($token === null) {
+            throw ValidationException::withMessages([
+                'code' => [self::INVALID_CODE_MESSAGE],
+            ]);
+        }
+
+        return response()->json([
+            'reset_token' => $token,
+            'expires_in' => PasswordResetCodeService::TOKEN_TTL_MINUTES * 60,
+        ]);
+    }
+
+    /** Step 3: set the new password with the reset token from step 2. */
+    public function resetPassword(Request $request, PasswordResetCodeService $codes)
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email:rfc', 'max:255'],
+            'reset_token' => ['required', 'string', 'max:128'],
+        ]);
+
+        $email = strtolower(trim($data['email']));
+        $token = $data['reset_token'];
         $user = User::where('email', $email)->first();
 
-        // Check the one-time token before the password policy so a bad,
-        // expired, or already-used link always maps to the "Link expired"
-        // screen instead of a password error.
-        if (! $user || ! Password::broker()->tokenExists($user, $token)) {
+        // Check the token before the password policy so a bad, expired, or
+        // already-used token always sends the user back to request a new code.
+        if (! $codes->checkToken($user, $token)) {
             throw ValidationException::withMessages([
-                'token' => ['This password reset link is invalid or has expired.'],
+                'reset_token' => [self::INVALID_RESET_TOKEN_MESSAGE],
             ]);
         }
 
@@ -304,34 +333,36 @@ class AuthController extends Controller
             ],
         ]);
 
-        $status = Password::reset(
-            [
-                'email' => $email,
-                'password' => $data['password'],
-                'password_confirmation' => $request->input('password_confirmation'),
-                'token' => $token,
-            ],
-            function (User $user, string $password) use ($request) {
-                $user->forceFill([
-                    'password' => Hash::make($password),
-                    'remember_token' => Str::random(60),
-                ])->save();
-
-                $this->revokeUserSessionsAndTokens($user);
-                $this->recordPasswordResetAudit($user, $request);
-
-                try {
-                    $user->notify(new PasswordChangedNotification());
-                } catch (\Throwable $e) {
-                    Log::error('Password changed notification failed.');
-                }
+        $reset = DB::transaction(function () use ($user, $token, $data, $codes) {
+            // Spend the token under a row lock so two parallel requests
+            // cannot both use it.
+            if (! $codes->checkToken($user, $token, true)) {
+                return false;
             }
-        );
 
-        if ($status !== Password::PASSWORD_RESET) {
+            $user->forceFill([
+                'password' => Hash::make($data['password']),
+                'remember_token' => Str::random(60),
+            ])->save();
+
+            $codes->clear($user);
+            $this->revokeUserSessionsAndTokens($user);
+            // No code, token or password in the entry.
+            AuditTrail::record($user, 'Password reset', $user, [], [], 'Password reset via emailed code');
+
+            return true;
+        });
+
+        if (! $reset) {
             throw ValidationException::withMessages([
-                'token' => ['This password reset link is invalid or has expired.'],
+                'reset_token' => [self::INVALID_RESET_TOKEN_MESSAGE],
             ]);
+        }
+
+        try {
+            $user->notify(new PasswordChangedNotification());
+        } catch (\Throwable $e) {
+            Log::error('Password changed notification failed.');
         }
 
         return response()->json([
@@ -339,10 +370,15 @@ class AuthController extends Controller
         ], 200);
     }
 
+    public const RESET_CODE_SENT_MESSAGE = 'If an account exists for that address, we sent a 6-digit code to it.';
+    public const INVALID_CODE_MESSAGE = 'Invalid or expired code';
+    public const INVALID_RESET_TOKEN_MESSAGE = 'Your reset session has expired. Request a new code.';
+
     private function passwordResetThrottleResponse(int $retryAfter)
     {
         return response()->json([
-            'message' => 'Too many reset requests. Please wait before requesting another link.',
+            'message' => 'Too many reset requests. Please wait before requesting another code.',
+            'retry_after' => max(1, $retryAfter),
         ], 429)->header('Retry-After', max(1, $retryAfter));
     }
 
@@ -355,20 +391,5 @@ class AuthController extends Controller
         if (Schema::hasTable('personal_access_tokens')) {
             $user->tokens()->delete();
         }
-    }
-
-    private function recordPasswordResetAudit(User $user, Request $request): void
-    {
-        AuditTrail::create([
-            'user_id' => $user->id,
-            'action' => 'Password reset',
-            'model_type' => 'User',
-            'model_id' => $user->id,
-            'old_values' => null,
-            'new_values' => null,
-            'reason' => 'Password reset via emailed link',
-            'ip_address' => $request->ip(),
-            'created_at' => now(),
-        ]);
     }
 }

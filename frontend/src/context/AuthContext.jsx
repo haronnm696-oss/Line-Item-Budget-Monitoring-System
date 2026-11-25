@@ -6,6 +6,7 @@ import {
   register as registerApi,
   forgotPassword as forgotPasswordApi,
   resetPassword as resetPasswordApi,
+  verifyResetCode as verifyResetCodeApi,
 } from '../api/auth';
 import { ROLE_MAP, normalizeRole } from '../lib/roles';
 
@@ -67,6 +68,10 @@ export function AuthProvider({ children }) {
     return await forgotPasswordApi(email);
   }, []);
 
+  const verifyResetCode = useCallback(async (payload) => {
+    return await verifyResetCodeApi(payload);
+  }, []);
+
   const resetPassword = useCallback(async (payload) => {
     return await resetPasswordApi(payload);
   }, []);
@@ -82,7 +87,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, roleInfo, checking, signIn, signOut, signUp, requestPasswordReset, resetPassword }}
+      value={{ user, roleInfo, checking, signIn, signOut, signUp, requestPasswordReset, verifyResetCode, resetPassword }}
     >
       {children}
     </AuthContext.Provider>

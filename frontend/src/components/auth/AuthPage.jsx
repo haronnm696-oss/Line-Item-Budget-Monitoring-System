@@ -237,7 +237,15 @@ export function AuthSection({ title, children }) {
   );
 }
 
-export function AuthAlert({ children }) {
+export function AuthAlert({ tone = 'error', children }) {
+  if (tone === 'success') {
+    return (
+      <div className="signin-alert signin-alert--success" role="status" aria-live="polite">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="signin-alert" role="alert" aria-live="polite">
       {children}

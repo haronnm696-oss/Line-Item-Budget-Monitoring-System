@@ -47,7 +47,7 @@ class BrevoMailTest extends TestCase
         });
     }
 
-    public function test_a_password_reset_sends_one_brevo_call_with_recipient_sender_and_link(): void
+    public function test_a_password_reset_sends_one_brevo_call_with_recipient_sender_and_code(): void
     {
         Http::fake([BrevoTransport::ENDPOINT => Http::response(['messageId' => '<abc@brevo>'], 201)]);
         $user = $this->user('project-leader', 'maria.santos@s.msumain.edu.ph');
@@ -58,6 +58,7 @@ class BrevoMailTest extends TestCase
         Http::assertSent(function (HttpRequest $request) use ($user) {
             $body = $request->data();
             $html = $body['htmlContent'] ?? '';
+            $text = $body['textContent'] ?? '';
 
             return $request->url() === BrevoTransport::ENDPOINT
                 && $request->method() === 'POST'
@@ -65,11 +66,12 @@ class BrevoMailTest extends TestCase
                 && $body['to'][0]['email'] === $user->email
                 && count($body['to']) === 1
                 && $body['sender'] === ['email' => 'no-reply@msumain.edu.ph', 'name' => 'LIB Monitoring System']
-                && $body['subject'] !== ''
-                && str_contains($html, 'https://lib.example.test/reset-password?token=')
-                && str_contains($html, urlencode($user->email))
-                && str_contains($body['textContent'] ?? '', 'https://lib.example.test/reset-password?token=')
-                && str_contains($body['textContent'], '&email=' . urlencode($user->email));
+                && $body['subject'] === 'Your LIB Monitoring System password reset code'
+                && preg_match('/>\d{6}</', $html) === 1
+                && preg_match('/^\d{6}$/m', $text) === 1
+                && str_contains($html, 'https://lib.example.test/brand/lib-wordmark-white.png')
+                && ! str_contains($html, 'reset-password')
+                && ! str_contains($text, 'reset-password');
         });
     }
 
@@ -100,7 +102,7 @@ class BrevoMailTest extends TestCase
 
         $this->forgot($user->email)
             ->assertStatus(202)
-            ->assertJsonPath('message', 'If an account exists for that address, a password reset link has been sent.');
+            ->assertJsonPath('message', 'If an account exists for that address, we sent a 6-digit code to it.');
 
         $entry = collect($this->logs)->firstWhere('message', 'Brevo rejected the mail.');
         $this->assertNotNull($entry, 'The provider error was not logged.');
@@ -165,7 +167,7 @@ class BrevoMailTest extends TestCase
     private function forgot(string $email)
     {
         $response = $this->postJson('/api/forgot-password', ['email' => $email]);
-        // The reset mail is sent in a terminating callback; run it now.
+        // The reset code mail is sent in a terminating callback; run it now.
         $this->app->terminate();
 
         return $response;

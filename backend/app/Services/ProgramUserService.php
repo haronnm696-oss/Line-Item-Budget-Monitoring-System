@@ -236,7 +236,7 @@ class ProgramUserService
                 'department' => $data['department'] ?? null,
                 'contact_number' => $data['contact_number'] ?? null,
                 // The initial password is random and never shown or emailed.
-                // The account holder sets their own password via the setup link.
+                // The account holder sets their own password via Forgot password.
                 'password' => Hash::make(Str::random(40)),
                 'role_id' => $role->id,
                 'is_active' => true,
@@ -254,12 +254,12 @@ class ProgramUserService
             return $user;
         });
 
-        $setupUrl = $this->createPasswordSetupLink($user);
-
+        // "Your account is ready": the person sets a password through Forgot
+        // password with an emailed code (no token in this email).
         // The account is saved already; a mailer failure is logged, never thrown.
         $this->setupEmailSent = true;
         try {
-            Notification::send($user, new AccountSetupNotification($user, $setupUrl));
+            Notification::send($user, new AccountSetupNotification($user, $this->roleLabel($role)));
         } catch (\Throwable $e) {
             $this->setupEmailSent = false;
             \Illuminate\Support\Facades\Log::warning('Account setup email could not be sent.', [
@@ -880,20 +880,6 @@ class ProgramUserService
         }
 
         return $moved;
-    }
-
-    public function createPasswordSetupLink(User $user): string
-    {
-        $token = Str::random(60);
-
-        DB::table('password_resets')->updateOrInsert(
-            ['email' => $user->email],
-            ['token' => $token, 'created_at' => now()]
-        );
-
-        $base = rtrim(config('app.frontend_url') ?: config('app.url', ''), '/');
-
-        return $base . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
     }
 
     /**

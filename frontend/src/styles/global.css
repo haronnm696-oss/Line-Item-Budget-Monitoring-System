@@ -3699,3 +3699,58 @@ select.signin-input:disabled{
 .pr-tick > span{min-width:0;overflow-wrap:anywhere}
 .pr-tick.is-disabled{cursor:default;color:var(--pg-muted)}
 .pr-tick-note{display:block;font-size:12.5px;margin-top:2px}
+
+/* Password reset: 6-digit code boxes (pages/ForgotPassword.jsx). */
+.signin-code{
+  display:grid;
+  grid-template-columns:repeat(6, minmax(0, 1fr));
+  gap:8px;
+  max-width:360px;
+}
+.signin-code__box{
+  width:100%;
+  min-width:0;
+  height:56px;
+  border:1px solid var(--signin-input-border);
+  border-radius:12px;
+  background:var(--signin-input);
+  color:var(--signin-ink);
+  font:inherit;
+  font-size:24px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  text-align:center;
+  transition:border-color .15s ease;
+}
+.signin-code__box:focus{
+  outline:3px solid var(--signin-focus);
+  outline-offset:2px;
+  border-color:var(--signin-brand);
+}
+.signin-code__box.is-invalid{
+  border-color:var(--signin-invalid);
+}
+.signin-code__box:disabled{
+  opacity:.6;
+}
+.signin-code__timer{
+  font-variant-numeric:tabular-nums;
+}
+.signin-code__timer.is-expired{
+  color:var(--signin-warning);
+  font-weight:600;
+}
+.signin-link--button{
+  border:0;
+  padding:0;
+  background:transparent;
+  font:inherit;
+  font-size:13px;
+  font-weight:600;
+  color:var(--signin-brand);
+  cursor:pointer;
+}
+.signin-alert--success{
+  background:var(--signin-success-bg);
+  color:var(--signin-success);
+}

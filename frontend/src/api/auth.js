@@ -175,6 +175,22 @@ export async function register({ name: _name, email, password, first_name, last_
   }
 }
 
+function authError(message, err) {
+  const error = new Error(message);
+  error.status = err?.response?.status;
+  error.errors = err?.response?.data?.errors;
+  const retryAfter = Number(err?.response?.data?.retry_after || err?.response?.headers?.['retry-after']);
+  if (retryAfter > 0) error.retryAfter = retryAfter;
+  return error;
+}
+
+function firstFieldError(err) {
+  const errors = err?.response?.data?.errors;
+  return errors ? Object.values(errors).flat()[0] : null;
+}
+
+// Step 1 of the password reset: email a 6-digit code. The reply is the same
+// whether or not the address has an account.
 export async function forgotPassword(email) {
   const cleanEmail = normalizeEmail(email);
   if (!cleanEmail || !isValidLoginEmail(cleanEmail)) {
@@ -182,9 +198,11 @@ export async function forgotPassword(email) {
   }
 
   if (USE_MOCK) {
-    // Mock mode: don't reveal whether the email exists.
+    // Mock mode: don't reveal whether the email exists. Any 6 digits verify.
     return {
-      message: 'If an account exists for that address, a password reset link has been sent.',
+      message: 'If an account exists for that address, we sent a 6-digit code to it.',
+      code_expires_in: 600,
+      resend_in: 60,
     };
   }
 
@@ -194,32 +212,48 @@ export async function forgotPassword(email) {
     return res.data;
   } catch (err) {
     const status = err.response?.status;
-    const errors = err.response?.data?.errors;
     if (status === 422) {
-      const firstError = errors ? Object.values(errors).flat()[0] : null;
-      const error = new Error(firstError || err.response?.data?.message || 'Enter a valid email address.');
-      error.status = status;
-      error.errors = errors;
-      throw error;
+      throw authError(firstFieldError(err) || err.response?.data?.message || 'Enter a valid email address.', err);
     }
     if (status === 429) {
-      const error = new Error('Too many reset requests. Please wait before requesting another link.');
-      error.status = status;
-      throw error;
+      throw authError('Too many reset requests. Please wait before requesting another code.', err);
     }
-    const error = new Error('We could not send the reset link. Check your connection and try again.');
-    error.status = status;
-    throw error;
+    throw authError('We could not send the code. Check your connection and try again.', err);
   }
 }
 
-export async function resetPassword({ email, token, password, passwordConfirmation }) {
+// Step 2: exchange the emailed code for a short-lived reset token.
+export async function verifyResetCode({ email, code }) {
   const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail || !isValidLoginEmail(cleanEmail)) {
-    throw new Error('This reset link is invalid or has expired.');
+  const cleanCode = String(code ?? '').replace(/\D/g, '');
+
+  if (USE_MOCK) {
+    if (!/^\d{6}$/.test(cleanCode)) {
+      throw Object.assign(new Error('Invalid or expired code'), { status: 422, errors: { code: ['Invalid or expired code'] } });
+    }
+    return { reset_token: 'mock-reset-token', expires_in: 600 };
   }
-  if (!token) {
-    throw new Error('This reset link is invalid or has expired.');
+
+  try {
+    await client.get(ENDPOINTS.csrf);
+    const res = await client.post(ENDPOINTS.verifyResetCode, { email: cleanEmail, code: cleanCode });
+    return res.data;
+  } catch (err) {
+    const status = err.response?.status;
+    if (status === 422) throw authError('Invalid or expired code', err);
+    if (status === 429) throw authError('Too many attempts. Please wait a minute and try again.', err);
+    throw authError('We could not check the code. Check your connection and try again.', err);
+  }
+}
+
+// Step 3: set the new password with the reset token from step 2.
+export async function resetPassword({ email, resetToken, password, passwordConfirmation }) {
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail || !isValidLoginEmail(cleanEmail) || !resetToken) {
+    throw Object.assign(new Error('Your reset session has expired. Request a new code.'), {
+      status: 422,
+      errors: { reset_token: ['Your reset session has expired. Request a new code.'] },
+    });
   }
   if (!password) {
     throw new Error('Enter a new password.');
@@ -227,13 +261,7 @@ export async function resetPassword({ email, token, password, passwordConfirmati
 
   if (USE_MOCK) {
     const found = MOCK_USERS.find((u) => u.email === cleanEmail);
-    if (!found) {
-      const error = new Error('This reset link is invalid or has expired.');
-      error.status = 422;
-      error.errors = { token: ['This reset link is invalid or has expired.'] };
-      throw error;
-    }
-    found.password = password;
+    if (found) found.password = password;
     return { message: 'Your password has been reset. You can now sign in.' };
   }
 
@@ -241,29 +269,18 @@ export async function resetPassword({ email, token, password, passwordConfirmati
     await client.get(ENDPOINTS.csrf);
     const res = await client.post(ENDPOINTS.resetPassword, {
       email: cleanEmail,
-      token,
+      reset_token: resetToken,
       password,
       password_confirmation: passwordConfirmation ?? password,
     });
     return res.data;
   } catch (err) {
     const status = err.response?.status;
-    const errors = err.response?.data?.errors;
     if (status === 422) {
-      const firstError = errors ? Object.values(errors).flat()[0] : null;
-      const error = new Error(firstError || err.response?.data?.message || 'This reset link is invalid or has expired.');
-      error.status = status;
-      error.errors = errors;
-      throw error;
+      throw authError(firstFieldError(err) || err.response?.data?.message || 'Your reset session has expired. Request a new code.', err);
     }
-    if (status === 429) {
-      const error = new Error('Too many requests. Please wait before trying again.');
-      error.status = status;
-      throw error;
-    }
-    const error = new Error('We could not reset your password. Check your connection and try again.');
-    error.status = status;
-    throw error;
+    if (status === 429) throw authError('Too many requests. Please wait before trying again.', err);
+    throw authError('We could not reset your password. Check your connection and try again.', err);
   }
 }
 

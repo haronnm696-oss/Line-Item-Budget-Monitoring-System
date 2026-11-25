@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ROUTE_BY_ROLE } from '../routes/access';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -23,7 +23,10 @@ const BRAND = {
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
+  // Set by the password reset page after a successful reset.
+  const notice = typeof location.state?.notice === 'string' ? location.state.notice : '';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,6 +93,7 @@ export default function Login() {
       </div>
 
       {error && <AuthAlert>{error}</AuthAlert>}
+      {!error && notice && <AuthAlert tone="success">{notice}</AuthAlert>}
 
       <form className="signin-form" onSubmit={handleLogin}>
         <AuthField id="login-email" label="Email address" icon="mail">
