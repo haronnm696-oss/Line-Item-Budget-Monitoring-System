@@ -286,22 +286,23 @@ export default function ProgramApprovals() {
       </div>
 
       <div className="program-filter-row pa-controls">
-        <div className="program-tabs pa-tabs" role="tablist" aria-label="Approval status">
-          {TABS.map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={status === value}
-              className={`program-tab${status === value ? ' active' : ''}`}
-              onClick={() => updateQuery({ tab: value })}
-            >
-              {label}{counts ? ` ${counts[value] ?? 0}` : ''}
-            </button>
-          ))}
-        </div>
-
         <span className="spacer" />
+
+        <div className="program-field">
+          <label htmlFor="approval-status">Status</label>
+          <select
+            id="approval-status"
+            className="program-select"
+            value={status}
+            onChange={(event) => updateQuery({ tab: event.target.value })}
+          >
+            {TABS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}{counts ? ` (${counts[value] ?? 0})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="program-field">
           <label htmlFor="approval-type">Type</label>
