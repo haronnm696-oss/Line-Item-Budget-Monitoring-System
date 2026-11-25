@@ -139,15 +139,16 @@ class RegistrationReviewTest extends TestCase
                 'assignments' => [['project_id' => $this->project('A')->id, 'role' => 'project-leader']],
             ])
             ->assertStatus(422)
-            ->assertJsonValidationErrors('assignments');
+            ->assertJsonValidationErrors('role');
 
         $this->assertNull($pending->fresh()->role_id);
 
-        // Without project rows a Program Leader account is approved.
+        // One Program Leader: the role is never given by approval, even without project rows.
         $this->actingAs($leader)
             ->postJson("/api/program/registrations/{$pending->id}/decision", ['decision' => 'approved', 'role' => 'program-leader'])
-            ->assertOk()
-            ->assertJsonPath('user.role', 'PRG');
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('role');
+        $this->assertNull($pending->fresh()->role_id);
     }
 
     public function test_reject_requires_a_reason_and_the_user_cannot_sign_in(): void

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import LeaderConflicts from '../../components/program/LeaderConflicts';
 import { conflictFor } from '../../lib/leaderRule';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   assignToProject,
   createProgramUser,
@@ -10,6 +11,7 @@ import {
   removeProjectAssignment,
   updateProgramUserDetails,
   fixProjectAssignment,
+  transferProgramLeader,
   updateProgramUserRole,
   updateProgramUserStatus,
 } from '../../api/program';
@@ -25,9 +27,10 @@ import {
   ManageMenu,
   MismatchWarning,
   StatusDialog,
+  TransferProgramLeaderDialog,
 } from '../../components/program/ProgramUserManage';
 import { formatDate } from '../../lib/datetime';
-import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
+import { ALL_ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
 
 const FILTERS = ['q', 'role', 'project', 'status', 'user'];
 
@@ -88,6 +91,8 @@ export default function ProgramUsers() {
 
   // ---- pending registrations: each card opens the Review panel (?review=<id>)
   const { refreshRegistrations } = useProgramRefresh();
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
   const [pending, setPending] = useState([]);
   const [reviewOptions, setReviewOptions] = useState({ roles: [], project_roles: [], projects: [] });
   const [pendingLoading, setPendingLoading] = useState(true);
@@ -310,6 +315,28 @@ export default function ProgramUsers() {
     }
   }
 
+  // Transfer Program Leader role: on success this account is deactivated
+  // and signed out by the server; clear the local session and go to sign-in.
+  async function runTransfer(payload) {
+    setDialogBusy(true);
+    setDialogError('');
+    setDialogFieldErrors({});
+    try {
+      const data = await transferProgramLeader(payload);
+      setDialog(null);
+      await signOut();
+      navigate('/login', {
+        replace: true,
+        state: { notice: data?.message || 'Program Leader role transferred. Your account is now deactivated.' },
+      });
+    } catch (error) {
+      const fields = fieldErrorsFrom(error);
+      setDialogFieldErrors(fields);
+      setDialogError(Object.keys(fields).length ? '' : messageFor(error, 'Unable to transfer the Program Leader role.'));
+      setDialogBusy(false);
+    }
+  }
+
   const current = result?.key === requestKey ? result : null;
   const error = failure?.key === requestKey ? failure.message : '';
   const loading = !current && !error;
@@ -351,6 +378,9 @@ export default function ProgramUsers() {
         <div className="program-head-actions">
           <button type="button" className="program-btn" onClick={() => { setAddError(''); setAddOpen(true); }}>
             Add user
+          </button>
+          <button type="button" className="program-btn" onClick={() => openDialog('transfer', null)}>
+            Transfer Program Leader role
           </button>
           {/* Assignment happens from Manage > Edit project assignments and the project page Team "Add member". */}
         </div>
@@ -448,7 +478,7 @@ export default function ProgramUsers() {
           <label htmlFor="pu-role">Account role</label>
           <select id="pu-role" className="program-select" value={filters.role} onChange={(event) => setFilter('role', event.target.value)}>
             <option value="">All roles</option>
-            {ACCOUNT_ROLE_OPTIONS.map((role) => (
+            {ALL_ACCOUNT_ROLE_OPTIONS.map((role) => (
               <option key={role.slug} value={role.slug}>{role.label}</option>
             ))}
           </select>
@@ -631,6 +661,16 @@ export default function ProgramUsers() {
           error={dialogError}
           onClose={() => { if (!dialogBusy) setDialog(null); }}
           onSave={(payload) => runDialog(() => updateProgramUserRole(dialog.user.id, payload), 'Account role changed.')}
+        />
+      )}
+      {dialog?.kind === 'transfer' && (
+        <TransferProgramLeaderDialog
+          candidates={options.assignable_users}
+          busy={dialogBusy}
+          error={dialogError}
+          fieldErrors={dialogFieldErrors}
+          onClose={() => { if (!dialogBusy) setDialog(null); }}
+          onSave={runTransfer}
         />
       )}
       {dialog?.kind === 'status' && (

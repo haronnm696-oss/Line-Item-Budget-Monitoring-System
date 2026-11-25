@@ -257,6 +257,8 @@ export const ENDPOINTS = {
   programUser: (id) => `/api/program/users/${id}`,
   programUserStatus: (id) => `/api/program/users/${id}/status`,
   programUserRole: (id) => `/api/program/users/${id}/role`,
+  // One Program Leader: { user_id, password } hands the role over; the caller is deactivated and signed out.
+  programTransferLeader: '/api/program/transfer-program-leader',
   programAssignments: '/api/program/assignments',
   programAssignment: (userId, projectId) => `/api/program/assignments/${userId}/${projectId}`,
   projectTranches: (projectId) => `/api/projects/${projectId}/tranches`,

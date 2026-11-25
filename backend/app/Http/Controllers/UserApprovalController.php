@@ -51,7 +51,9 @@ class UserApprovalController extends Controller
         }
 
         $data = $request->validate([
-            'role' => ['required', 'string', 'in:program-leader,project-leader,research-assistant,researcher,finance-admin'],
+            'role' => ['bail', 'required', 'string', 'not_in:program-leader', 'in:project-leader,research-assistant,researcher,finance-admin'],
+        ], [
+            'role.not_in' => \App\Services\ProgramUserService::PROGRAM_LEADER_NOT_ASSIGNABLE,
         ]);
 
         $role = Role::where('slug', $data['role'])->firstOrFail();

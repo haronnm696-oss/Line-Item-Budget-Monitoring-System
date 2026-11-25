@@ -230,6 +230,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
         Route::patch('/program/users/{user}', [ProgramUserController::class, 'updateDetails']);
         Route::patch('/program/users/{user}/status', [ProgramUserController::class, 'updateStatus']);
         Route::patch('/program/users/{user}/role', [ProgramUserController::class, 'updateRole']);
+        // One Program Leader: the role moves only by transfer (password confirmed).
+        Route::post('/program/transfer-program-leader', [ProgramUserController::class, 'transferProgramLeader'])->middleware('throttle:5,1');
         Route::post('/program/assignments', [ProgramUserController::class, 'assign']);
         Route::patch('/program/assignments/{user}/{project}', [ProgramUserController::class, 'updateAssignment']);
         Route::delete('/program/assignments/{user}/{project}', [ProgramUserController::class, 'removeAssignment']);

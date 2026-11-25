@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { decideRegistration } from '../../api/program';
 import { formatDateTime } from '../../lib/datetime';
-import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
+import { ACCOUNT_ROLE_OPTIONS, assignableRoleOptions } from '../../lib/roles';
 import {
   ONE_PROJECT_HELP,
   ONE_PROJECT_TRIMMED,
@@ -26,7 +26,7 @@ function fieldErrorsFrom(error) {
  * with a required reason. The applicant is emailed either way.
  */
 export default function RegistrationReviewPanel({ user, projects, accountRoles, onClose, onDecided }) {
-  const roleOptions = accountRoles?.length ? accountRoles : ACCOUNT_ROLE_OPTIONS;
+  const roleOptions = assignableRoleOptions(accountRoles?.length ? accountRoles : ACCOUNT_ROLE_OPTIONS);
 
   const [role, setRole] = useState('');
   const [rows, setRows] = useState([]);

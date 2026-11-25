@@ -23,7 +23,7 @@ class ProgramUserController extends Controller
             'users' => $users,
             'counts' => ['pending' => $users->count()],
             // Account roles for the Review panel; project roles for its assignment rows.
-            'roles' => $this->roleOptions(ProgramUserService::ACCOUNT_ROLES),
+            'roles' => $this->roleOptions(ProgramUserService::ASSIGNABLE_ROLES),
             'project_roles' => $this->roleOptions(ProgramUserService::PROJECT_ROLES),
             'projects' => $this->projectOptions(),
         ]);
@@ -47,7 +47,7 @@ class ProgramUserController extends Controller
     {
         $data = $request->validate([
             'decision' => ['required', Rule::in(['approved', 'rejected'])],
-            'role' => ['nullable', 'string', 'required_if:decision,approved', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
+            'role' => ['bail', 'nullable', 'string', 'required_if:decision,approved', 'not_in:program-leader', Rule::in(ProgramUserService::ASSIGNABLE_ROLES)],
             'remarks' => ['nullable', 'string', 'max:2000', 'required_if:decision,rejected'],
             'assignments' => ['nullable', 'array', 'max:50'],
             'assignments.*.project_id' => ['required', 'integer', 'exists:projects,id'],
@@ -55,6 +55,7 @@ class ProgramUserController extends Controller
             'assignments.*.role' => ['nullable', 'string'],
         ], [
             'remarks.required_if' => 'A reason for rejection is required.',
+            'role.not_in' => ProgramUserService::PROGRAM_LEADER_NOT_ASSIGNABLE,
             'assignments.*.project_id.required' => 'Choose a project.',
             'assignments.*.project_id.exists' => 'This project no longer exists.',
         ]);
@@ -104,7 +105,8 @@ class ProgramUserController extends Controller
         $directory = $this->users->directory($data, $request->user());
 
         return response()->json($directory + [
-            'roles' => $this->roleOptions(ProgramUserService::ACCOUNT_ROLES),
+            // Roles that can be given (Change account role); never Program Leader.
+            'roles' => $this->roleOptions(ProgramUserService::ASSIGNABLE_ROLES),
             'project_roles' => $this->roleOptions(ProgramUserService::PROJECT_ROLES),
             'projects' => $this->projectOptions(),
             'assignable_users' => $this->users->assignableUsers(),
@@ -173,8 +175,10 @@ class ProgramUserController extends Controller
             'employee_id' => ['required', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
             'position' => ['required', 'string', 'max:255'],
             'contact_number' => User::contactNumberRules(),
-            'role' => ['required', 'string', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
-        ], User::contactNumberMessages());
+            'role' => ['bail', 'required', 'string', 'not_in:program-leader', Rule::in(ProgramUserService::ASSIGNABLE_ROLES)],
+        ], User::contactNumberMessages() + [
+            'role.not_in' => ProgramUserService::PROGRAM_LEADER_NOT_ASSIGNABLE,
+        ]);
 
         $user = $this->users->addUser($data, $request->user());
 
@@ -215,8 +219,10 @@ class ProgramUserController extends Controller
     public function updateRole(Request $request, User $user)
     {
         $data = $request->validate([
-            'role' => ['required', 'string', Rule::in(ProgramUserService::ACCOUNT_ROLES)],
+            'role' => ['bail', 'required', 'string', 'not_in:program-leader', Rule::in(ProgramUserService::ASSIGNABLE_ROLES)],
             'reason' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'role.not_in' => ProgramUserService::PROGRAM_LEADER_NOT_ASSIGNABLE,
         ]);
 
         $user = $this->users->updatePrimaryRole(
@@ -229,6 +235,39 @@ class ProgramUserController extends Controller
         return response()->json([
             'message' => 'Role updated.',
             'user' => $this->userPayload($user),
+        ]);
+    }
+
+    /**
+     * Transfer Program Leader role: the target (an active account) becomes
+     * Program Leader, the current one is deactivated and signed out. The
+     * current Program Leader's password confirms it.
+     */
+    public function transferProgramLeader(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'password' => ['required', 'string'],
+        ], [
+            'user_id.required' => 'Choose the new Program Leader.',
+            'user_id.exists' => 'Choose the new Program Leader.',
+            'password.required' => 'Enter your password to confirm.',
+        ]);
+
+        $result = $this->users->transferProgramLeader($request->user(), User::findOrFail($data['user_id']), $data['password']);
+        $user = $result['user'];
+
+        // The previous Program Leader is signed out of this session too.
+        \Illuminate\Support\Facades\Auth::guard('web')->logout();
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+
+        return response()->json([
+            'message' => 'Program Leader role transferred to ' . $user->name . '. Your account is now deactivated.',
+            'user' => $this->userPayload($user->load('primaryRole')),
+            'removed_assignments' => $result['removed_assignments'],
         ]);
     }
 
