@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   AuthAlert,
   AuthField,
+  AuthHead,
   AuthPage,
   AuthPasswordFeedback,
   AuthPillButton,
@@ -26,13 +27,6 @@ import { useAcademicUnits } from '../lib/useAcademicUnits';
 // (GET /api/academic-units), never typed here.
 
 const BRAND = {
-  title: 'Request access',
-  lead: 'Create an account to monitor externally funded research at Mindanao State University – Main Campus.',
-  steps: [
-    'Register with your email address',
-    'The Program Leader reviews your request and assigns your role',
-    'Sign in once you are approved',
-  ],
   cta: { to: '/login', label: 'Back to sign in' },
 };
 
@@ -257,6 +251,7 @@ export default function Register() {
           <div className="signin-success__icon" aria-hidden="true">
             <CheckIcon />
           </div>
+          <p className="signin-eyebrow">Request access</p>
           <h1 className="signin-success__title">Registration submitted</h1>
           <p className="signin-success__text">
             The Program Leader will review your request and assign your role. We will email you at{' '}
@@ -276,15 +271,14 @@ export default function Register() {
 
   return (
     <AuthPage variant="register" brand={BRAND} backdrop={<OrbitBackground />}>
-      <div className="signin-head">
-        <h1 className="signin-title">Create account</h1>
-        <p className="signin-subtitle">Your role is assigned by the Program Leader after review.</p>
-      </div>
+      <AuthHead eyebrow="Request access" title="Create an account">
+        The Program Leader will review your request.
+      </AuthHead>
 
       {submitError && <AuthAlert>{submitError}</AuthAlert>}
 
       <form className="signin-form signin-form--register" onSubmit={handleRegister} noValidate>
-        <AuthSection title="Personal details">
+        <AuthSection title="Personal">
           <div className="signin-grid-2">
             <AuthField
               id="reg-first-name"
@@ -372,11 +366,7 @@ export default function Register() {
                 required
               />
             </AuthField>
-          </div>
-        </AuthSection>
 
-        <AuthSection title="Employment">
-          <div className="signin-grid-2">
             <AuthField
               id="reg-position"
               label="Position"
@@ -398,93 +388,97 @@ export default function Register() {
               />
             </AuthField>
           </div>
+        </AuthSection>
 
+        <AuthSection title="College">
           {unitList.status === 'error' && (
             <p className="signin-error" role="alert">
               Could not load the list of colleges and units.{' '}
               <button type="button" className="signin-link" onClick={unitList.retry}>Try again</button>
             </p>
           )}
-          <AuthField
-            id="reg-college"
-            label="College or unit"
-            icon="building"
-            trailingIcon="chevron"
-            error={errorFor('college')}
-          >
-            <select
-              id="reg-college"
-              className={inputClass('college')}
-              name="college"
-              value={formData.college}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              disabled={!units}
-              aria-busy={unitList.status === 'loading' || undefined}
-              aria-invalid={Boolean(errorFor('college'))}
-              aria-describedby={describedBy('college', 'reg-college-error')}
-              required
-            >
-              <option value="">{units ? 'Select a college or unit' : 'Loading colleges and units…'}</option>
-              {(units?.units ?? []).map((unit) => (
-                <option key={unit.name} value={unit.name}>{unit.name}</option>
-              ))}
-            </select>
-          </AuthField>
-
-          {/* Units without departments hide the field; "Other office / unit" asks for its name. */}
-          {showDepartment && (
+          <div className="signin-grid-2">
             <AuthField
-              id="reg-department"
-              label="Department"
+              id="reg-college"
+              label="College"
               icon="building"
               trailingIcon="chevron"
-              error={errorFor('department')}
+              error={errorFor('college')}
             >
               <select
-                id="reg-department"
-                className={inputClass('department')}
-                name="department"
-                value={formData.department}
+                id="reg-college"
+                className={inputClass('college')}
+                name="college"
+                value={formData.college}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                aria-invalid={Boolean(errorFor('department'))}
-                aria-describedby={describedBy('department', 'reg-department-error')}
+                disabled={!units}
+                aria-busy={unitList.status === 'loading' || undefined}
+                aria-invalid={Boolean(errorFor('college'))}
+                aria-describedby={describedBy('college', 'reg-college-error')}
                 required
               >
-                <option value="">Select a department</option>
-                {departments.map((department) => (
-                  <option key={department} value={department}>{department}</option>
+                <option value="">{units ? 'Select a college or unit' : 'Loading colleges and units…'}</option>
+                {(units?.units ?? []).map((unit) => (
+                  <option key={unit.name} value={unit.name}>{unit.name}</option>
                 ))}
               </select>
             </AuthField>
-          )}
 
-          {showOffice && (
-            <AuthField
-              id="reg-office"
-              label={officeLabel}
-              icon="building"
-              error={errorFor('officeName')}
-            >
-              <input
+            {/* Units without departments hide the field; "Other office / unit" asks for its name. */}
+            {showDepartment && (
+              <AuthField
+                id="reg-department"
+                label="Department"
+                icon="building"
+                trailingIcon="chevron"
+                error={errorFor('department')}
+              >
+                <select
+                  id="reg-department"
+                  className={inputClass('department')}
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  aria-invalid={Boolean(errorFor('department'))}
+                  aria-describedby={describedBy('department', 'reg-department-error')}
+                  required
+                >
+                  <option value="">Select a department</option>
+                  {departments.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
+                </select>
+              </AuthField>
+            )}
+
+            {showOffice && (
+              <AuthField
                 id="reg-office"
-                className={inputClass('officeName')}
-                name="officeName"
-                value={formData.officeName}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                maxLength={officeMax}
-                placeholder="e.g. Office of the Vice Chancellor for Research and Extension"
-                aria-invalid={Boolean(errorFor('officeName'))}
-                aria-describedby={describedBy('officeName', 'reg-office-error')}
-                required
-              />
-            </AuthField>
-          )}
+                label={officeLabel}
+                icon="building"
+                error={errorFor('officeName')}
+              >
+                <input
+                  id="reg-office"
+                  className={inputClass('officeName')}
+                  name="officeName"
+                  value={formData.officeName}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  maxLength={officeMax}
+                  placeholder="e.g. Office of the Vice Chancellor for Research and Extension"
+                  aria-invalid={Boolean(errorFor('officeName'))}
+                  aria-describedby={describedBy('officeName', 'reg-office-error')}
+                  required
+                />
+              </AuthField>
+            )}
+          </div>
         </AuthSection>
 
-        <AuthSection title="Security">
+        <AuthSection title="Password">
           <div className="signin-grid-2">
             <AuthField
               id="reg-password"
@@ -578,12 +572,8 @@ export default function Register() {
         </div>
 
         <AuthPillButton type="submit" disabled={submitting}>
-          {submitting ? 'Submitting…' : 'Create account'}
+          {submitting ? 'Submitting…' : 'Request access'}
         </AuthPillButton>
-
-        <p className="signin-switch">
-          Already have an account? <Link to="/login" className="signin-text-link">Sign in</Link>
-        </p>
       </form>
     </AuthPage>
   );

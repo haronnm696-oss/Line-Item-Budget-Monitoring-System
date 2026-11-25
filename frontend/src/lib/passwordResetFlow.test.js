@@ -128,7 +128,7 @@ test('step 2: a wrong or expired code shows one generic message', () => {
 
 test('step 2: the page shows the email, the countdown, resend and the code boxes', () => {
   const page = source('pages/ForgotPassword.jsx');
-  assert.match(page, /Code sent to <strong>\{submittedEmail\}<\/strong>/);
+  assert.match(page, /We sent a 6-digit code to <strong>\{maskEmail\(submittedEmail\)\}<\/strong>/);
   assert.match(page, /Code expires in \$\{formatCountdown\(codeSecondsLeft\)\}/);
   assert.match(page, /disabled=\{resendSecondsLeft > 0 \|\| resending\}/);
   assert.match(page, /verifyResetCode\(\{ email: submittedEmail, code \}\)/);

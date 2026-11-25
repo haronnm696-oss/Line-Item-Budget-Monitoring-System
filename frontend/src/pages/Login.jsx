@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   AuthAlert,
   AuthField,
-  AuthNote,
+  AuthHead,
   AuthPage,
   AuthPillButton,
 } from '../components/auth/AuthPage';
@@ -16,8 +16,6 @@ function getDashboardPath(roleCode) {
 }
 
 const BRAND = {
-  title: 'Welcome back',
-  lead: 'Monitor externally funded research budgets at Mindanao State University – Main Campus.',
   cta: { to: '/register', label: 'Request access' },
 };
 
@@ -87,10 +85,9 @@ export default function Login() {
 
   return (
     <AuthPage brand={BRAND} backdrop={<OrbitBackground />}>
-      <div className="signin-head">
-        <h1 className="signin-title">Sign in</h1>
-        <p className="signin-subtitle">Use your email address to continue.</p>
-      </div>
+      <AuthHead eyebrow="Welcome back" title="Sign in">
+        Use your email address to continue.
+      </AuthHead>
 
       {error && <AuthAlert>{error}</AuthAlert>}
       {!error && notice && <AuthAlert tone="success">{notice}</AuthAlert>}
@@ -159,10 +156,6 @@ export default function Login() {
         <AuthPillButton type="submit" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </AuthPillButton>
-
-        <AuthNote>
-          New accounts are reviewed by the Program Leader before first use.
-        </AuthNote>
       </form>
     </AuthPage>
   );
