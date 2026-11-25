@@ -6,7 +6,7 @@ import { ROUTE_BY_ROLE } from '../routes/access';
 
 /** Placeholder for a menu item whose page is not built yet. */
 export default function ComingSoon() {
-  const { user, roleInfo } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const code = normalizeRole(user);
   const item = navItemFor(code, location.pathname);
@@ -16,7 +16,6 @@ export default function ComingSoon() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">{roleInfo?.label ?? 'LIB Monitoring System'}</div>
           <h1 className="program-h1">{title}</h1>
         </div>
       </div>

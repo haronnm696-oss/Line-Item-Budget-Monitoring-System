@@ -6,6 +6,7 @@ import { notAssignedText } from '../../lib/myProjects';
 import LoadState from '../../components/LoadState';
 import ProgramPill from '../../components/program/ProgramPill';
 import { formatPct, peso } from '../../components/money';
+import Tip from '../../components/Tip';
 
 const GROUPS = [
   ['PS', 'Personal Services (PS)'],
@@ -28,7 +29,7 @@ function Cells({ row }) {
       <td className="num">{peso(row.spent)}</td>
       <td className="num">{peso(row.pending)}</td>
       <td className={`num${row.available < 0 ? ' ld-neg' : ''}`}>{peso(row.available)}</td>
-      <td className="num">{pct == null ? '—' : formatPct(pct)}</td>
+      <td className="num">{pct == null ? '' : formatPct(pct)}</td>
     </>
   );
 }
@@ -51,17 +52,15 @@ export default function LineItemBudget() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Project</div>
           <h1 className="program-h1">Line-item budget</h1>
-          <p className="program-sub">
-            {picker.project ? `${picker.project.title} · ${picker.project.code} · ` : ''}
-            Available = allocated − spent − pending. Spent = verified expenses and verified payroll.
-          </p>
+          {picker.project && (
+            <p className="program-sub">{`${picker.project.title} · ${picker.project.code}`}</p>
+          )}
         </div>
       </div>
 
       <LoadState state={picker.state} emptyText={notAssignedText(picker.role)} isEmpty={picker.state.status === 'ready' && !picker.project}>
-        <LoadState state={balancing} loadingText="Loading line items…" emptyText="This project has no line items yet. The Program Leader sets them up from the project's Form B." isEmpty={rows.length === 0}>
+        <LoadState state={balancing} loadingText="Loading line items…" emptyText="No line items yet. The Program Leader adds them." isEmpty={rows.length === 0}>
           <section className="program-card">
             <div className="program-scroll">
               <table className="program-table ld-table ld-budget-table">
@@ -69,9 +68,9 @@ export default function LineItemBudget() {
                   <tr>
                     <th scope="col">Line item</th>
                     <th scope="col" className="num">Allocated</th>
-                    <th scope="col" className="num">Spent</th>
+                    <th scope="col" className="num"><Tip>Spent</Tip></th>
                     <th scope="col" className="num">Pending</th>
-                    <th scope="col" className="num">Available</th>
+                    <th scope="col" className="num"><Tip text="Available = allocated − spent − pending">Available</Tip></th>
                     <th scope="col" className="num">% used</th>
                   </tr>
                 </thead>
@@ -93,8 +92,7 @@ export default function LineItemBudget() {
                             <td>
                               <div className="project-name">{row.name}</div>
                               <div className="project-code">
-                                {row.code ? `${row.code} · ` : ''}
-                                {row.pending > 0 ? `Pending: ${peso(row.pending_expenses)} expenses, ${peso(row.pending_purchase_requests)} purchase requests` : 'Nothing pending'}
+                                {[row.code, row.pending > 0 ? `Pending: ${peso(row.pending_expenses)} expenses, ${peso(row.pending_purchase_requests)} purchase requests` : null].filter(Boolean).join(' · ')}
                               </div>
                               {row.available < 0 && <ProgramPill value="Over budget" />}
                             </td>

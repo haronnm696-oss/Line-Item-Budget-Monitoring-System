@@ -6,7 +6,6 @@ import { formatDate, formatDateTime } from '../../lib/datetime';
 import { waitedText } from '../../lib/waited';
 import DocumentList from '../leader/DocumentList';
 import StagePill from '../assistant/StagePill';
-import ProgramPill from '../program/ProgramPill';
 import DetailModal, { DetailNote } from '../DetailModal';
 import { peso } from '../money';
 
@@ -76,7 +75,6 @@ export default function FinanceRecordPanel({ projectId, target, refreshKey, acti
         <>
           <StagePill status={item.workflow_status} />
           {item.can_verify && <span className="dm-wait">{waitedText(item.submitted_at)}</span>}
-          {item.type_label && <ProgramPill value={item.type_label} />}
         </>
       )}
       amount={item?.amount ?? null}

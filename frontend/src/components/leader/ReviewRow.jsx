@@ -32,7 +32,7 @@ export default function ReviewRow({ item, onOpen, openHref, showStage = false })
         <div className="ld-review-meta">
           {item.submitted_by && <span>Submitted by {item.submitted_by.name}</span>}
           {when && <span>{when}</span>}
-          <span>{item.documents_count > 0 ? `${item.documents_count} document${item.documents_count === 1 ? '' : 's'}` : 'No documents'}</span>
+          {item.documents_count > 0 && <span>{`${item.documents_count} document${item.documents_count === 1 ? '' : 's'}`}</span>}
         </div>
         {item.return_reason && item.workflow_status === 'returned' && (
           <p className="ld-reason">Reason: “{item.return_reason}”</p>

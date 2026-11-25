@@ -52,7 +52,6 @@ function Assignments({ user, onFix, fixing }) {
     return (
       <div className="pu-assign">
         <span className="au-strong">All projects</span>
-        <div className="au-sub">Program-wide role</div>
       </div>
     );
   }
@@ -66,7 +65,8 @@ function Assignments({ user, onFix, fixing }) {
             <Link className="au-link" to={`/program-projects/${assignment.project_id}`}>
               {assignment.project} · {assignment.project_code}
             </Link>
-            <div className="au-sub">as {assignment.role_label}</div>
+            {/* The Account role column already names the role; only a mismatch is shown here. */}
+            {assignment.role_mismatch && <div className="au-sub">as {assignment.role_label}</div>}
             {assignment.role_mismatch && (
               <div className="pu-asg-fix">
                 <MismatchWarning assignment={assignment} user={user} />
@@ -371,9 +371,7 @@ export default function ProgramUsers() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">Users and roles · Program Leader</div>
           <h1 className="program-h1">Users and roles</h1>
-          <p className="program-sub">Create, update and deactivate accounts, and assign people to projects.</p>
         </div>
         <div className="program-head-actions">
           <button type="button" className="program-btn" onClick={() => { setAddError(''); setAddOpen(true); }}>
@@ -414,8 +412,9 @@ export default function ProgramUsers() {
         <section className="program-card">
           <div className="program-card-head">
             <div>
-              <div className="program-card-title">Pending registrations</div>
-              <div className="program-card-sub">Review each request: approve with an account role and project assignments, or reject with a reason. The applicant is emailed either way.</div>
+              <div className="program-card-title">
+                Pending registrations{pendingLoading ? '' : ` · ${pending.length}`}
+              </div>
             </div>
           </div>
 
@@ -423,22 +422,16 @@ export default function ProgramUsers() {
             <div className="program-empty">Loading pending registrations…</div>
           ) : (
             <div className="program-note">
-              <div className="program-note-title">
-                {pending.length} pending registration{pending.length === 1 ? '' : 's'}
-              </div>
-              <div className="program-note-sub">
-                Project assignments are optional; you can also add them later from Manage.
-              </div>
 
               {pending.map((user) => (
                   <div className="program-pending-row" key={user.id}>
                     <div className="program-pending-main">
                       <div className="program-row-title">
                         <span>{user.name}</span>
-                        <span className="program-muted">{user.employee_id || '—'}</span>
+                        <span className="program-muted">{user.employee_id}</span>
                       </div>
                       <div className="program-row-sub">
-                        {`${user.position || '—'} · ${[user.college, user.department].filter(Boolean).join(', ') || '—'}`}
+                        {[user.position, [user.college, user.department].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
                       </div>
                       <div className="program-row-sub">
                         {user.email} · requested {formatDate(user.created_at)}
@@ -561,12 +554,12 @@ export default function ProgramUsers() {
                             <span className="au-strong">{user.name}</span>
                             {user.is_self && <span className="pu-you">You</span>}
                           </div>
-                          <div className="au-sub">{user.position || '—'}</div>
+                          {user.position && <div className="au-sub">{user.position}</div>}
                           {conflictFor(leaderConflicts, user.id) && (
                             <div className="pu-conflict"><span aria-hidden="true">⚠ </span>{conflictFor(leaderConflicts, user.id).message}</div>
                           )}
                         </td>
-                        <td className="num">{user.employee_id || '—'}</td>
+                        <td className="num">{user.employee_id}</td>
                         <td><RoleLabel slug={user.role_slug} label={user.role_label} /></td>
                         <td><Assignments user={user} onFix={handleFix} fixing={fixingKey} /></td>
                         <td className="num">{formatDate(user.last_login_at)}</td>

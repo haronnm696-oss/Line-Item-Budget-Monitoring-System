@@ -9,10 +9,6 @@ import { waitedText } from '../../lib/waited';
 import DetailModal, { DetailNote } from '../DetailModal';
 
 const KIND_ICON = { expense: '▤', fund_release: '₱', realignment: '⇄', liquidation: '▤', payroll: '₱' };
-const KIND_HINT = {
-  realignment: 'Nothing moves until it is approved.',
-  fund_release: 'No funds are released until it is approved.',
-};
 const TRANCHE_STATUS = { released: 'Released', due: 'Due', pending: 'Not yet due', overdue: 'Overdue' };
 
 function messageFor(error, fallback) {
@@ -114,10 +110,7 @@ function Liquidation({ details }) {
       </dl>
       {period && (
         <p className="ld-muted">
-          Spent (verified expenses and verified payroll) dated {formatDate(period.from)} to {period.to ? formatDate(period.to) : 'today'}
-          {period.starts === 'project_start'
-            ? ' (first release: from the project start to the next release).'
-            : ' (from this release to the next one).'}
+          Period: {formatDate(period.from)} – {period.to ? formatDate(period.to) : 'today'}
         </p>
       )}
       {expenses.length === 0 ? (
@@ -176,9 +169,9 @@ function ExpenseVerify({ details }) {
       <div><dt>Line item</dt><dd>{details.line_item ?? '—'}{details.category ? ` (${details.category})` : ''}</dd></div>
       <div><dt>Amount</dt><dd><b>{peso(details.amount)}</b></dd></div>
       <div><dt>Recorded by</dt><dd>{details.recorded_by ?? '—'}</dd></div>
-      <div><dt>Approved by</dt><dd>{details.approved_by ?? 'No Project Leader step (recorded by the Project Leader)'}</dd></div>
+      <div><dt>Approved by</dt><dd>{details.approved_by ?? '— (recorded by the Project Leader)'}</dd></div>
       <div><dt>Receipt</dt><dd>{details.receipts_count > 0 ? <>✓ {details.receipts_count} attached</> : <>! No receipt</>}</dd></div>
-      <div><dt>Step sent to you</dt><dd>{details.step}: approving counts it in Total spent; returning sends it back to the recorder.</dd></div>
+      <div><dt>Step sent to you</dt><dd>{details.step}</dd></div>
     </dl>
   );
 }
@@ -242,8 +235,8 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
     try {
       await decideApproval(approval.id, { decision, remarks: decision === 'returned' ? reason.trim() : '' });
       onDecided(decision === 'approved'
-        ? `Approved “${approval.title}”. The decision was written to the audit trail.`
-        : `Returned “${approval.title}” to the requester with your reason. They can edit and resubmit it.`);
+        ? `Approved “${approval.title}”.`
+        : `Returned “${approval.title}”.`);
     } catch (requestError) {
       setActionError(messageFor(requestError, decision === 'approved' ? 'Unable to approve this request.' : 'Unable to return this request.'));
     } finally {
@@ -255,7 +248,6 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
     <>
       <ProgramPill value={approval.status_label} />
       {approval.status === 'pending' && <span className="dm-wait">{waitedText(approval.resubmitted_at ?? approval.created_at)}</span>}
-      <ProgramPill value={approval.type_label} />
     </>
   );
 
@@ -306,7 +298,7 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
       chips={chips}
       amount={approval?.amount ?? null}
       amountCaption={kind === 'realignment' ? 'Amount to move' : 'Requested amount'}
-      hint={returning ? 'The requester sees your reason and can edit and resubmit.' : (KIND_HINT[kind] ?? 'Nothing changes until it is approved.')}
+      hint={returning ? 'The requester sees your reason and can edit and resubmit.' : ''}
       actions={actions}
       footerNotice={footerNotice}
       dirty={returning && reason.trim() !== ''}
@@ -319,7 +311,7 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
       {approval && (
         <>
           <dl className="ld-fields">
-            <div><dt>Project</dt><dd>{approval.project ? `${approval.project.title} · ${approval.project.code}` : '—'}</dd></div>
+            <div><dt>Project</dt><dd>{approval.project?.title ?? '—'}</dd></div>
             <div><dt>Requested by</dt><dd>{approval.requested_by ? `${approval.requested_by.name}${approval.requested_by.role ? ` (${approval.requested_by.role})` : ''}` : '—'}</dd></div>
             <div><dt>Submitted</dt><dd>{formatDateTime(approval.created_at)}</dd></div>
             {approval.resubmitted_at && <div><dt>Resubmitted</dt><dd>{formatDateTime(approval.resubmitted_at)}</dd></div>}

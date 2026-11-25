@@ -39,7 +39,7 @@ export default function MonthlyExpenseTrend({ months = [] }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">Monthly expense trend</div>
-          <div className="program-card-sub">Spent per month, {year} · verified expenses and verified payroll</div>
+          <div className="program-card-sub">{year}</div>
         </div>
       </div>
 

@@ -14,6 +14,7 @@ import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import LateReceipts from '../../components/finance/LateReceipts';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { formatPct, peso } from '../../components/money';
+import Tip, { SPENT_RULE } from '../../components/Tip';
 
 /**
  * Finance/Admin Overview: what waits for verification, what was verified
@@ -45,7 +46,7 @@ export default function FinanceDashboard() {
       <div className="pl-head">
         <div>
           <h1 className="program-h1">Verification</h1>
-          <ProjectLine picker={picker} project={data?.project ?? picker.project} detail="only verified amounts count as spent" />
+          <ProjectLine picker={picker} project={data?.project ?? picker.project} />
         </div>
       </div>
 
@@ -59,15 +60,15 @@ export default function FinanceDashboard() {
             <>
               <div className="pl-kpi-grid">
                 <Kpi to={`/verification-queue${q}`} label="To verify" value={kpis.to_verify}
-                  sub={`Approved by the Project Leader${othersOnly > 0 ? ` · ${othersOnly} need another verifier` : ''}`} />
+                  sub={othersOnly > 0 ? `${othersOnly} need another verifier` : ''} />
                 <Kpi to={`/verification-queue${q}${q ? '&' : '?'}tab=verified`} label="Verified this month" value={kpis.verified_this_month} format={peso}
                   sub={`${kpis.month_label} · ${plural(kpis.verified_this_month_expenses, 'expense')} · ${plural(kpis.verified_this_month_payroll, 'payroll batch', 'payroll batches')}`} />
                 <Kpi alert={kpis.missing_receipts > 0} to={`/transaction-history${q}${q ? '&' : '?'}receipt=missing`} label="Missing receipts" value={kpis.missing_receipts}
                   sub={kpis.verified_expenses > 0
                     ? `Receipt compliance ${formatPct(kpis.receipt_compliance_pct)} · ${kpis.verified_with_receipt} of ${kpis.verified_expenses}`
                     : 'No verified expenses yet'} />
-                <Kpi to={`/transaction-history${q}`} label="Total spent" value={kpis.total_spent} format={peso}
-                  sub={`Verified, ${formatPct(kpis.utilization_pct)} of ${peso(kpis.total_budget)}`} />
+                <Kpi to={`/transaction-history${q}`} label="Total spent" tip={SPENT_RULE} value={kpis.total_spent} format={peso}
+                  sub={`${formatPct(kpis.utilization_pct)} of ${peso(kpis.total_budget)}`} />
               </div>
 
               <div className="pl-row pl-row-main">
@@ -75,7 +76,6 @@ export default function FinanceDashboard() {
                   <div className="program-card-head">
                     <div>
                       <div className="program-card-title">Verification queue</div>
-                      <div className="program-card-sub">Approved by the Project Leader, oldest first. Verify against the receipt, or reject with a reason.</div>
                     </div>
                     <Link className="program-card-link" to={`/verification-queue${q}`}>View all</Link>
                   </div>
@@ -87,10 +87,6 @@ export default function FinanceDashboard() {
                   {kpis.to_verify > data.queue.length && (
                     <Link className="ld-more" to={`/verification-queue${q}`}>{kpis.to_verify - data.queue.length} more waiting</Link>
                   )}
-                  <p className="fin-note">
-                    After you verify, the amount is added to Total spent on every dashboard and appears in reports.
-                    A rejection returns the record to the Research Assistant with your reason. Spent = verified expenses and verified payroll.
-                  </p>
                   <LateReceipts items={data.late_receipts} onOpen={(row) => update({ open: row.key })} />
                 </section>
 
@@ -99,7 +95,6 @@ export default function FinanceDashboard() {
                     <div className="program-card-head">
                       <div>
                         <div className="program-card-title">Returned to you</div>
-                        <div className="program-card-sub">Expenses you recorded earlier. Edit and resubmit them; new expenses are recorded by the Research Assistant.</div>
                       </div>
                     </div>
                     <ul className="ld-mini-list">
@@ -126,7 +121,6 @@ export default function FinanceDashboard() {
                 <div className="program-card-head">
                   <div>
                     <div className="program-card-title">Recently verified</div>
-                    <div className="program-card-sub">Transactions you verified, newest first</div>
                   </div>
                   <Link className="program-card-link" to={`/transaction-history${q}`}>View transaction history</Link>
                 </div>
@@ -153,7 +147,7 @@ export default function FinanceDashboard() {
                               <button type="button" className="ld-link" onClick={() => update({ open: item.key })}>{item.reference}</button>
                             </td>
                             <td data-label="Description">{item.title}</td>
-                            <td data-label="Category">{item.category ? <span className="res-cat">{item.category}</span> : '—'}</td>
+                            <td data-label="Category">{item.category ? <span className="res-cat">{item.category}</span> : null}</td>
                             <td data-label="Amount" className="num ld-amount">{peso(item.amount)}</td>
                           </tr>
                         ))}
@@ -179,12 +173,30 @@ function plural(n, one, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-function Kpi({ label, value, sub, to, format, alert = false }) {
+/**
+ * A KPI card that opens its page. With `tip`, the label explains itself
+ * (Tip); the label then sits outside the link (a link cannot hold a
+ * button) and the figure below it opens the page.
+ */
+function Kpi({ label, value, sub, to, format, tip = null, alert = false }) {
+  const figure = (
+    <>
+      <div className="pl-kpi-value">{format ? format(value) : Number(value || 0).toLocaleString('en-PH')}</div>
+      {sub && <div className="pl-kpi-sub">{sub}</div>}
+    </>
+  );
+  if (tip) {
+    return (
+      <div className={`program-card pl-kpi ra-kpi ra-kpi-split${alert ? ' ra-kpi-alert' : ''}`}>
+        <div className="pl-kpi-head"><span className="pl-kpi-label"><Tip text={tip}>{label}</Tip></span></div>
+        <Link to={to} className="ra-kpi-link">{figure}</Link>
+      </div>
+    );
+  }
   return (
     <Link to={to} className={`program-card pl-kpi ra-kpi${alert ? ' ra-kpi-alert' : ''}`}>
       <div className="pl-kpi-head"><span className="pl-kpi-label">{label}</span></div>
-      <div className="pl-kpi-value">{format ? format(value) : Number(value || 0).toLocaleString('en-PH')}</div>
-      <div className="pl-kpi-sub">{sub}</div>
+      {figure}
     </Link>
   );
 }

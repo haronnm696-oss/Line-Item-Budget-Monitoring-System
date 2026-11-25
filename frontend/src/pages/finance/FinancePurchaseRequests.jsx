@@ -60,7 +60,6 @@ export default function FinancePurchaseRequests() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Records · Finance/Admin</div>
           <h1 className="program-h1">Purchase requests</h1>
           <ProjectLine picker={picker} detail="Fill in the PR, SAI and ALOBS numbers of approved requests" />
         </div>
@@ -85,7 +84,7 @@ export default function FinancePurchaseRequests() {
               <section key={row.id} className="program-card">
                 <div className="pl-head">
                   <div>
-                    <div className="program-eyebrow">PR-{row.id} · {row.requested_by?.name ?? '—'}</div>
+                    <div className="program-eyebrow">{[row.pr_no, row.requested_by?.name].filter(Boolean).join(' · ')}</div>
                     <h2 className="program-card-title">{row.purpose ?? row.description}</h2>
                     <div className="program-card-sub">
                       {row.items?.length ?? 1} {(row.items?.length ?? 1) === 1 ? 'item' : 'items'} · {row.line_item}{row.supplier ? ` · ${row.supplier}` : ''}
@@ -98,7 +97,7 @@ export default function FinancePurchaseRequests() {
                 </div>
                 <dl className="ld-fields">
                   {NUMBERS.map(([key, label]) => (
-                    <div key={key}><dt>{label}</dt><dd>{numberText(row, key) ?? 'Not set'}</dd></div>
+                    <div key={key}><dt>{label}</dt><dd>{numberText(row, key)}</dd></div>
                   ))}
                 </dl>
                 <div className="ld-panel-actions">
@@ -110,7 +109,7 @@ export default function FinancePurchaseRequests() {
                       {NUMBERS.some(([key]) => numberText(row, key)) ? 'Edit PR / SAI / ALOBS' : 'Set PR / SAI / ALOBS'}
                     </button>
                   )}
-                  <PurchaseRequestDownload requestId={row.id} reference={row.pr_no || `PR-${row.id}`} align="start" />
+                  <PurchaseRequestDownload requestId={row.id} reference={row.pr_no || row.purpose || row.description} align="start" />
                 </div>
                 {expanded.has(row.id) && <PurchaseRequestItemsTable items={row.items} total={row.total} />}
               </section>
@@ -155,7 +154,7 @@ function NumbersDialog({ request, onClose, onDone }) {
     try {
       const body = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, String(value).trim() || null]));
       await apiWrite('patch', ENDPOINTS.purchaseRequestStep(request.id, 'numbers'), body);
-      onDone(`Saved the PR, SAI and ALOBS details of PR-${request.id}.`);
+      onDone(`Saved the PR, SAI and ALOBS details of “${request.pr_no || request.purpose || request.description}”.`);
     } catch (error) {
       setErrors(fieldErrors(error));
       setFormError(errorText(error, 'Could not save. Please try again.'));
@@ -171,7 +170,7 @@ function NumbersDialog({ request, onClose, onDone }) {
       <form className="program-modal" role="dialog" aria-modal="true" aria-labelledby="fin-pr-numbers-title" onClick={(event) => event.stopPropagation()} onSubmit={save} noValidate>
         <div className="program-modal-head">
           <div>
-            <div className="program-modal-title" id="fin-pr-numbers-title">PR, SAI and ALOBS — PR-{request.id}</div>
+            <div className="program-modal-title" id="fin-pr-numbers-title">PR, SAI and ALOBS</div>
             <div className="program-card-sub">{request.purpose ?? request.description} · {peso(request.total ?? request.estimated_amount)}</div>
           </div>
           <button type="button" className="program-icon-btn" onClick={close} aria-label="Close" disabled={busy}>×</button>

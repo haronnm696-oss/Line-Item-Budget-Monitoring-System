@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { ROLE_NAV } from '../layouts/roleNav.js';
 import { ROUTE_ROLES } from '../routes/access.js';
-import { transactionsEyebrow, transactionsTitle } from '../lib/pageHead.js';
+import { transactionsTitle } from '../lib/pageHead.js';
 
 // Finance/Admin follows MSU's process: it verifies expenses and payroll
 // against their documents and records PR/SAI/ALOBS numbers; it does not
@@ -61,12 +61,9 @@ test('the Finance Payroll page has no "Payroll to verify" button', () => {
   assert.doesNotMatch(source('pages/finance/FinancePayroll.jsx'), /Payroll to verify/);
 });
 
-test('Transaction history: Finance/Admin eyebrow and title; other roles keep theirs', () => {
-  assert.equal(transactionsEyebrow('FIN'), 'Records · Finance/Admin');
+test('Transaction history: Finance/Admin title; other roles keep theirs', () => {
   assert.equal(transactionsTitle('FIN'), 'Transaction history');
-  assert.equal(transactionsEyebrow('PL'), 'Project');
   assert.equal(transactionsTitle('PL'), 'Transactions');
-  assert.equal(transactionsEyebrow('RES'), 'View · Researcher');
   assert.equal(transactionsTitle('RES'), 'Transactions');
   assert.match(source('pages/leader/Transactions.jsx'), /title=\{transactionsTitle\(roleCode\)\}/);
 });

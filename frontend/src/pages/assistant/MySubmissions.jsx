@@ -13,6 +13,9 @@ import { useRecordActions } from '../../components/assistant/useRecordActions';
 
 const DEFAULTS = { tab: 'waiting' };
 
+// Tabs whose rows all share one status: the tab names it, so rows skip the pill.
+const SINGLE_STATUS_TABS = ['drafts', 'returned'];
+
 const EMPTY = {
   drafts: 'No drafts. Everything you saved has been submitted.',
   waiting: 'Nothing is waiting for the Project Leader.',
@@ -47,9 +50,8 @@ export default function MySubmissions() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Track · Research Assistant</div>
           <h1 className="program-h1">My submissions</h1>
-          <ProjectLine picker={picker} detail="Every record you encoded, and who has it now" />
+          <ProjectLine picker={picker} />
         </div>
       </div>
 
@@ -84,7 +86,7 @@ export default function MySubmissions() {
 
         <LoadState state={list} loadingText="Loading your submissions…" emptyText={EMPTY[tab]} isEmpty={items.length === 0}>
           <section className="program-card ld-list-card">
-            <SubmissionTable items={items} showType caption="My submissions" onOpen={(item) => update({ open: item.key })} onResubmit={actions.resubmit} busyKey={actions.busyKey} />
+            <SubmissionTable items={items} showType showStage={!SINGLE_STATUS_TABS.includes(tab)} caption="My submissions" onOpen={(item) => update({ open: item.key })} onResubmit={actions.resubmit} busyKey={actions.busyKey} />
           </section>
         </LoadState>
 

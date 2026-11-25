@@ -136,15 +136,15 @@ test('the Researcher Overview has no Reports card; Transaction summary is full w
   assert.doesNotMatch(page, /pl-row-charts/);
 });
 
-// The Researcher's menu: eyebrow and "Read-only access" badge from PageTitle.
+// The Researcher's menu: "Read-only access" badge from PageTitle (no eyebrow).
 const RESEARCHER_PAGES = [
-  ['pages/dashboards/ResearcherDashboard.jsx', /<PageTitle eyebrow=\{RESEARCHER_EYEBROW\} title="[^"]+" readOnly \/>/],
-  ['pages/researcher/ResearcherBudget.jsx', /<PageTitle eyebrow=\{RESEARCHER_EYEBROW\} title="Budget" readOnly \/>/],
-  ['pages/leader/Transactions.jsx', /<PageTitle eyebrow=\{transactionsEyebrow\(roleCode\)\} title=\{transactionsTitle\(roleCode\)\} readOnly=\{readOnly\} \/>/],
-  ['pages/Reports.jsx', /<PageTitle eyebrow=\{reportsEyebrow\(roleCode\)\} title="Reports" readOnly=\{isReadOnlyRole\(roleCode\)\} \/>/],
+  ['pages/dashboards/ResearcherDashboard.jsx', /<PageTitle title="[^"]+" readOnly \/>/],
+  ['pages/researcher/ResearcherBudget.jsx', /<PageTitle title="Budget" readOnly \/>/],
+  ['pages/leader/Transactions.jsx', /<PageTitle title=\{transactionsTitle\(roleCode\)\} readOnly=\{readOnly\} \/>/],
+  ['pages/Reports.jsx', /<PageTitle title="Reports" readOnly=\{isReadOnlyRole\(roleCode\)\} \/>/],
 ];
 
-test('every Researcher page shows the eyebrow and the read-only badge in the same place', () => {
+test('every Researcher page shows the read-only badge in the same place', () => {
   for (const [path, title] of RESEARCHER_PAGES) {
     const page = source(path);
     assert.match(page, title, path);
@@ -157,7 +157,6 @@ test('the Reports page hides the Project field with one project and shows no pay
   const page = source('pages/Reports.jsx');
   assert.match(page, /const showProjectField = showReportProjectField\(roleCode, projectsStatus, projectList\.length\);/);
   assert.match(page, /\{showProjectField && <div \{\.\.\.fieldProps\}>\s*<label htmlFor="report-param-project">/);
-  assert.match(page, /Generated from verified expenses and verified payroll · Form B/);
   assert.doesNotMatch(page, /REPORT_TYPES\.(map|find)/);
   assert.match(page, /const registerKey = listRow && seesRegister \?/);
 });

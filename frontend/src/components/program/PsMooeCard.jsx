@@ -39,7 +39,6 @@ export default function PsMooeCard({ summary, action = null }) {
       <div className="program-card-head">
         <div>
           <div className="program-card-title">PS vs MOOE</div>
-          <div className="program-card-sub">Allocated and spent by category</div>
         </div>
         {action}
       </div>

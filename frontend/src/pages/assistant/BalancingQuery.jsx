@@ -39,9 +39,8 @@ export default function BalancingQuery() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Track · Research Assistant</div>
           <h1 className="program-h1">Balancing query</h1>
-          <ProjectLine picker={picker} detail="Available = Allocated − Spent − Pending. Spent = verified expenses and verified payroll." />
+          <ProjectLine picker={picker} />
         </div>
       </div>
 

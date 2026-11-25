@@ -222,7 +222,6 @@ export default function Profile() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">{roleInfo?.label ?? 'Account'}</div>
           <h1 className="program-h1">Profile</h1>
         </div>
       </div>

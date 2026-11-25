@@ -10,8 +10,9 @@ import ProjectLine from '../../components/ProjectLine';
 import RecordExpenseDialog from '../../components/leader/RecordExpenseDialog';
 import { useAuth } from '../../context/AuthContext';
 import { normalizeRole } from '../../lib/roles';
-import { isReadOnlyRole, transactionsEyebrow, transactionsTitle } from '../../lib/pageHead';
+import { isReadOnlyRole, transactionsTitle } from '../../lib/pageHead';
 import PageTitle from '../../components/PageTitle';
+import Tip from '../../components/Tip';
 import DocumentList from '../../components/leader/DocumentList';
 import DetailModal from '../../components/DetailModal';
 import ProgramPill from '../../components/program/ProgramPill';
@@ -78,8 +79,8 @@ export default function Transactions() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <PageTitle eyebrow={transactionsEyebrow(roleCode)} title={transactionsTitle(roleCode)} readOnly={readOnly} />
-          <ProjectLine picker={picker} detail="Spent = verified expenses and verified payroll, newest first" />
+          <PageTitle title={transactionsTitle(roleCode)} readOnly={readOnly} />
+          <ProjectLine picker={picker} />
         </div>
         {/* With no project led, the button stays hidden; the page shows notAssignedText instead. */}
         {isLeader && picker.projectId && (
@@ -166,11 +167,11 @@ export default function Transactions() {
                             {[row.payee, row.reference_no && `Ref. ${row.reference_no}`, row.verified_by && `Verified by ${row.verified_by}`].filter(Boolean).join(' · ')}
                           </div>
                         </td>
-                        <td>{row.line_item ?? '—'}<div className="project-code">{row.category ?? ''}</div></td>
+                        <td>{row.line_item}<div className="project-code">{row.category ?? ''}</div></td>
                         <td className="num">{peso(row.amount)}</td>
                         <td>
                           {readOnly && row.kind === 'payroll' ? (
-                            <span className="project-code">Payroll files: not shown</span>
+                            <Tip text="Payroll files are not shown to Researchers.">—</Tip>
                           ) : (
                             <button type="button" className="ld-link" onClick={() => setDocsFor(row)}>
                               {row.documents_count > 0 ? `${row.documents_count} document${row.documents_count === 1 ? '' : 's'}` : 'View documents'}
@@ -222,20 +223,15 @@ export default function Transactions() {
           title={docsFor.description}
           eyebrow={`${docsFor.kind === 'payroll' ? 'Payroll' : 'Expense'} · ${formatDate(docsFor.date)}`}
           icon={docsFor.kind === 'payroll' ? '₱' : '▤'}
-          chips={(
-            <>
-              <ProgramPill value="Verified" />
-              <ProgramPill value={docsFor.kind === 'payroll' ? 'Payroll' : 'Expense'} />
-            </>
-          )}
+          chips={<ProgramPill value="Verified" />}
           amount={docsFor.amount}
-          amountCaption="Counted in Total spent"
+          amountCaption="Amount"
           onClose={() => setDocsFor(null)}
         >
           <dl className="ld-fields">
             <div><dt>Date</dt><dd>{formatDate(docsFor.date)}</dd></div>
-            <div><dt>Line item</dt><dd>{docsFor.line_item ?? '—'}{docsFor.category ? ` (${docsFor.category})` : ''}</dd></div>
-            <div><dt>Verified by</dt><dd>{docsFor.verified_by ?? '—'}</dd></div>
+            <div><dt>Line item</dt><dd>{docsFor.line_item}{docsFor.category ? ` (${docsFor.category})` : ''}</dd></div>
+            <div><dt>Verified by</dt><dd>{docsFor.verified_by}</dd></div>
             {docsFor.payee && <div><dt>Payee</dt><dd>{docsFor.payee}</dd></div>}
             {docsFor.reference_no && <div><dt>Reference</dt><dd>{docsFor.reference_no}</dd></div>}
           </dl>

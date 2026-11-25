@@ -79,7 +79,6 @@ export default function Submissions() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <div className="program-eyebrow">Review · Project Leader</div>
           <h1 className="program-h1">Submissions</h1>
           <p className="program-sub">
             {picker.project ? `${picker.project.title} · ${picker.project.code}` : 'Expenses, payroll and purchase requests of your project'}
@@ -122,7 +121,8 @@ export default function Submissions() {
               <ReviewRow
                 key={item.key}
                 item={item}
-                showStage={tab !== 'waiting'}
+                // "Waiting" and "Returned" hold one stage each (the tab says it); "Approved by you" rows move on to later stages.
+                showStage={tab === 'approved'}
                 onOpen={(row) => updateQuery({ open: row.key })}
               />
             ))}

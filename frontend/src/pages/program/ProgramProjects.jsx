@@ -9,6 +9,7 @@ import { projectsSummaryLine } from '../../lib/programOverview';
 import { FundersDialog, ProjectFormDialog } from '../../components/program/ProjectSetup';
 import { compactPeso, formatPct, peso } from '../../components/money';
 import { formatDateTime, formatInManila, todayInManila } from '../../lib/datetime';
+import Tip, { SPENT_RULE } from '../../components/Tip';
 
 const FILTER_KEYS = ['q', 'status', 'funder', 'leader', 'year', 'risk'];
 const DASH = '—';
@@ -282,7 +283,8 @@ export default function ProgramProjects() {
     return sortDir === 'asc' ? 'ascending' : 'descending';
   }
 
-  function sortHeader(key, label, className = '') {
+  // `tip`: an explanation next to the sort button (a button cannot hold another).
+  function sortHeader(key, label, className = '', tip = null) {
     const active = sortKey === key;
     return (
       <th aria-sort={ariaSort(key)} className={className || undefined}>
@@ -292,6 +294,7 @@ export default function ProgramProjects() {
             {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
           </span>
         </button>
+        {tip}
       </th>
     );
   }
@@ -382,9 +385,7 @@ export default function ProgramProjects() {
     <>
       <div className="program-page-head">
         <div>
-          <div className="program-eyebrow">Projects · Program Leader</div>
           <h1 className="program-h1">Projects</h1>
-          <p className="program-sub">Externally funded research projects across every funder.</p>
         </div>
         <div className="program-head-actions">
           <DownloadMenu
@@ -422,7 +423,7 @@ export default function ProgramProjects() {
       )}
 
       <p className="pp-summary-line" aria-live="polite">
-        {summary ? projectsSummaryLine(summary) : DASH}
+        {summary ? projectsSummaryLine(summary) : ''}
       </p>
 
       <div className="program-filter-row">
@@ -532,7 +533,7 @@ export default function ProgramProjects() {
               <thead>
                 <tr>
                   {sortHeader('title', 'Project')}
-                  {sortHeader('spent', 'Spent')}
+                  {sortHeader('spent', 'Spent', '', <Tip icon label={SPENT_RULE} />)}
                   <th className="pp-num">Remaining</th>
                   {sortHeader('period', 'Period')}
                   <th>Status</th>
@@ -560,13 +561,13 @@ export default function ProgramProjects() {
                           to={`/program-projects/${project.id}`}
                           state={detailState}
                         >
-                          {project.title || DASH}
+                          {project.title}
                         </Link>
                         <div className="project-code">
-                          {project.code || DASH} · Ref. {project.funder_reference || DASH}
+                          {[project.code, project.funder_reference && `Ref. ${project.funder_reference}`].filter(Boolean).join(' · ')}
                         </div>
                         <div className="pp-meta">
-                          {project.funder || DASH} · {project.project_leader || DASH}
+                          {[funder ? null : project.funder, project.project_leader].filter(Boolean).join(' · ')}
                         </div>
                       </td>
                       <td className="pp-col-spent">
@@ -587,22 +588,13 @@ export default function ProgramProjects() {
                       </td>
                       <td className="pp-col-period">
                         <div>{projectPeriod(project.start_date, project.end_date)}</div>
-                        {lastEntry ? (
-                          <div className="pp-meta">Last entry: {lastEntry}</div>
-                        ) : (
-                          <div className="pp-meta pp-none">Last entry: none yet</div>
-                        )}
+                        {lastEntry && <div className="pp-meta">Last entry: {lastEntry}</div>}
                       </td>
-                      <td>{project.status ? <ProgramPill value={project.status} /> : DASH}</td>
+                      <td>{project.status ? <ProgramPill value={project.status} /> : null}</td>
                       <td className="pp-col-health">
-                        {closed ? (
+                        {closed ? null : (
                           <>
-                            <div>{DASH}</div>
-                            <div className="pl-health-reason">Not tracked after completion</div>
-                          </>
-                        ) : (
-                          <>
-                            {project.health ? <ProgramPill value={project.health} /> : DASH}
+                            {project.health ? <ProgramPill value={project.health} /> : null}
                             {project.health_note && (
                               <div className="pl-health-reason">{project.health_note}</div>
                             )}
@@ -611,7 +603,7 @@ export default function ProgramProjects() {
                       </td>
                       <td className="pp-num">
                         <div className="pp-approvals">
-                          {project.pending_approvals > 0 ? (
+                          {project.pending_approvals > 0 && (
                             <Link
                               className="pp-pending"
                               to={`/program-approvals?project=${project.id}&status=pending`}
@@ -619,8 +611,6 @@ export default function ProgramProjects() {
                               <span aria-hidden="true">⏳</span>
                               {project.pending_approvals} pending
                             </Link>
-                          ) : (
-                            <span className="pp-muted">No pending</span>
                           )}
                           <RowActions project={project} detailState={detailState} />
                         </div>

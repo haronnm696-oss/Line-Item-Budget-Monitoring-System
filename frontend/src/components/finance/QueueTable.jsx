@@ -6,9 +6,10 @@ import { peso } from '../money';
  * Verification queue rows: reference, description, amount, documents, who
  * approved it, and "Review" when this user may verify (otherwise the
  * reason). Verify / Reject live only in the side panel (FinanceRecordPanel),
- * so the receipts are seen first. `onOpen` opens the panel.
+ * so the receipts are seen first. `onOpen` opens the panel. `showStage` =
+ * false hides the status pill (a tab that holds one status says it).
  */
-export default function QueueTable({ items, onOpen, showActions = true, caption }) {
+export default function QueueTable({ items, onOpen, showActions = true, caption, showStage = true }) {
   return (
     <div className="ra-table-wrap">
       <table className="program-table ld-table ra-table">
@@ -33,11 +34,11 @@ export default function QueueTable({ items, onOpen, showActions = true, caption 
                 <td data-label="Description">
                   <div className="ra-desc">{item.title}</div>
                   {item.details && <div className="ra-details">{item.details}</div>}
-                  <div className="ra-details">{item.documents_count > 0 ? `${item.documents_count} document${item.documents_count === 1 ? '' : 's'}` : 'No documents'}</div>
+                  {item.documents_count > 0 && <div className="ra-details">{`${item.documents_count} document${item.documents_count === 1 ? '' : 's'}`}</div>}
                 </td>
                 <td data-label="Amount" className="num ld-amount">{peso(item.amount)}</td>
                 <td data-label="Status">
-                  <StagePill status={item.workflow_status} />
+                  {showStage && <StagePill status={item.workflow_status} />}
                   <div className="ra-next">
                     {item.workflow_status === 'endorsed'
                       ? (item.approved_by ? `Approved by ${item.approved_by.name}${item.approved_at ? ` · ${formatDate(item.approved_at)}` : ''}` : item.approval_note)

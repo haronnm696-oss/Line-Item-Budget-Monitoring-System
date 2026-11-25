@@ -11,7 +11,7 @@ import MonthlyExpenseTrend from '../../components/program/MonthlyExpenseTrend';
 import PsMooeCard from '../../components/program/PsMooeCard';
 import { formatPct, peso } from '../../components/money';
 import PageTitle from '../../components/PageTitle';
-import { RESEARCHER_EYEBROW } from '../../lib/pageHead';
+import Tip from '../../components/Tip';
 
 
 function clampPct(value) {
@@ -35,8 +35,8 @@ export default function ResearcherDashboard() {
     <div className="ld-page">
       <div className="pl-head">
         <div>
-          <PageTitle eyebrow={RESEARCHER_EYEBROW} title="Budget information" readOnly />
-          <ProjectLine picker={picker} project={data?.project ?? picker.project} detail="verified data only" />
+          <PageTitle title="Budget information" readOnly />
+          <ProjectLine picker={picker} project={data?.project ?? picker.project} />
         </div>
       </div>
 
@@ -50,12 +50,11 @@ export default function ResearcherDashboard() {
                   <div className="pl-kpi-value"><AnimatedNumber value={data.kpis.total_budget} format={peso} /></div>
                   <div className="pl-kpi-sub">{data.project.funder ?? 'Funder'} {peso(data.kpis.funder_share)} · {data.project.implementing_agency || 'Implementing agency'} counterpart {peso(data.kpis.counterpart)}</div>
                   <div className="pl-track pl-track-gold"><span style={{ width: `${clampPct(data.kpis.utilization_pct)}%` }} /></div>
-                  <div className="pl-kpi-foot">{formatPct(data.kpis.utilization_pct)} spent</div>
                 </section>
                 <section className="program-card pl-kpi">
-                  <div className="pl-kpi-head"><span className="pl-kpi-label">Total spent</span></div>
+                  <div className="pl-kpi-head"><span className="pl-kpi-label"><Tip>Total spent</Tip></span></div>
                   <div className="pl-kpi-value"><AnimatedNumber value={data.kpis.total_spent} format={peso} /></div>
-                  <div className="pl-kpi-sub">{formatPct(data.kpis.utilization_pct)} of the total budget · verified expenses and verified payroll</div>
+                  <div className="pl-kpi-sub">{formatPct(data.kpis.utilization_pct)} of budget</div>
                   <div className="pl-track"><span style={{ width: `${clampPct(data.kpis.utilization_pct)}%` }} /></div>
                 </section>
                 <section className="program-card pl-kpi">
@@ -82,7 +81,6 @@ export default function ResearcherDashboard() {
                 <div className="program-card-head">
                   <div>
                     <div className="program-card-title">Transaction summary</div>
-                    <div className="program-card-sub">Latest verified transactions</div>
                   </div>
                   <Link className="program-card-link" to={`/transactions${q}`}>View all</Link>
                 </div>
@@ -119,9 +117,9 @@ function TransactionTable({ rows }) {
           {rows.map((row) => (
             <tr key={row.id}>
               <td data-label="Date">{formatDate(row.date)}</td>
-              <td data-label="Reference">{row.reference_no || `EXP-${row.id}`}</td>
+              <td data-label="Reference">{row.reference_no}</td>
               <td data-label="Description">{row.description}</td>
-              <td data-label="Category">{row.category ? <span className="res-cat">{row.category}</span> : '—'}</td>
+              <td data-label="Category">{row.category ? <span className="res-cat">{row.category}</span> : null}</td>
               <td data-label="Amount" className="num ld-amount">{peso(row.amount)}</td>
             </tr>
           ))}
