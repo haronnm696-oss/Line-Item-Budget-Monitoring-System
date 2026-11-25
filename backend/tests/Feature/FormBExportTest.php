@@ -50,7 +50,7 @@ class FormBExportTest extends TestCase
         $doc = $this->actingAs($this->programLeader)->getJson("/api/projects/{$project->id}/form-b")->assertOk()->json();
 
         $this->assertSame([
-            'form' => 'MOST-BARMM R&D Form B',
+            'form' => 'MOST-BARMM Form B',
             'agency' => 'MINISTRY OF SCIENCE AND TECHNOLOGY - BARMM',
             'title' => 'Project Line-Item Budget',
             'year' => 'CY 2026',
@@ -95,7 +95,7 @@ class FormBExportTest extends TestCase
         $csv = $this->actingAs($this->programLeader)->get("/api/projects/{$project->id}/reports/form-b")->assertOk()->getContent();
         $lines = explode("\r\n", substr($csv, 3));
 
-        $this->assertSame('MOST-BARMM R&D Form B', $lines[0]);
+        $this->assertSame('MOST-BARMM Form B', $lines[0]);
         $this->assertSame('MINISTRY OF SCIENCE AND TECHNOLOGY - BARMM', $lines[1]);
         $this->assertContains('Total Duration:,Twelve (12) months', $lines);
         $this->assertContains(',Counterpart Funding: Implementing Agency,MOST-BARMM', $lines);
@@ -163,7 +163,7 @@ class FormBExportTest extends TestCase
 
         $response = $this->actingAs($this->programLeader)->getJson("/api/projects/{$project->id}/form-b")->assertOk();
         $doc = $response->json();
-        $this->assertSame('DOST R&D Form B', $doc['header']['form']);
+        $this->assertSame('DOST Form B', $doc['header']['form']);
         $this->assertSame('DEPARTMENT OF SCIENCE AND TECHNOLOGY', $doc['header']['agency']);
         $this->assertSame('DOST', $doc['columns'][2]);
         $this->assertSame('(To be filled-up by DOST)', $doc['footer']['title']);
@@ -178,10 +178,36 @@ class FormBExportTest extends TestCase
         $this->assertStringNotContainsString('MOST', $response->getContent());
 
         $csv = $this->get("/api/projects/{$project->id}/reports/form-b")->assertOk()->getContent();
-        $this->assertStringContainsString('DOST R&D Form B', $csv);
+        $this->assertStringContainsString('DOST Form B', $csv);
         $this->assertStringContainsString(',Counterpart Funding: Implementing Agency,DOST', $csv);
         $this->assertStringContainsString('(To be filled-up by DOST)', $csv);
         $this->assertStringNotContainsString('MOST', $csv);
+    }
+
+    /** The title is "<funder short name> Form B": the system adds no "R&D" of its own. */
+    public function test_the_title_is_the_funder_short_name_and_form_b_with_no_added_r_and_d(): void
+    {
+        $project = $this->demo();
+        $project->fundingAgency->update(['acronym' => 'MOST R&D']);
+
+        $doc = $this->actingAs($this->programLeader)->getJson("/api/projects/{$project->id}/form-b")->assertOk()->json();
+        $title = $doc['header']['form'];
+        $this->assertSame('MOST R&D Form B', $title);
+        $this->assertSame(1, substr_count($title, 'R&D'));
+        $words = preg_split('/\s+/', $title);
+        $this->assertSame($words, array_values(array_unique($words)), "Duplicated word in \"{$title}\"");
+        $this->assertSame('MINISTRY OF SCIENCE AND TECHNOLOGY - BARMM', $doc['header']['agency']);
+        $this->assertSame('Project Line-Item Budget', $doc['header']['title']);
+
+        $csv = $this->get("/api/projects/{$project->id}/reports/form-b")->assertOk()->getContent();
+        $this->assertSame('MOST R&D Form B', explode("\r\n", substr($csv, 3))[0]);
+        $this->assertStringNotContainsString('R&D R&D', $csv);
+
+        // Another funder: no "R&D" anywhere in the title.
+        $project->fundingAgency->update(['acronym' => 'DOST']);
+        $doc = $this->getJson("/api/projects/{$project->id}/form-b")->assertOk()->json();
+        $this->assertSame('DOST Form B', $doc['header']['form']);
+        $this->assertStringNotContainsString('R&D', $doc['header']['form']);
     }
 
     public function test_export_is_refused_without_a_funder(): void

@@ -157,7 +157,7 @@ test('the Reports page hides the Project field with one project and shows no pay
   const page = source('pages/Reports.jsx');
   assert.match(page, /const showProjectField = showReportProjectField\(roleCode, projectsStatus, projectList\.length\);/);
   assert.match(page, /\{showProjectField && <div \{\.\.\.fieldProps\}>\s*<label htmlFor="report-param-project">/);
-  assert.match(page, /Generated from verified expenses and verified payroll · R&D Form B/);
+  assert.match(page, /Generated from verified expenses and verified payroll · Form B/);
   assert.doesNotMatch(page, /REPORT_TYPES\.(map|find)/);
   assert.match(page, /const registerKey = listRow && seesRegister \?/);
 });

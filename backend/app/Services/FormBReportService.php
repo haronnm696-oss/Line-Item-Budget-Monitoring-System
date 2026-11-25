@@ -14,7 +14,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  * so the amounts never drift from the screens. The PDF (frontend print view)
  * and the CSV export both render this one document.
  *
- *   <short> R&D Form B / <FUNDER FULL NAME> / Project Line-Item Budget / CY <year>
+ *   <short> Form B / <FUNDER FULL NAME> / Project Line-Item Budget / CY <year>
  *   Project Title, Implementing Agency, Total Duration, Project Leader, Monitoring Agency
  *   | item | Counterpart Funding: Implementing Agency | <short> |
  *   I. PERSONNEL SERVICES (PS) ... Sub-total for PS
@@ -98,7 +98,7 @@ class FormBReportService
             'project_code' => (string) $project->code,
             'funder' => ['short_name' => $short, 'name' => $fullName],
             'header' => [
-                'form' => "{$short} R&D Form B",
+                'form' => "{$short} Form B",
                 'agency' => mb_strtoupper($fullName),
                 'title' => 'Project Line-Item Budget',
                 'year' => "CY {$year}",

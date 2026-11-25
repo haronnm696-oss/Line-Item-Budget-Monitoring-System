@@ -22,7 +22,7 @@ const REPORT_TYPES = [
   {
     key: 'form-b',
     icon: '▤',
-    title: 'R&D Form B (Project Line-Item Budget)',
+    title: 'Form B (Project Line-Item Budget)',
     desc: "Official Form B layout for the project's funder: PS and MOOE, Direct and Indirect cost, counterpart and funder columns, and signatories.",
   },
   {
@@ -547,7 +547,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
 
         <div class="footer">
           This report was generated from verified expenses and verified payroll. <br />
-          Mindanao State University–Main Campus · R&D Form B · Line-Item Budget Monitoring System.
+          Mindanao State University–Main Campus · Form B · Line-Item Budget Monitoring System.
         </div>
       </body>
       </html>
@@ -685,7 +685,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
             <PageTitle eyebrow={reportsEyebrow(roleCode)} title="Reports" readOnly={isReadOnlyRole(roleCode)} />
             <p className="program-sub">
               {!showProjectField && listRow ? `${listRow.title} · ${listRow.code} · ` : ''}
-              Generated from verified expenses and verified payroll · R&D Form B
+              Generated from verified expenses and verified payroll · Form B
             </p>
           </div>
         </div>

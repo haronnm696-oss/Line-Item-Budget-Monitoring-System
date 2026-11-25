@@ -230,7 +230,7 @@ export default function ProgramProjectDetail() {
       <section className="program-card">
         <div className="program-card-head">
           <div>
-            <div className="program-card-title">Line-item budget (R&amp;D Form B)</div>
+            <div className="program-card-title">Line-item budget (Form B)</div>
             <div className="program-card-sub">
               PS and MOOE, direct and indirect cost, by expense group: {labels.implementing_agency} counterpart and {labels.funder} amounts, with verified spending
             </div>
