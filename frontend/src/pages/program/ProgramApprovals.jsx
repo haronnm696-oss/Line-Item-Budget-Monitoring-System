@@ -7,15 +7,7 @@ import ProgramPill from '../../components/program/ProgramPill';
 import ApprovalPanel from '../../components/program/ApprovalPanel';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
-
-const TYPES = [
-  ['all', 'All types'],
-  ['fund-release', 'Fund release'],
-  ['realignment', 'Realignment'],
-  ['liquidation', 'Liquidation'],
-  ['payroll', 'Payroll'],
-  ['expense', 'Expense verification'],
-];
+import { ALL_TYPES, approvalListError, typeOptions } from '../../lib/approvalFilters';
 
 const TABS = [
   ['pending', 'Pending'],
@@ -49,10 +41,6 @@ const TYPE_PILL = {
   // Expenses no Finance/Admin of the project may verify (they recorded or approved it).
   expense: 'Expense verification',
 };
-
-function messageFor(error, fallback) {
-  return error?.response?.data?.message || fallback;
-}
 
 function documentsText(count) {
   if (!count) return 'No attachments';
@@ -185,8 +173,9 @@ export default function ProgramApprovals() {
   const tabParam = searchParams.get('tab') ?? searchParams.get('status');
   const rawTab = tabParam === 'rejected' ? 'returned' : tabParam;
   const status = TABS.some(([value]) => value === rawTab) ? rawTab : 'pending';
-  const rawType = searchParams.get('type');
-  const type = TYPES.some(([value]) => value === rawType) ? rawType : 'all';
+  // The server validates the type against the list it returns as `types`;
+  // a value it does not accept shows "This filter isn't supported."
+  const type = searchParams.get('type') || ALL_TYPES;
   const project = searchParams.get('project') ?? '';
   const funder = searchParams.get('funder') ?? '';
   const hasFilters = type !== 'all' || project !== '' || funder !== '';
@@ -231,7 +220,7 @@ export default function ProgramApprovals() {
       setFailure(null);
     } catch (requestError) {
       if (controller.signal.aborted || controllerRef.current !== controller) return;
-      setFailure({ key: requestKey, message: messageFor(requestError, 'Unable to load approval requests right now.') });
+      setFailure({ key: requestKey, message: approvalListError(requestError) });
     }
   }, [status, type, project, funder, requestKey]);
 
@@ -278,6 +267,7 @@ export default function ProgramApprovals() {
   const counts = payload?.counts ?? null;
   const projects = Array.isArray(payload?.projects) ? payload.projects : [];
   const funders = Array.isArray(payload?.funders) ? payload.funders : [];
+  const types = typeOptions(payload?.types, type);
   // Safety net: only rows of the selected tab's status are ever rendered.
   const approvals = isCurrent && Array.isArray(payload?.approvals)
     ? payload.approvals.filter((approval) => approval.status === status)
@@ -336,7 +326,7 @@ export default function ProgramApprovals() {
             value={type}
             onChange={(event) => updateQuery({ type: event.target.value })}
           >
-            {TYPES.map(([value, label]) => (
+            {types.map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
@@ -377,6 +367,18 @@ export default function ProgramApprovals() {
         <div className="program-banner error" role="alert">
           {error}{' '}
           <button type="button" className="program-btn sm" onClick={retry}>Retry</button>
+          {hasFilters && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="program-btn sm"
+                onClick={() => updateQuery({ type: '', project: '', funder: '' })}
+              >
+                Clear filters
+              </button>
+            </>
+          )}
         </div>
       )}
 

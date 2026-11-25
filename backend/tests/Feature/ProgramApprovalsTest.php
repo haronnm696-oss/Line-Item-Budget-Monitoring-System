@@ -96,6 +96,71 @@ class ProgramApprovalsTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_the_list_accepts_every_type_on_every_tab(): void
+    {
+        $leader = $this->userWithRole('program-leader');
+        $project = $this->project();
+
+        // Every stored type is a filter option.
+        $filterStoredTypes = array_column(ApprovalRequest::FILTER_TYPES, 'type');
+        foreach (array_keys(ApprovalRequest::TYPES) as $storedType) {
+            $this->assertContains($storedType, $filterStoredTypes, "{$storedType} has no Type filter option");
+        }
+
+        // One request per stored type in each tab.
+        foreach (array_keys(ApprovalRequest::TYPES) as $storedType) {
+            $this->approval($project, $storedType, 'pending');
+            $this->approval($project, $storedType, 'approved');
+            $this->approval($project, $storedType, 'rejected');
+            $this->approval($project, $storedType, 'rejected')->forceFill(['withdrawn_at' => now()])->save();
+        }
+
+        $tabs = array_merge(array_keys(ApprovalRequest::STATUS_LABELS), [ApprovalRequest::STORED_RETURNED]);
+
+        foreach (ApprovalRequest::filterTypeValues() as $type) {
+            foreach ($tabs as $tab) {
+                $query = http_build_query([
+                    'status' => $tab,
+                    'type' => $type,
+                    'project' => $project->id,
+                    'funder' => $project->funding_agency_id,
+                ]);
+
+                $response = $this->actingAs($leader)
+                    ->getJson('/api/program/approvals?' . $query)
+                    ->assertOk()
+                    ->assertJsonPath('types', ApprovalRequest::filterTypeOptions());
+
+                $rows = collect($response->json('approvals'));
+                $label = "type={$type} tab={$tab}";
+                $this->assertCount($type === 'all' ? count(ApprovalRequest::TYPES) : 1, $rows, $label);
+
+                if ($type !== 'all') {
+                    $this->assertSame([ApprovalRequest::storedTypeForFilter($type)], $rows->pluck('type')->unique()->values()->all(), $label);
+                }
+            }
+        }
+    }
+
+    public function test_the_expense_verification_filter_from_the_bug_report_is_accepted(): void
+    {
+        $leader = $this->userWithRole('program-leader');
+        $project = $this->project();
+        $expense = $this->approval($project, 'expense', 'approved');
+        $this->approval($project, 'disbursement', 'approved');
+
+        $response = $this->actingAs($leader)
+            ->getJson("/api/program/approvals?status=approved&type=expense&project={$project->id}&funder={$project->funding_agency_id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'approvals')
+            ->assertJsonPath('approvals.0.id', $expense->id);
+
+        $this->assertContains(
+            ['value' => 'expense', 'label' => 'Expense verification'],
+            $response->json('types')
+        );
+    }
+
     public function test_pending_count_matches_the_overview_kpi_for_the_same_funder(): void
     {
         $leader = $this->userWithRole('program-leader');

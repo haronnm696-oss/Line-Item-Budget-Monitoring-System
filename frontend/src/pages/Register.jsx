@@ -14,7 +14,6 @@ import OrbitBackground from '../components/OrbitBackground';
 import {
   contactNumberCounter,
   contactNumberError,
-  isValidEmployeeId,
   isEmailFormat,
   mapRegisterFieldErrors,
   passwordRules,
@@ -42,7 +41,6 @@ const FIELD_IDS = {
   lastName: 'reg-last-name',
   email: 'reg-email',
   contactNumber: 'reg-contact',
-  employeeId: 'reg-employee-id',
   position: 'reg-position',
   college: 'reg-college',
   department: 'reg-department',
@@ -59,7 +57,6 @@ const SERVER_FIELD_MAP = {
   email: 'email',
   contact_number: 'contactNumber',
   office_name: 'officeName',
-  employee_id: 'employeeId',
   position: 'position',
   college: 'college',
   department: 'department',
@@ -86,9 +83,6 @@ function fieldError(name, data, units) {
       return isEmailFormat(value) ? '' : 'Enter a valid email address.';
     case 'contactNumber':
       return contactNumberError(value, { required: true });
-    case 'employeeId':
-      if (!value) return 'Enter your employee ID.';
-      return isValidEmployeeId(value) ? '' : 'Use the format MSU-##### (5 digits).';
     case 'position':
       return value ? '' : 'Enter your position.';
     case 'password': {
@@ -122,7 +116,6 @@ export default function Register() {
     lastName: '',
     email: '',
     contactNumber: '',
-    employeeId: '',
     position: '',
     college: '',
     department: '',
@@ -223,7 +216,6 @@ export default function Register() {
         last_name: formData.lastName.trim(),
         email: formData.email.trim(),
         password: formData.password,
-        employee_id: formData.employeeId.trim(),
         contact_number: formData.contactNumber,
         ...academicUnitPayload(formData, units),
         position: formData.position.trim(),
@@ -241,9 +233,6 @@ export default function Register() {
         if (localField) localErrors[localField] = serverMessage;
       });
 
-      if (Object.keys(localErrors).length === 0 && /employee id.*(already|taken|exists)/i.test(message)) {
-        localErrors.employeeId = 'This employee ID is already registered.';
-      }
       if (Object.keys(localErrors).length === 0 && /email.*(already|taken|exists)/i.test(message)) {
         localErrors.email = 'An account with this email already exists.';
       }
@@ -388,28 +377,6 @@ export default function Register() {
 
         <AuthSection title="Employment">
           <div className="signin-grid-2">
-            <AuthField
-              id="reg-employee-id"
-              label="Employee ID"
-              icon="id"
-              error={errorFor('employeeId')}
-            >
-              <input
-                id="reg-employee-id"
-                className={inputClass('employeeId')}
-                type="text"
-                name="employeeId"
-                value={formData.employeeId}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                placeholder="MSU-04182"
-                autoComplete="off"
-                aria-invalid={Boolean(errorFor('employeeId'))}
-                aria-describedby={describedBy('employeeId', 'reg-employee-id-error')}
-                required
-              />
-            </AuthField>
-
             <AuthField
               id="reg-position"
               label="Position"
