@@ -20,7 +20,6 @@ class RegistrationTest extends TestCase
             'last_name' => 'Haron',
             'email' => 'new.user@s.msumain.edu.ph',
             'password' => 'Str0ng!Pass2026',
-            'employee_id' => 'MSU-99999',
             'contact_number' => '09096254046',
             'college' => 'College of Business Administration and Accountancy',
             'department' => 'Accountancy',
@@ -66,12 +65,36 @@ class RegistrationTest extends TestCase
             ->assertJsonPath('message', 'Your account is awaiting Program Leader approval.');
     }
 
+    public function test_registration_succeeds_without_an_employee_id_and_ignores_one_if_sent(): void
+    {
+        $this->postJson('/api/register', $this->payload())->assertCreated();
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'new.user@s.msumain.edu.ph',
+            'employee_id' => null,
+        ]);
+
+        // An employee ID sent anyway (even a malformed one) is neither validated nor stored.
+        Cache::flush();
+        $this->postJson('/api/register', $this->payload([
+            'email' => 'other.user@s.msumain.edu.ph',
+            'contact_number' => '09096254047',
+            'employee_id' => 'not-an-id',
+        ]))
+            ->assertCreated()
+            ->assertJsonMissingValidationErrors('employee_id');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'other.user@s.msumain.edu.ph',
+            'employee_id' => null,
+        ]);
+    }
+
     public function test_registration_accepts_any_valid_email_domain(): void
     {
         foreach (['new.user@gmail.com', 'new.user@yahoo.com', 'new.user@msumain.edu.ph'] as $i => $email) {
             $this->postJson('/api/register', $this->payload([
                 'email' => $email,
-                'employee_id' => 'MSU-9000' . $i,
                 'contact_number' => '0909625404' . $i,
             ]))->assertCreated();
         }
@@ -118,7 +141,6 @@ class RegistrationTest extends TestCase
 
             $this->postJson('/api/register', $this->payload([
                 'email' => $case['email'],
-                'employee_id' => null,
                 'password' => $case['password'],
             ]))
                 ->assertStatus(422)
@@ -173,9 +195,7 @@ class RegistrationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->postJson('/api/register', $this->payload([
-            'employee_id' => 'MSU-99998',
-        ]))
+        $this->postJson('/api/register', $this->payload())
             ->assertStatus(422)
             ->assertJsonValidationErrors('email');
 

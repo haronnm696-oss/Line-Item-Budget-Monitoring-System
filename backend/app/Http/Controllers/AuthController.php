@@ -124,7 +124,6 @@ class AuthController extends Controller
                     (string) $request->input('email')
                 ),
             ],
-            'employee_id' => ['nullable', 'string', 'max:255', 'regex:/^MSU-\d{5}$/i', 'unique:users,employee_id'],
             'contact_number' => User::contactNumberRules(required: true),
             'position' => ['required', 'string', 'max:255'],
         ], [
@@ -133,16 +132,8 @@ class AuthController extends Controller
 
         $email = $data['email'];
 
-        // The employee ID is its own field and must never be derived from the
-        // email address (or any other input).
-        $employeeId = isset($data['employee_id']) ? trim($data['employee_id']) : null;
-        $employeeId = $employeeId === '' ? null : $employeeId;
-
-        if ($employeeId !== null && strcasecmp($employeeId, $email) === 0) {
-            throw ValidationException::withMessages([
-                'employee_id' => ['The employee ID cannot be the same as the email address.'],
-            ]);
-        }
+        // Create account does not collect an employee ID; one sent anyway is
+        // ignored. The Program Leader can add it later from the user directory.
 
         // Public registration never assigns a role. The account stays pending
         // and inactive until a Program Leader or Finance/Admin approves it.
@@ -150,7 +141,6 @@ class AuthController extends Controller
             'name' => trim($data['first_name'] . ' ' . $data['last_name']),
             'first_name' => $data['first_name'],
             'last_name' => $data['last_name'],
-            'employee_id' => $employeeId,
             'email' => $email,
             'password' => Hash::make($data['password']),
             'contact_number' => $data['contact_number'] ?? null,
