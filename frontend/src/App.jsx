@@ -44,6 +44,9 @@ import ResearcherBudget from './pages/researcher/ResearcherBudget';
 import ByRole from './routes/ByRole';
 import HomeRoute from './routes/HomeRoute';
 import NotFound from './pages/NotFound';
+import Profile from './pages/Profile';
+import { useAuth } from './context/AuthContext';
+import { normalizeRole } from './lib/roles';
 
 /** A short URL that keeps its ?project= (and other filters). */
 function RedirectKeepingQuery({ to }) {
@@ -86,6 +89,12 @@ const ROLE_PAGES = [
   ['/my-requests', <MyRequests />],
 ];
 
+/** Pages every role opens (Profile) sit in the user's own shell. */
+function OwnShell() {
+  const { user } = useAuth();
+  return normalizeRole(user) === 'PRG' ? <ProgramLayout /> : <RoleLayout />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -111,6 +120,11 @@ export default function App() {
               {COMING_SOON_PATHS.map((path) => (
                 <Route key={path} path={path} element={<RoleRoute path={path}><ComingSoon /></RoleRoute>} />
               ))}
+            </Route>
+
+            {/* Own profile: every role, inside their usual shell. */}
+            <Route element={<OwnShell />}>
+              <Route path="/profile" element={<RoleRoute path="/profile"><Profile /></RoleRoute>} />
             </Route>
 
             {/* Program Leader-only shell. Other roles are redirected by RoleRoute. */}

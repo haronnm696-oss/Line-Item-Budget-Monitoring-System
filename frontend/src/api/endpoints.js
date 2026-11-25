@@ -7,7 +7,8 @@
  * Auth (Sanctum SPA cookie flow):
  *   GET  /sanctum/csrf-cookie              -> 204, sets XSRF-TOKEN cookie
  *   POST /api/login   { email, password }
- *        -> 200 { user: { id, name, email, role, role_slug, roleLabel, avatar_initials } }
+ *        -> 200 { user: { id, name, email, role, role_slug, roleLabel, avatar_initials, avatar_url } }
+ *           avatar_url: null, or a relative URL of the 256x256 profile photo
  *        -> 422 { message, errors } on bad credentials
  *        -> 403 { message } when the account is deactivated
  *        Email is globally unique. The controller resolves the frontend
@@ -16,6 +17,12 @@
  *        Per-project permissions still come from project_user.role_id.
  *   POST /api/logout                        -> 204
  *   GET  /api/me                            -> 200 { user } | 401
+ *
+ * Profile photo (signed-in user; JPG/PNG/WebP, at most 2 MB; the server
+ * crops it to a 256x256 JPEG):
+ *   POST   /api/profile/avatar  multipart { avatar } -> 200 { user } | 422 errors.avatar
+ *   DELETE /api/profile/avatar                       -> 200 { user }
+ *   GET    /api/users/:id/avatar                     -> the JPEG (any signed-in user) | 404
  *
  * Dashboards (role-scoped, server decides what the caller may see):
  *   GET /api/program/overview               -> Program Leader overview (descriptive figures only)
@@ -213,6 +220,7 @@ export const ENDPOINTS = {
   academicUnits: '/api/academic-units',
   logout: '/api/logout',
   me: '/api/me',
+  profileAvatar: '/api/profile/avatar',
   // Password reset by emailed 6-digit code:
   //   POST forgot-password        { email }                 -> 202 { message, code_expires_in, resend_in } (same for any address)
   //   POST forgot-password/verify { email, code }           -> { reset_token, expires_in } | 422 errors.code "Invalid or expired code"

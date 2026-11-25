@@ -9,6 +9,7 @@ use App\Notifications\NewRegistrationPendingNotification;
 use App\Notifications\PasswordChangedNotification;
 use App\Notifications\PasswordResetCodeNotification;
 use App\Rules\StrongPassword;
+use App\Services\AvatarStorage;
 use App\Services\PasswordResetCodeService;
 use App\Support\AcademicUnits;
 use Illuminate\Http\Request;
@@ -50,6 +51,7 @@ class AuthController extends Controller
             'status' => $user->role_id === null ? 'Pending' : ($user->is_active ? 'Active' : 'Inactive'),
             'is_active' => (bool) $user->is_active,
             'avatar_initials' => self::initials($user->name),
+            'avatar_url' => AvatarStorage::url($user),
         ];
     }
 
