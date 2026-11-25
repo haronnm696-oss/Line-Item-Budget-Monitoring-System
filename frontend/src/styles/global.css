@@ -3372,7 +3372,7 @@ select.signin-input:disabled{
 .ld-page .program-btn,.ld-page .program-select,.ld-page .program-input{min-height:44px}
 .ld-page .program-btn.sm{min-height:44px}
 .ld-page .program-btn:focus-visible,.ld-page .program-select:focus-visible,.ld-page .program-input:focus-visible,
-.ld-page .program-tab:focus-visible,.ld-link:focus-visible,.ld-panel .program-btn:focus-visible,.ld-panel .program-icon-btn:focus-visible{
+.ld-page .program-tab:focus-visible,.ld-link:focus-visible{
   outline:2px solid var(--pg-brand);outline-offset:2px;
 }
 .ld-page .pl-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -3441,17 +3441,8 @@ select.signin-input:disabled{
 .ld-highlight td{background:#FBF3DF}
 .ld-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:14px;font-size:13px;color:var(--pg-muted)}
 
-/* Side panel (record and documents) */
-.ld-panel-overlay{position:fixed;inset:0;background:rgba(42,26,29,.35);z-index:70;display:flex;justify-content:flex-end}
-.ld-panel{
-  width:min(560px,100%);height:100%;overflow-y:auto;background:#fff;padding:22px;
-  display:flex;flex-direction:column;gap:12px;box-shadow:-12px 0 32px rgba(42,26,29,.16);
-}
-.ld-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.ld-panel-eyebrow{font-size:12px;font-weight:650;color:var(--pg-muted);text-transform:uppercase;letter-spacing:.05em}
-.ld-panel-title{margin:4px 0 0;font-size:20px;font-weight:800;letter-spacing:-.02em;overflow-wrap:anywhere}
+/* Record detail sections (the detail modal itself: styles/detail-modal.css) */
 .ld-panel-sub{margin:8px 0 0;font-size:15px;font-weight:800}
-.ld-panel-status{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .ld-panel-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:auto;padding-top:14px;border-top:1px solid var(--pg-card-border)}
 .ld-panel-actions .program-btn{min-height:44px}
 .ld-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:4px 0 0}
@@ -3554,7 +3545,6 @@ select.signin-input:disabled{
 .ra-inline-form{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .ra-inline-form .program-field{min-width:240px;margin:0}
 .ra-panel-actions{flex-wrap:wrap}
-.ld-panel .ra-panel-actions{margin-top:auto}
 .program-card .ra-panel-actions{margin-top:14px}
 .program-tab.ra-tab-alert{color:var(--pg-risk)}
 .program-tab.ra-tab-alert::before{content:'⚠ '}
@@ -3616,7 +3606,6 @@ select.signin-input:disabled{
 .pa-history{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:13.5px}
 .pa-history li{padding:6px 10px;border-left:3px solid var(--pg-card-border,#E8DFD3);background:#FAF7F2;border-radius:0 6px 6px 0;overflow-wrap:anywhere}
 .pa-caption{caption-side:top;text-align:left;font-size:13px;font-weight:700;padding:6px 0}
-.ld-panel .ld-table tfoot th,.ld-panel .ld-table tfoot td{border-top:1px solid var(--pg-card-border,#E8DFD3)}
 .pa-panel-actions{flex-wrap:wrap}
 .pa-panel-actions .pa-return-field{flex:1 1 100%;margin:0}
 .program-row-actions .program-btn{min-height:44px}

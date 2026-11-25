@@ -6,7 +6,11 @@ import DocumentList from '../leader/DocumentList';
 import { peso } from '../money';
 import PurchaseRequestItemsTable from '../PurchaseRequestItemsTable';
 import PurchaseRequestDownload from '../PurchaseRequestDownload';
+import ProgramPill from '../program/ProgramPill';
+import DetailModal, { DetailNote } from '../DetailModal';
 import StagePill from './StagePill';
+
+const TYPE_ICON = { expense: '▤', payroll: '₱', purchase_request: '◇' };
 
 function fieldValue(field) {
   if (field.value == null || field.value === '') return '—';
@@ -16,7 +20,7 @@ function fieldValue(field) {
 }
 
 /**
- * Side panel with one of the Research Assistant's records (loaded fresh,
+ * Detail modal with one of the Research Assistant's records (loaded fresh,
  * any stage) and its documents. The buttons follow the server's can_*
  * flags; each one calls the page's useRecordActions().
  */
@@ -36,13 +40,6 @@ export default function AssistantRecordPanel({ projectId, target, refreshKey, ac
     return () => { alive = false; };
   }, [key, projectId, target?.type, target?.id]);
 
-  useEffect(() => {
-    if (!target) return undefined;
-    const onKey = (event) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [target, onClose]);
-
   if (!target) return null;
   const item = result?.key === key ? result.item : null;
   const error = result?.key === key ? result.error : null;
@@ -50,77 +47,78 @@ export default function AssistantRecordPanel({ projectId, target, refreshKey, ac
   const returned = returnedLine(item);
   const editable = item && (item.can_edit || item.can_delete || item.can_submit || item.can_cancel || item.can_attach_receipt);
 
+  const footer = editable ? (
+    <>
+      {item.can_delete && (
+        <button type="button" className="program-btn danger" disabled={busy} onClick={() => actions.remove(item)}>Delete</button>
+      )}
+      {item.can_cancel && (
+        <button type="button" className="program-btn danger" disabled={busy} onClick={() => actions.cancel(item)}>Cancel request</button>
+      )}
+      {item.can_attach_receipt && (
+        <button type="button" className="program-btn primary" disabled={busy} onClick={() => actions.upload(item, { types: ['receipt'], title: 'Upload missing receipt' })}>
+          Upload receipt
+        </button>
+      )}
+      {item.can_edit && (
+        <button type="button" className={`program-btn${item.can_submit && item.workflow_status === 'draft' ? '' : ' primary'}`} disabled={busy} onClick={() => actions.edit(item)}>
+          {item.workflow_status === 'returned' ? 'Edit and resubmit' : (item.type === 'payroll' ? 'Open payroll' : 'Edit')}
+        </button>
+      )}
+      {item.can_submit && item.workflow_status === 'draft' && (
+        <button type="button" className="program-btn primary" disabled={busy} onClick={() => actions.submit(item)}>
+          {busy ? 'Submitting…' : 'Submit'}
+        </button>
+      )}
+    </>
+  ) : null;
+
   return (
-    <div className="ld-panel-overlay" role="presentation" onClick={onClose}>
-      <aside className="ld-panel" role="dialog" aria-modal="true" aria-labelledby="ra-panel-title" onClick={(event) => event.stopPropagation()}>
-        <div className="ld-panel-head">
-          <div>
-            <div className="ld-panel-eyebrow">{item ? `${item.type_label} · ${item.reference}` : 'Record'}</div>
-            <h2 className="ld-panel-title" id="ra-panel-title">{item?.title ?? 'Loading…'}</h2>
-          </div>
-          <button type="button" className="program-icon-btn" onClick={onClose} aria-label="Close panel">×</button>
-        </div>
+    <DetailModal
+      titleId="ra-panel-title"
+      title={item?.title ?? 'Loading…'}
+      eyebrow={item ? `${item.type_label} · ${item.reference}` : 'Record'}
+      icon={TYPE_ICON[item?.type ?? target.type] ?? '▤'}
+      chips={item && (
+        <>
+          <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} fulfilment={item.fulfilment} />
+          {item.type_label && <ProgramPill value={item.type_label} />}
+        </>
+      )}
+      amount={item?.amount ?? null}
+      hint={returned ? 'Fix what was returned, then resubmit.' : 'Nothing is sent until you submit.'}
+      actions={footer}
+      onClose={onClose}
+    >
+      {error && <div className="program-banner error" role="alert">{error}</div>}
+      {!item && !error && <p className="ld-muted" aria-busy="true">Loading…</p>}
 
-        {error && <div className="program-banner error" role="alert">{error}</div>}
-        {!item && !error && <p className="ld-muted" aria-busy="true">Loading…</p>}
+      {item && (
+        <>
+          <dl className="ld-fields">
+            <div><dt>Encoded by</dt><dd>{item.submitted_by?.name ?? '—'}</dd></div>
+            <div><dt>Submitted</dt><dd>{formatDateTime(item.submitted_at)}</dd></div>
+            {item.fields.map((field) => (
+              <div key={field.label}><dt>{field.label}</dt><dd>{fieldValue(field)}</dd></div>
+            ))}
+          </dl>
+          {returned
+            ? <DetailNote label="Returned" tone="risk">{returned}</DetailNote>
+            : item.next_step && <p className="ld-waiting"><span aria-hidden="true">◷</span> {item.next_step}</p>}
 
-        {item && (
-          <>
-            <div className="ld-panel-status">
-              <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} fulfilment={item.fulfilment} />
-              {item.amount != null && <b className="ld-amount">{peso(item.amount)}</b>}
+          {Array.isArray(item.pr_items) && (
+            <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(item.workflow_status)} />
+          )}
+          {item.type === 'purchase_request' && (
+            <div className="ld-panel-actions pr-download">
+              <PurchaseRequestDownload requestId={item.id} reference={item.reference} />
             </div>
-            {returned
-              ? <div className="program-banner error ld-return-banner" role="note"><b>Returned.</b> {returned}</div>
-              : item.next_step && <p className="ld-waiting"><span aria-hidden="true">◷</span> {item.next_step}</p>}
+          )}
 
-            <dl className="ld-fields">
-              <div><dt>Encoded by</dt><dd>{item.submitted_by?.name ?? '—'}</dd></div>
-              <div><dt>Submitted</dt><dd>{formatDateTime(item.submitted_at)}</dd></div>
-              {item.fields.map((field) => (
-                <div key={field.label}><dt>{field.label}</dt><dd>{fieldValue(field)}</dd></div>
-              ))}
-            </dl>
-            {Array.isArray(item.pr_items) && (
-              <PurchaseRequestItemsTable items={item.pr_items} total={item.pr_total} showStatus={['endorsed', 'fulfilled', 'cancelled'].includes(item.workflow_status)} />
-            )}
-            {item.type === 'purchase_request' && (
-              <div className="ld-panel-actions pr-download">
-                <PurchaseRequestDownload requestId={item.id} reference={item.reference} />
-              </div>
-            )}
-
-            <h3 className="ld-panel-sub">Documents</h3>
-            <DocumentList key={`${item.key}#${refreshKey}`} type={item.type} id={item.id} />
-
-            {editable && (
-              <div className="ld-panel-actions ra-panel-actions">
-                {item.can_delete && (
-                  <button type="button" className="program-btn danger" disabled={busy} onClick={() => actions.remove(item)}>Delete</button>
-                )}
-                {item.can_cancel && (
-                  <button type="button" className="program-btn danger" disabled={busy} onClick={() => actions.cancel(item)}>Cancel request</button>
-                )}
-                {item.can_attach_receipt && (
-                  <button type="button" className="program-btn primary" disabled={busy} onClick={() => actions.upload(item, { types: ['receipt'], title: 'Upload missing receipt' })}>
-                    Upload receipt
-                  </button>
-                )}
-                {item.can_edit && (
-                  <button type="button" className={`program-btn${item.can_submit && item.workflow_status === 'draft' ? '' : ' primary'}`} disabled={busy} onClick={() => actions.edit(item)}>
-                    {item.workflow_status === 'returned' ? 'Edit and resubmit' : (item.type === 'payroll' ? 'Open payroll' : 'Edit')}
-                  </button>
-                )}
-                {item.can_submit && item.workflow_status === 'draft' && (
-                  <button type="button" className="program-btn primary" disabled={busy} onClick={() => actions.submit(item)}>
-                    {busy ? 'Submitting…' : 'Submit'}
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </aside>
-    </div>
+          <h3 className="ld-panel-sub">Documents</h3>
+          <DocumentList key={`${item.key}#${refreshKey}`} type={item.type} id={item.id} />
+        </>
+      )}
+    </DetailModal>
   );
 }

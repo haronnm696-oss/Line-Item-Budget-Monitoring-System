@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { decideApproval, fetchApprovalDetail } from '../../api/program';
 import DocumentList from '../leader/DocumentList';
 import ProgramPill from './ProgramPill';
 import { peso } from '../money';
 import { formatDate, formatDateTime } from '../../lib/datetime';
 import { reviewPanelWarning } from '../../lib/releasePlan';
+import { waitedText } from '../../lib/waited';
+import DetailModal, { DetailNote } from '../DetailModal';
 
-const HISTORY_ICON = { requested: '•', approved: '✓', returned: '↩', resubmitted: '↻', withdrawn: '⊘' };
+const KIND_ICON = { expense: '▤', fund_release: '₱', realignment: '⇄', liquidation: '▤', payroll: '₱' };
+const KIND_HINT = {
+  realignment: 'Nothing moves until it is approved.',
+  fund_release: 'No funds are released until it is approved.',
+};
 const TRANCHE_STATUS = { released: 'Released', due: 'Due', pending: 'Not yet due', overdue: 'Overdue' };
 
 function messageFor(error, fallback) {
@@ -46,25 +51,40 @@ function FundRelease({ details }) {
 
 const FIGURES = [['allocated', 'Allocated'], ['spent', 'Spent'], ['pending', 'Pending'], ['available', 'Available']];
 
-function LineItemMove({ side, label }) {
-  if (!side) return <p className="ld-muted">{label}: this line item no longer exists.</p>;
+function FigureValue({ before, after }) {
+  if (before === after) return <dd><span className="dm-new">{peso(after)}</span></dd>;
+  const direction = Number(after) < Number(before) ? 'down' : 'up';
   return (
-    <div className="ra-table-wrap">
-      <table className="program-table ld-table">
-        <caption className="pa-caption">{label}: {side.code ? `${side.code} ` : ''}{side.name}{side.type ? ` (${side.type})` : ''}</caption>
-        <thead>
-          <tr><th scope="col">Figure</th><th scope="col" className="num">Before</th><th scope="col" className="num">After</th></tr>
-        </thead>
-        <tbody>
-          {FIGURES.map(([key, text]) => (
-            <tr key={key}>
-              <th scope="row">{text}</th>
-              <td className="num">{peso(side.before[key])}</td>
-              <td className="num">{side.before[key] === side.after[key] ? peso(side.after[key]) : <b>{peso(side.after[key])}</b>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <dd>
+      <span className="dm-old"><span className="pa-sr-only">Before: </span>{peso(before)}</span>
+      <span className={`dm-new is-${direction}`}>
+        <span className="pa-sr-only">After ({direction === 'down' ? 'goes down' : 'goes up'}): </span>{peso(after)}
+      </span>
+    </dd>
+  );
+}
+
+function LineItemMove({ side, label }) {
+  if (!side) {
+    return (
+      <div className="dm-move-card">
+        <div className="dm-move-tag">{label}</div>
+        <p className="ld-muted">This line item no longer exists.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="dm-move-card">
+      <div className="dm-move-tag">{label}</div>
+      <div className="dm-move-name">{side.code ? `${side.code} ` : ''}{side.name}{side.type ? ` (${side.type})` : ''}</div>
+      <dl className="dm-move-rows">
+        {FIGURES.map(([key, text]) => (
+          <div key={key}>
+            <dt>{text}</dt>
+            <FigureValue before={side.before[key]} after={side.after[key]} />
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
@@ -75,8 +95,11 @@ function Realignment({ details }) {
       <p className="ld-muted">
         Moves {peso(details.amount)}. {details.applied ? 'Approved: the move is already in the allocations.' : 'Nothing moves until it is approved.'}
       </p>
-      <LineItemMove side={details.from} label="From" />
-      <LineItemMove side={details.to} label="To" />
+      <div className="dm-move">
+        <LineItemMove side={details.from} label="From" />
+        <span className="dm-move-arrow" aria-hidden="true">→</span>
+        <LineItemMove side={details.to} label="To" />
+      </div>
     </>
   );
 }
@@ -163,17 +186,17 @@ function ExpenseVerify({ details }) {
 const DETAILS = {
   expense: ['Expense to verify', ExpenseVerify],
   fund_release: ['Fund release', FundRelease],
-  realignment: ['Line items', Realignment],
+  realignment: ['What changes', Realignment],
   liquidation: ['Liquidation', Liquidation],
   payroll: ['Payroll batch', Payroll],
 };
 
 /**
- * Review side panel for one approval request (Program Leader). Shows who
- * asked, the status history, the type's figures and the attachments with
- * preview; Approve / Return (with a required reason) live only here, so a
- * request is always opened before it is decided. `onDecided(text)` runs
- * after a decision is saved.
+ * Review modal for one approval request (Program Leader). Shows who asked,
+ * the justification, the latest return reason, the type's figures and the
+ * attachments with preview; Approve / Return (with a required reason) live
+ * only here, so a request is always opened before it is decided.
+ * `onDecided(text)` runs after a decision is saved.
  */
 export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
   const [result, setResult] = useState(null); // { id, approval } | { id, error }
@@ -198,19 +221,15 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
     return () => controller.abort();
   }, [approvalId]);
 
-  useEffect(() => {
-    if (approvalId == null) return undefined;
-    const onKey = (event) => { if (event.key === 'Escape' && !busy) onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [approvalId, busy, onClose]);
-
   if (approvalId == null) return null;
   const approval = result?.id === approvalId ? result.approval : null;
   const error = result?.id === approvalId ? result.error : null;
   const [detailTitle, Details] = DETAILS[approval?.details?.kind] ?? [];
   // Beside Approve: an earlier released release has no approved liquidation (a warning, not a block).
   const liquidationWarning = reviewPanelWarning(approval);
+  // The latest return reason stays visible (the requester needs it to fix the request).
+  const lastReturn = approval?.history?.filter((entry) => entry.event === 'returned' && entry.reason).at(-1) ?? null;
+  const kind = approval?.details?.kind;
 
   async function decide(decision) {
     if (busy) return;
@@ -232,108 +251,105 @@ export default function ApprovalPanel({ approvalId, onClose, onDecided }) {
     }
   }
 
-  return (
-    <div className="ld-panel-overlay" role="presentation" onClick={() => !busy && onClose()}>
-      <aside className="ld-panel" role="dialog" aria-modal="true" aria-labelledby="pa-panel-title" onClick={(event) => event.stopPropagation()}>
-        <div className="ld-panel-head">
-          <div>
-            <div className="ld-panel-eyebrow">{approval ? `${approval.type_label} · ${approval.project?.code ?? ''}` : 'Approval request'}</div>
-            <h2 className="ld-panel-title" id="pa-panel-title">{approval?.title ?? (error ? 'Request' : 'Loading…')}</h2>
-          </div>
-          <button type="button" className="program-icon-btn" onClick={onClose} disabled={busy} aria-label="Close panel">×</button>
+  const chips = approval && (
+    <>
+      <ProgramPill value={approval.status_label} />
+      {approval.status === 'pending' && <span className="dm-wait">{waitedText(approval.resubmitted_at ?? approval.created_at)}</span>}
+      <ProgramPill value={approval.type_label} />
+    </>
+  );
+
+  const actions = approval?.can_decide ? (returning ? (
+    <>
+      <button type="button" className="program-btn" disabled={busy} onClick={() => { setReturning(false); setActionError(''); }}>Cancel</button>
+      <button type="button" className="program-btn primary" disabled={busy} onClick={() => decide('returned')}>
+        {busy ? 'Returning…' : 'Return to requester'}
+      </button>
+    </>
+  ) : (
+    <>
+      <button type="button" className="program-btn" disabled={busy} onClick={() => { setReturning(true); setActionError(''); }}>Return</button>
+      <button type="button" className="program-btn primary" disabled={busy} onClick={() => decide('approved')}>
+        {busy ? 'Saving…' : 'Approve'}
+      </button>
+    </>
+  )) : null;
+
+  const footerNotice = approval?.can_decide && (liquidationWarning || returning || actionError) ? (
+    <>
+      {liquidationWarning && (
+        <p className="ld-waiting pa-return-field" role="status"><span aria-hidden="true">⚠</span> {liquidationWarning}</p>
+      )}
+      {returning && (
+        <div className="program-field pa-return-field">
+          <label htmlFor="pa-return-reason">Reason for returning (required)</label>
+          <textarea
+            id="pa-return-reason"
+            className="program-textarea"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Tell the requester what to fix, e.g. add the work plan"
+            autoFocus
+          />
         </div>
+      )}
+      {actionError && <p className="program-error pa-return-field" role="alert">{actionError}</p>}
+    </>
+  ) : null;
 
-        {error && <div className="program-banner error" role="alert">{error}</div>}
-        {!approval && !error && <p className="ld-muted" aria-busy="true">Loading…</p>}
+  return (
+    <DetailModal
+      titleId="pa-panel-title"
+      title={approval?.title ?? (error ? 'Request' : 'Loading…')}
+      eyebrow={approval ? `${approval.type_label} · ${approval.project?.code ?? ''}` : 'Approval request'}
+      icon={KIND_ICON[kind] ?? '▤'}
+      chips={chips}
+      amount={approval?.amount ?? null}
+      amountCaption={kind === 'realignment' ? 'Amount to move' : 'Requested amount'}
+      hint={returning ? 'The requester sees your reason and can edit and resubmit.' : (KIND_HINT[kind] ?? 'Nothing changes until it is approved.')}
+      actions={actions}
+      footerNotice={footerNotice}
+      dirty={returning && reason.trim() !== ''}
+      closeDisabled={busy}
+      onClose={onClose}
+    >
+      {error && <div className="program-banner error" role="alert">{error}</div>}
+      {!approval && !error && <p className="ld-muted" aria-busy="true">Loading…</p>}
 
-        {approval && (
-          <>
-            <div className="ld-panel-status">
-              <ProgramPill value={approval.status_label} />
-              {approval.amount != null && <b className="ld-amount">{peso(approval.amount)}</b>}
-            </div>
+      {approval && (
+        <>
+          <dl className="ld-fields">
+            <div><dt>Project</dt><dd>{approval.project ? `${approval.project.title} · ${approval.project.code}` : '—'}</dd></div>
+            <div><dt>Requested by</dt><dd>{approval.requested_by ? `${approval.requested_by.name}${approval.requested_by.role ? ` (${approval.requested_by.role})` : ''}` : '—'}</dd></div>
+            <div><dt>Submitted</dt><dd>{formatDateTime(approval.created_at)}</dd></div>
+            {approval.resubmitted_at && <div><dt>Resubmitted</dt><dd>{formatDateTime(approval.resubmitted_at)}</dd></div>}
+            {approval.reviewed_at && <div><dt>Decided</dt><dd>{approval.reviewed_by ?? '—'} · {formatDateTime(approval.reviewed_at)}</dd></div>}
+          </dl>
+          {approval.justification?.trim()
+            ? <DetailNote label="Justification">“{approval.justification.trim()}”</DetailNote>
+            : <div className="dm-note is-empty" role="note">No justification</div>}
 
-            <dl className="ld-fields">
-              <div><dt>Type</dt><dd>{approval.type_label}</dd></div>
-              <div><dt>Project</dt><dd>{approval.project ? `${approval.project.title} · ${approval.project.code}` : '—'}</dd></div>
-              <div><dt>Requested by</dt><dd>{approval.requested_by ? `${approval.requested_by.name}${approval.requested_by.role ? ` (${approval.requested_by.role})` : ''}` : '—'}</dd></div>
-              <div><dt>Submitted</dt><dd>{formatDateTime(approval.created_at)}</dd></div>
-              {approval.resubmitted_at && <div><dt>Resubmitted</dt><dd>{formatDateTime(approval.resubmitted_at)}</dd></div>}
-              {approval.reviewed_at && <div><dt>Decided</dt><dd>{approval.reviewed_by ?? '—'} · {formatDateTime(approval.reviewed_at)}</dd></div>}
-            </dl>
-            {approval.justification?.trim()
-              ? <p className="pa-remark">“{approval.justification.trim()}”</p>
-              : <p className="pa-remark is-empty">No justification</p>}
+          {lastReturn && (
+            <DetailNote label={`Returned ${formatDateTime(lastReturn.at)}${lastReturn.by ? ` · ${lastReturn.by}` : ''}`} tone="risk">
+              <span aria-hidden="true">↩</span> Reason: “{lastReturn.reason}”
+            </DetailNote>
+          )}
 
-            <h3 className="ld-panel-sub">Status history</h3>
-            <ol className="pa-history">
-              {approval.history.map((entry, index) => (
-                <li key={`${entry.event}-${index}`}>
-                  <span aria-hidden="true">{HISTORY_ICON[entry.event] ?? '•'}</span>{' '}
-                  <b>{entry.label}</b> {formatDateTime(entry.at)}{entry.by ? ` · ${entry.by}` : ''}
-                  {entry.reason && <div className="ld-reason">Reason: “{entry.reason}”</div>}
-                </li>
-              ))}
-            </ol>
-            {approval.project?.id != null && (
-              <Link className="pa-audit-link" to={`/program-audit?project=${approval.project.id}`}>
-                View in audit trail
-              </Link>
-            )}
+          {Details && (
+            <>
+              <h3 className="ld-panel-sub">{detailTitle}</h3>
+              <Details details={approval.details} />
+            </>
+          )}
 
-            {Details && (
-              <>
-                <h3 className="ld-panel-sub">{detailTitle}</h3>
-                <Details details={approval.details} />
-              </>
-            )}
+          <h3 className="ld-panel-sub">Attachments</h3>
+          <DocumentList type="approval" id={approval.id} documents={approval.documents} emptyText="No attachments" />
 
-            <h3 className="ld-panel-sub">Attachments</h3>
-            <DocumentList type="approval" id={approval.id} documents={approval.documents} emptyText="No attachments" />
-
-            {approval.blocked_text && approval.status === 'pending' && (
-              <p className="ld-waiting"><span aria-hidden="true">⚠</span> {approval.blocked_text}</p>
-            )}
-
-            {approval.can_decide && (
-              <div className="ld-panel-actions pa-panel-actions">
-                {liquidationWarning && (
-                  <p className="ld-waiting pa-return-field" role="status"><span aria-hidden="true">⚠</span> {liquidationWarning}</p>
-                )}
-                {returning && (
-                  <div className="program-field pa-return-field">
-                    <label htmlFor="pa-return-reason">Reason for returning (required)</label>
-                    <textarea
-                      id="pa-return-reason"
-                      className="program-textarea"
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      placeholder="Tell the requester what to fix, e.g. add the work plan"
-                      autoFocus
-                    />
-                  </div>
-                )}
-                {actionError && <p className="program-error pa-return-field" role="alert">{actionError}</p>}
-                {returning ? (
-                  <>
-                    <button type="button" className="program-btn" disabled={busy} onClick={() => { setReturning(false); setActionError(''); }}>Cancel</button>
-                    <button type="button" className="program-btn primary" disabled={busy} onClick={() => decide('returned')}>
-                      {busy ? 'Returning…' : 'Return to requester'}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" className="program-btn" disabled={busy} onClick={() => { setReturning(true); setActionError(''); }}>Return</button>
-                    <button type="button" className="program-btn primary" disabled={busy} onClick={() => decide('approved')}>
-                      {busy ? 'Saving…' : 'Approve'}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </aside>
-    </div>
+          {approval.blocked_text && approval.status === 'pending' && (
+            <p className="ld-waiting"><span aria-hidden="true">⚠</span> {approval.blocked_text}</p>
+          )}
+        </>
+      )}
+    </DetailModal>
   );
 }

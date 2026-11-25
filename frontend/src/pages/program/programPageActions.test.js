@@ -16,9 +16,18 @@ test('decided approval cards keep "View details" but no audit trail link', () =>
   assert.doesNotMatch(approvals, /View in audit trail/);
 });
 
-test('the approval detail panel links to the audit trail for the project', () => {
-  assert.match(panel, /View in audit trail/);
-  assert.match(panel, /to=\{`\/program-audit\?project=\$\{approval\.project\.id\}`\}/);
+test('the approval detail modal has no status history or audit trail link, but keeps the latest return reason', () => {
+  assert.doesNotMatch(panel, /View in audit trail/);
+  assert.doesNotMatch(panel, /program-audit/);
+  assert.doesNotMatch(panel, /Status history/);
+  assert.match(panel, /entry\.event === 'returned' && entry\.reason/);
+  assert.match(panel, /<DetailModal/);
+});
+
+test('budget realignment shows FROM and TO cards with an arrow, old value struck through', () => {
+  assert.match(panel, /<LineItemMove side=\{details\.from\} label="From" \/>\s*<span className="dm-move-arrow"[^>]*>→<\/span>\s*<LineItemMove side=\{details\.to\} label="To" \/>/);
+  assert.match(panel, /className="dm-old"/);
+  assert.match(panel, /is-\$\{direction\}/);
 });
 
 test('Users and roles header has "Add user" and no top "Assign to project" button', () => {
