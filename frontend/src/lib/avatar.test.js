@@ -89,9 +89,9 @@ test('zooming keeps the center and the crop maps back to image pixels', () => {
 
 test('the profile page uploads, removes and shows clear errors', () => {
   const page = source('../pages/Profile.jsx');
-  assert.match(page, /label="Upload photo"/);
+  assert.match(page, /label="Change photo"/);
   assert.match(page, /<FileField[\s\S]*accept=\{AVATAR_ACCEPT\}[\s\S]*prepare=\{prepareAvatarFile\}/);
-  assert.match(page, /Remove photo/);
+  assert.match(page, /'Remove'/);
   assert.match(page, /role="alert"/);
   assert.match(page, /updateUser\(data\?\.user\)/);
   const api = source('../api/profile.js');

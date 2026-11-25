@@ -21,6 +21,12 @@ const FRAME = 240; // crop square on screen (px)
 const OUTPUT = 512; // JPEG sent to the server (it makes the final 256x256)
 const MAX_ZOOM = 3;
 const STEP = 10; // arrow-key move (px)
+const TOAST_MS = 3000; // success toast stays this long
+
+/** A rejected file's message, with the type/size rule (shown only here). */
+function rejectedText(problem) {
+  return `${problem} Allowed: ${AVATAR_HINT}.`;
+}
 
 function initialsFrom(name) {
   const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
@@ -149,6 +155,13 @@ export default function Profile() {
   // Free the preview's object URL when it is replaced or the page closes.
   useEffect(() => () => { if (image) URL.revokeObjectURL(image.src); }, [image]);
 
+  // The success toast disappears by itself.
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   const initials = initialsFrom(user?.name) || user?.avatar_initials || 'U';
   const hasPhoto = Boolean(user?.avatar_url);
 
@@ -156,11 +169,11 @@ export default function Profile() {
   function pick(file, problem) {
     setNotice('');
     if (problem || !file) {
-      setError(problem || '');
+      setError(problem ? rejectedText(problem) : '');
       return;
     }
     if (avatarFileError(file)) {
-      setError(avatarFileError(file));
+      setError(rejectedText(avatarFileError(file)));
       return;
     }
 
@@ -182,7 +195,7 @@ export default function Profile() {
       const data = await uploadAvatar(blob);
       updateUser(data?.user);
       setImage(null);
-      setNotice('Profile photo updated.');
+      setNotice('Photo updated');
     } catch (err) {
       setError(errorText(err, 'Could not save the photo. Please try again.'));
     } finally {
@@ -197,7 +210,7 @@ export default function Profile() {
     try {
       const data = await removeAvatar();
       updateUser(data?.user);
-      setNotice('Profile photo removed.');
+      setNotice('Photo removed');
     } catch (err) {
       setError(errorText(err, 'Could not remove the photo. Please try again.'));
     } finally {
@@ -214,16 +227,13 @@ export default function Profile() {
         </div>
       </div>
 
-      <section className="program-card profile-card" aria-labelledby="profile-photo-title">
-        <div className="program-card-head">
-          <div>
-            <h2 className="program-card-title" id="profile-photo-title">Profile photo</h2>
-            <p className="program-card-sub">JPG, PNG or WebP, up to 2 MB. Others see it next to your name.</p>
-          </div>
-        </div>
+      {/* Always in the page so screen readers announce the toast when it appears. */}
+      <div className="profile-toast-region" role="status" aria-live="polite">
+        {notice && <div className="profile-toast">{notice}</div>}
+      </div>
 
+      <section className="program-card profile-card" aria-label="Your profile">
         {error && <p className="profile-alert" role="alert">{error}</p>}
-        {notice && <p className="profile-notice" role="status">{notice}</p>}
 
         {image ? (
           <AvatarCropper image={image} saving={saving} onSave={save} onCancel={() => { setImage(null); setError(''); }} />
@@ -233,25 +243,23 @@ export default function Profile() {
             <div className="profile-who">
               <b>{user?.name ?? ''}</b>
               <span>{user?.email ?? ''}</span>
-              <em>{roleInfo?.label ?? ''}</em>
-            </div>
-            <div className="profile-upload">
-              <FileField
-                id="profile-photo-file"
-                label="Upload photo"
-                hint={AVATAR_HINT}
-                accept={AVATAR_ACCEPT}
-                prepare={prepareAvatarFile}
-                disabled={saving}
-                onChange={pick}
-              />
-            </div>
-            <div className="profile-actions">
-              {hasPhoto && (
-                <button type="button" className="program-btn danger" onClick={remove} disabled={saving}>
-                  {saving ? 'Removing…' : 'Remove photo'}
-                </button>
-              )}
+              {roleInfo?.label && <em className="profile-role">{roleInfo.label}</em>}
+              <div className="profile-links">
+                <FileField
+                  id="profile-photo-file"
+                  variant="link"
+                  label="Change photo"
+                  accept={AVATAR_ACCEPT}
+                  prepare={prepareAvatarFile}
+                  disabled={saving}
+                  onChange={pick}
+                />
+                {hasPhoto && (
+                  <button type="button" className="profile-link muted" onClick={remove} disabled={saving}>
+                    {saving ? 'Removing…' : 'Remove'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

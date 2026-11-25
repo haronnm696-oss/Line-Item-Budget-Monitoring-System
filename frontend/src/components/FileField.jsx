@@ -17,8 +17,13 @@ import { formatBytes } from '../lib/imagePrep';
  * while photos are being compressed). `accept` and `prepare` default to the
  * document rules; the profile photo passes its own (JPG/PNG/WebP, 2 MB, no
  * compression: it is cropped on the page).
+ *
+ * variant="link": only a text link (`label`) that opens the picker; no hint,
+ * file name or sizes (the page shows the result itself, e.g. the profile
+ * photo's crop dialog). The input is cleared after each choice so the same
+ * file can be picked again.
  */
-export default function FileField({ id, label, multiple = false, disabled = false, onChange, onPreparing, hint = FILE_HINT, accept = FILE_ACCEPT, prepare = prepareUpload }) {
+export default function FileField({ id, label, multiple = false, disabled = false, onChange, onPreparing, hint = FILE_HINT, accept = FILE_ACCEPT, prepare = prepareUpload, variant }) {
   const [items, setItems] = useState([]);
   const [names, setNames] = useState([]);
   const [preparing, setPreparing] = useState(false);
@@ -52,7 +57,17 @@ export default function FileField({ id, label, multiple = false, disabled = fals
     }
     setItems(results.map((result, index) => ({ ...result, originalName: chosen[index].name })));
     const files = results.map((result) => result.file);
+    if (variant === 'link') input.value = '';
     onChange(multiple ? files : files[0], null);
+  }
+
+  if (variant === 'link') {
+    return (
+      <span className={`file-field file-field-link${disabled ? ' is-disabled' : ''}`}>
+        <input id={id} className="file-field-input" type="file" accept={accept} multiple={multiple} onChange={choose} disabled={disabled} />
+        <label htmlFor={id} className="file-field-link-control">{label}</label>
+      </span>
+    );
   }
 
   return (

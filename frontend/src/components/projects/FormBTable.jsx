@@ -132,7 +132,7 @@ export default function FormBTable({ formB, setup = null, onOpen, remaining = fa
   return (
     <div className="program-scroll">
       <table className="program-table fb-table">
-        <caption className="pa-sr-only">Line-item budget in R&amp;D Form B layout</caption>
+        <caption className="pa-sr-only">Line-item budget in Form B layout</caption>
         <thead>
           <tr>
             <th scope="col">Particulars</th>

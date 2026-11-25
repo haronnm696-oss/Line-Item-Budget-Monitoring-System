@@ -5,7 +5,7 @@ import { formBAmount, formBBlocker, formBHtml, formBPaper, formBTitle } from './
 // A Form B document as the backend returns it (FormBReportService), for any funder.
 function doc(short, name, signatories = []) {
   return {
-    header: { form: `${short} R&D Form B`, agency: name.toUpperCase(), title: 'Project Line-Item Budget', year: 'CY 2026' },
+    header: { form: `${short} Form B`, agency: name.toUpperCase(), title: 'Project Line-Item Budget', year: 'CY 2026' },
     details: [
       { label: 'Project Title', value: 'Demo <Project>' },
       { label: 'Implementing Agency', value: 'MSU' },
@@ -46,7 +46,7 @@ test('the demo totals print in the official layout', () => {
   for (const total of ['1,058,376.00', '351,600.00', '120,000.00', '1,648,400.00', '1,178,376.00', '2,000,000.00', '3,178,376.00']) {
     assert.ok(html.includes(total), `missing ${total}`);
   }
-  assert.ok(html.includes('MOST-BARMM R&amp;D Form B'));
+  assert.ok(html.includes('MOST-BARMM Form B'));
   assert.ok(html.includes('MINISTRY OF SCIENCE AND TECHNOLOGY - BARMM'));
   assert.ok(html.includes('One (1) Project Leader @ P8,800.00/mo. x 12 mos.'));
   assert.ok(html.includes('<td class="r">-</td>'), 'zero cell prints "-"');
@@ -70,7 +70,7 @@ test('signatories print only when set (labels and lines always)', () => {
 
 test('a DOST project shows DOST in title, column and footer and never MOST', () => {
   const html = formBHtml(doc('DOST', 'Department of Science and Technology'));
-  assert.ok(html.includes('DOST R&amp;D Form B'));
+  assert.ok(html.includes('DOST Form B'));
   assert.ok(html.includes('<th scope="col">DOST</th>'));
   assert.ok(html.includes('(To be filled-up by DOST)'));
   assert.ok(!html.includes('MOST'));
@@ -111,4 +111,13 @@ test('export is disabled without a funder or without line items', () => {
   assert.equal(formBBlocker({ form_b_blocker: noItems }), noItems);
   assert.equal(formBBlocker({ form_b_blocker: null }), null);
   assert.equal(formBBlocker(null), null);
+});
+
+test('the print title is the funder short name and "Form B", with no added R&D', () => {
+  const html = formBHtml(doc('MOST R&D', 'Ministry of Science and Technology - BARMM'));
+  assert.ok(html.includes('<div class="form-id">MOST R&amp;D Form B</div>'));
+  assert.ok(!html.includes('R&amp;D R&amp;D'));
+  const dost = formBHtml(doc('DOST', 'Department of Science and Technology'));
+  assert.ok(dost.includes('<div class="form-id">DOST Form B</div>'));
+  assert.ok(!dost.includes('R&amp;D'));
 });

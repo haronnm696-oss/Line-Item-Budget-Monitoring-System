@@ -125,7 +125,7 @@ function buildPrintHTML(title, subtitle, rows, meta) {
 
       <div class="footer">
         This is an immutable system audit log. Entries cannot be edited or deleted.<br />
-        Mindanao State University–Main Campus · R&D Form B · Line-Item Budget Monitoring System.
+        Mindanao State University–Main Campus · Form B · Line-Item Budget Monitoring System.
       </div>
       <script>window.print();</script>
     </body>
