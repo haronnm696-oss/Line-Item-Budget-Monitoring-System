@@ -25,6 +25,21 @@ class ProjectLeaderRule
 {
     public const SLUG = 'project-leader';
 
+    /** Registration review: a Project Leader account is approved with at most one project. */
+    public const ONE_PROJECT_MESSAGE = 'A Project Leader leads one project. Keep one project and remove the others.';
+
+    /**
+     * Refuse approving a Project Leader with more than one project row
+     * (registration review). Each row is still checked against the rules
+     * below when it is saved.
+     */
+    public static function ensureOneProject(string $roleSlug, array $assignments, string $field = 'assignments'): void
+    {
+        if ($roleSlug === self::SLUG && count($assignments) > 1) {
+            throw ValidationException::withMessages([$field => [self::ONE_PROJECT_MESSAGE]]);
+        }
+    }
+
     /** Active projects only (end date today or later, or not set). */
     public static function scopeActive(Builder $query): Builder
     {

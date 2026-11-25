@@ -155,27 +155,85 @@ class OneActiveProjectPerLeaderTest extends TestCase
             ->assertCreated();
     }
 
-    public function test_registration_review_refuses_two_active_projects_for_a_project_leader(): void
+    private function pendingApplicant(): User
     {
-        Notification::fake();
-        $third = AuditLogger::muted(fn () => $this->makeProject('WF-003', 'Third project'));
-        $pending = User::create([
+        return User::create([
             'name' => 'Pending Leader', 'first_name' => 'Pending', 'last_name' => 'Leader',
             'email' => 'pending.' . uniqid() . '@msumain.edu.ph', 'password' => Hash::make('password123'),
             'role_id' => null, 'is_active' => false, 'email_verified_at' => now(),
         ]);
+    }
 
-        $this->actingAs($this->programLeader)->postJson("/api/program/registrations/{$pending->id}/decision", [
-            'decision' => 'approved', 'role' => 'project-leader',
-            'assignments' => [['project_id' => $this->otherProject->id], ['project_id' => $third->id]],
-        ])->assertStatus(422)
-            // The second row is named (the first one already made them leader of WF-002).
-            ->assertJsonPath('errors', ['assignments.1.project_id' => ['Pending Leader already leads WF-002. A Project Leader leads one active project at a time.']]);
+    private function approve(User $pending, string $role, array $projects)
+    {
+        return $this->actingAs($this->programLeader)->postJson("/api/program/registrations/{$pending->id}/decision", [
+            'decision' => 'approved', 'role' => $role,
+            'assignments' => array_map(fn (Project $project) => ['project_id' => $project->id], $projects),
+        ]);
+    }
+
+    private function assertStillPending(User $pending): void
+    {
+        $pending->refresh();
+        $this->assertNull($pending->role_id, 'not approved');
         $this->assertSame(0, ProjectUser::where('user_id', $pending->id)->count(), 'nothing saved');
+    }
 
-        $this->postJson("/api/program/registrations/{$pending->id}/decision", [
-            'decision' => 'approved', 'role' => 'project-leader', 'assignments' => [['project_id' => $this->otherProject->id]],
-        ])->assertOk();
+    public function test_registration_review_refuses_two_projects_for_a_project_leader(): void
+    {
+        Notification::fake();
+        $third = AuditLogger::muted(fn () => $this->makeProject('WF-003', 'Third project'));
+        $pending = $this->pendingApplicant();
+
+        $this->approve($pending, 'project-leader', [$this->otherProject, $third])
+            ->assertStatus(422)
+            ->assertJsonPath('errors', ['assignments' => ['A Project Leader leads one project. Keep one project and remove the others.']]);
+        $this->assertStillPending($pending);
+
+        // Also when the second project is completed: the drawer takes one project.
+        $past = $this->makeLed('WF-004', $this->past(), $this->outsider);
+        ProjectUser::where('project_id', $past->id)->delete();
+        $this->approve($pending, 'project-leader', [$this->otherProject, $past])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('assignments');
+        $this->assertStillPending($pending);
+    }
+
+    public function test_registration_review_refuses_a_project_that_already_has_a_project_leader(): void
+    {
+        Notification::fake();
+        $pending = $this->pendingApplicant();
+
+        // WF-001 is led by $this->projectLeader.
+        $response = $this->approve($pending, 'project-leader', [$this->project])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['assignments.0.project_id']);
+        $message = $response->json('errors')['assignments.0.project_id'][0];
+        $this->assertStringContainsString('already has a Project Leader (' . $this->projectLeader->name . ')', $message);
+        $this->assertStillPending($pending);
+    }
+
+    public function test_registration_review_approves_a_project_leader_with_one_free_project(): void
+    {
+        Notification::fake();
+        $pending = $this->pendingApplicant();
+
+        $this->approve($pending, 'project-leader', [$this->otherProject])->assertOk();
+
+        $pending->refresh();
+        $this->assertSame('project-leader', $pending->primaryRole->slug);
+        $this->assertDatabaseHas('project_user', ['user_id' => $pending->id, 'project_id' => $this->otherProject->id]);
+        $this->assertSame(1, ProjectUser::where('user_id', $pending->id)->count());
+    }
+
+    public function test_registration_review_still_lets_a_research_assistant_have_two_projects(): void
+    {
+        Notification::fake();
+        $pending = $this->pendingApplicant();
+
+        $this->approve($pending, 'research-assistant', [$this->project, $this->otherProject])->assertOk();
+
+        $this->assertSame(2, ProjectUser::where('user_id', $pending->id)->count());
     }
 
     public function test_changing_the_account_role_to_project_leader_refuses_two_active_projects(): void
