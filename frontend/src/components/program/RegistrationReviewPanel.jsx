@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { decideRegistration } from '../../api/program';
 import { formatDateTime } from '../../lib/datetime';
 import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
+import {
+  ONE_PROJECT_HELP,
+  ONE_PROJECT_TRIMMED,
+  canAddProjectRow,
+  registrationProjectChoices,
+  rowsForRole,
+  singleProjectRole,
+} from '../../lib/registrationAssignments';
 
 let nextRowKey = 1;
 const newRow = () => ({ key: nextRowKey++, project_id: '' });
@@ -27,10 +35,15 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [trimNote, setTrimNote] = useState('');
   const titleRef = useRef(null);
 
   const programWide = role === 'program-leader';
   const roleLabel = roleOptions.find((option) => option.slug === role)?.label ?? '';
+  // A Project Leader leads one project: one slot, no "+ Add project", and
+  // projects that already have a Project Leader are disabled.
+  const singleProject = singleProjectRole(role);
+  const projectChoices = registrationProjectChoices(projects, role);
 
   useEffect(() => { titleRef.current?.focus(); }, []);
 
@@ -49,6 +62,14 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
     setRows((current) => [...current, newRow()]);
   }
 
+  function changeRole(next) {
+    const result = rowsForRole(rows, next, newRow, role);
+    setRows(result.rows);
+    setTrimNote(result.trimmed ? ONE_PROJECT_TRIMMED : '');
+    setRole(next);
+    setFieldErrors({});
+  }
+
   async function submit(decision) {
     setError('');
     const local = {};
@@ -56,7 +77,10 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
       if (!role) local.role = 'Choose an account role.';
       if (!programWide) {
         rows.forEach((row, index) => {
-          if (!row.project_id) local[`assignments.${index}.project_id`] = 'Choose a project.';
+          // The Project Leader's one slot may stay empty (no project yet).
+          if (!row.project_id && !singleProject) local[`assignments.${index}.project_id`] = 'Choose a project.';
+          const taken = projectChoices.find((project) => String(project.id) === String(row.project_id) && project.disabled);
+          if (taken) local[`assignments.${index}.project_id`] = taken.reason;
         });
       }
     } else if (!reason.trim()) {
@@ -76,7 +100,9 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
           role,
           // A Program Leader is program-wide: project rows are never sent.
           // The role on each project is the account role, so rows carry the project only.
-          assignments: programWide ? [] : rows.map((row) => ({ project_id: Number(row.project_id) })),
+          assignments: programWide ? [] : rows
+            .filter((row) => row.project_id || !singleProject)
+            .map((row) => ({ project_id: Number(row.project_id) })),
         }
         : { decision, remarks: reason.trim() };
       const data = await decideRegistration(user.id, payload);
@@ -134,7 +160,7 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
                 disabled={busy}
                 aria-invalid={fieldErrors.role ? 'true' : undefined}
                 aria-describedby={fieldErrors.role ? 'rr-role-error' : undefined}
-                onChange={(event) => { setRole(event.target.value); setFieldErrors({}); }}
+                onChange={(event) => changeRole(event.target.value)}
               >
                 <option value="">Choose a role</option>
                 {roleOptions.map((option) => (
@@ -145,7 +171,11 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
             </div>
 
             <h3 className="ld-panel-sub">Project assignments (optional)</h3>
-            {!programWide && <p className="ld-muted">The person works on each project in their account role{roleLabel ? ` (${roleLabel})` : ''}.</p>}
+            {!programWide && !singleProject && <p className="ld-muted">The person works on each project in their account role{roleLabel ? ` (${roleLabel})` : ''}.</p>}
+            {singleProject && <p className="ld-muted">{ONE_PROJECT_HELP}</p>}
+            {singleProject && trimNote && (
+              <p className="ld-muted" role="status"><span aria-hidden="true">ℹ</span> {trimNote}</p>
+            )}
             {programWide ? (
               <p className="ld-muted">
                 <span aria-hidden="true">ℹ</span> A Program Leader oversees every project, so no project rows are needed.
@@ -176,10 +206,11 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
                             aria-invalid={projectError ? 'true' : undefined}
                             onChange={(event) => updateRow(row.key, { project_id: event.target.value })}
                           >
-                            <option value="">Choose a project</option>
-                            {projects.map((project) => (
-                              <option key={project.id} value={String(project.id)}>
+                            <option value="">{singleProject ? 'No project yet' : 'Choose a project'}</option>
+                            {projectChoices.map((project) => (
+                              <option key={project.id} value={String(project.id)} disabled={project.disabled}>
                                 {project.title}{project.code ? ` · ${project.code}` : ''}
+                                {project.disabled ? ' — has a Project Leader' : ''}
                               </option>
                             ))}
                           </select>
@@ -187,7 +218,7 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
                         <p className="pu-ro-value rr-row-role">
                           {roleLabel ? `as ${roleLabel}` : 'Role: choose the account role above'}
                         </p>
-                        <button
+                        {!singleProject && <button
                           type="button"
                           className="program-btn"
                           disabled={busy}
@@ -195,7 +226,7 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
                           onClick={() => { setRows((current) => current.filter((item) => item.key !== row.key)); setFieldErrors({}); }}
                         >
                           Remove
-                        </button>
+                        </button>}
                         {rowError && (
                           <p className="program-error rr-row-error" role="alert">
                             <span aria-hidden="true">⚠</span> Project {index + 1}: {rowError}
@@ -205,11 +236,13 @@ export default function RegistrationReviewPanel({ user, projects, accountRoles, 
                     );
                   })}
                 </ol>
-                <div>
-                  <button type="button" className="program-btn" disabled={busy || projects.length === 0} onClick={addRow}>
-                    + Add project
-                  </button>
-                </div>
+                {canAddProjectRow(role) && (
+                  <div>
+                    <button type="button" className="program-btn" disabled={busy || projects.length === 0} onClick={addRow}>
+                      + Add project
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </>

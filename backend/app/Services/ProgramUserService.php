@@ -90,6 +90,10 @@ class ProgramUserService
             ]);
         }
 
+        // A Project Leader leads one project: one row at most. Each row is
+        // still checked below (no other leader, one active project).
+        ProjectLeaderRule::ensureOneProject((string) $roleSlug, $assignments);
+
         // Resolve every row up front; a second row for the same project is
         // named here (one person, one role per project).
         $rows = [];
