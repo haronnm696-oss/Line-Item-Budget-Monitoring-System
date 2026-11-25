@@ -148,6 +148,15 @@ export async function updateProgramUserRole(id, payload) {
   return response.data;
 }
 
+/**
+ * Transfer Program Leader role to an active account ({ user_id, password }).
+ * The caller is deactivated and signed out by the server.
+ */
+export async function transferProgramLeader(payload) {
+  const response = await client.post(ENDPOINTS.programTransferLeader, payload);
+  return response.data;
+}
+
 export async function assignToProject(payload) {
   const response = await client.post(ENDPOINTS.programAssignments, payload);
   return response.data;

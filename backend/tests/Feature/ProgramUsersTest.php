@@ -227,11 +227,23 @@ class ProgramUsersTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('message', 'Deactivated users cannot be assigned to projects.');
 
+        // One Program Leader: a second one is not reactivated while this one is active.
         $this->actingAs($leader)
             ->patchJson("/api/program/users/{$otherLeader->id}/status", ['is_active' => true])
+            ->assertStatus(422);
+
+        $this->assertFalse($otherLeader->fresh()->is_active);
+
+        // Any other account is reactivated as before.
+        $user = $this->userWithRole('researcher');
+        $this->actingAs($leader)
+            ->patchJson("/api/program/users/{$user->id}/status", ['is_active' => false, 'reason' => 'Contract ended'])
+            ->assertOk();
+        $this->actingAs($leader)
+            ->patchJson("/api/program/users/{$user->id}/status", ['is_active' => true])
             ->assertOk();
 
-        $this->assertTrue($otherLeader->fresh()->is_active);
+        $this->assertTrue($user->fresh()->is_active);
     }
 
     public function test_the_last_active_program_leader_cannot_be_deactivated_or_demoted(): void

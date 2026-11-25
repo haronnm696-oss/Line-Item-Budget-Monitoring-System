@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
+import { ACCOUNT_ROLE_OPTIONS, ALL_ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
 import { contactNumberCounter, contactNumberError, isEmailFormat } from '../../lib/authValidation';
 import ContactNumberInput from '../ContactNumberInput';
 import AcademicUnitFields from '../AcademicUnitFields';
@@ -70,6 +70,17 @@ export function ManageMenu({ user, onEdit, onRole, onAssignments, onStatus }) {
   const assignmentsHint = canEditAssignments
     ? undefined
     : (programWide ? 'Program Leaders already oversee all projects' : 'Reactivate the account first');
+  // One Program Leader: the last active one keeps the account and role
+  // (hand it over with "Transfer Program Leader role"); nobody deactivates
+  // themselves; an inactive Program Leader stays inactive while another is active.
+  const lastLeader = Boolean(user.is_last_program_leader);
+  const roleHint = lastLeader ? 'The only active Program Leader keeps this role. Use "Transfer Program Leader role".' : undefined;
+  const canDeactivate = !user.is_self && !lastLeader;
+  const deactivateHint = user.is_self
+    ? 'You cannot deactivate your own account'
+    : (lastLeader ? 'The only active Program Leader cannot be deactivated' : undefined);
+  const canReactivate = user.can_reactivate !== false;
+  const reactivateHint = canReactivate ? undefined : 'Another Program Leader is active; the system has one Program Leader';
 
   return (
     <div className="pu-menu-wrap">
@@ -90,7 +101,14 @@ export function ManageMenu({ user, onEdit, onRole, onAssignments, onStatus }) {
           <button type="button" role="menuitem" className="pu-menu-item" onClick={() => choose(onEdit)}>
             Edit details
           </button>
-          <button type="button" role="menuitem" className="pu-menu-item" onClick={() => choose(onRole)}>
+          <button
+            type="button"
+            role="menuitem"
+            className="pu-menu-item"
+            aria-disabled={lastLeader || undefined}
+            title={roleHint}
+            onClick={() => !lastLeader && choose(onRole)}
+          >
             Change account role
           </button>
           <button
@@ -108,11 +126,25 @@ export function ManageMenu({ user, onEdit, onRole, onAssignments, onStatus }) {
           </Link>
           <div className="pu-menu-sep" role="separator" />
           {user.is_active ? (
-            <button type="button" role="menuitem" className="pu-menu-item danger" onClick={() => choose(onStatus)}>
+            <button
+              type="button"
+              role="menuitem"
+              className="pu-menu-item danger"
+              aria-disabled={!canDeactivate || undefined}
+              title={deactivateHint}
+              onClick={() => canDeactivate && choose(onStatus)}
+            >
               Deactivate account
             </button>
           ) : (
-            <button type="button" role="menuitem" className="pu-menu-item" onClick={() => choose(onStatus)}>
+            <button
+              type="button"
+              role="menuitem"
+              className="pu-menu-item"
+              aria-disabled={!canReactivate || undefined}
+              title={reactivateHint}
+              onClick={() => canReactivate && choose(onStatus)}
+            >
               Reactivate account
             </button>
           )}
@@ -266,7 +298,7 @@ export function EditDetailsDialog({ user, busy, error, fieldErrors = {}, onSave,
 export function ChangeRoleDialog({ user, busy, error, onSave, onClose }) {
   const [role, setRole] = useState(user.role_slug ?? '');
   const [reason, setReason] = useState('');
-  const current = ACCOUNT_ROLE_OPTIONS.find((option) => option.slug === user.role_slug)?.label ?? user.role_label;
+  const current = ALL_ACCOUNT_ROLE_OPTIONS.find((option) => option.slug === user.role_slug)?.label ?? user.role_label;
   const next = ACCOUNT_ROLE_OPTIONS.find((option) => option.slug === role)?.label;
   const unchanged = role === user.role_slug;
 
@@ -281,6 +313,10 @@ export function ChangeRoleDialog({ user, busy, error, onSave, onClose }) {
             <div className="program-field">
               <label htmlFor="pu-role-select">Account role</label>
               <select id="pu-role-select" className="program-select" value={role} disabled={busy} onChange={(event) => setRole(event.target.value)}>
+                {/* Program Leader is never offered; shown only as the current role. */}
+                {user.role_slug === 'program-leader' && (
+                  <option value="program-leader" disabled>Program Leader (current)</option>
+                )}
                 {ACCOUNT_ROLE_OPTIONS.map((option) => (
                   <option key={option.slug} value={option.slug}>{option.label}</option>
                 ))}
@@ -367,6 +403,92 @@ export function StatusDialog({ user, busy, error, onSave, onClose }) {
               {busy ? 'Saving…' : deactivating ? 'Deactivate account' : 'Reactivate account'}
             </button>
           )}
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/**
+ * Transfer Program Leader role: pick an active account, confirm with your
+ * password. The person leaves their project teams (a Program Leader
+ * oversees every project) and you are deactivated and signed out.
+ * candidates: active, non-Program-Leader accounts ({ id, name, role_label, project_ids }).
+ */
+export function TransferProgramLeaderDialog({ candidates, busy, error, fieldErrors = {}, onSave, onClose }) {
+  const [userId, setUserId] = useState('');
+  const [password, setPassword] = useState('');
+  const [local, setLocal] = useState({});
+  const errors = { ...fieldErrors, ...local };
+  const chosen = (candidates ?? []).find((person) => String(person.id) === userId);
+  const projectCount = chosen?.project_ids?.length ?? 0;
+
+  function submit(event) {
+    event.preventDefault();
+    const next = {};
+    if (!userId) next.user_id = 'Choose the new Program Leader.';
+    if (!password) next.password = 'Enter your password to confirm.';
+    setLocal(next);
+    if (Object.keys(next).length) return;
+    onSave({ user_id: Number(userId), password });
+  }
+
+  return (
+    <Dialog title="Transfer Program Leader role" labelId="pu-transfer-title" busy={busy} onClose={onClose}>
+      <form className="pu-form" onSubmit={submit} noValidate>
+        {error && <div className="program-banner error" role="alert">{error}</div>}
+        <p className="pu-confirm">
+          The system has one Program Leader. The person you choose becomes the Program Leader;
+          your account is then deactivated and you are signed out.
+        </p>
+        <div className="program-field">
+          <label htmlFor="pu-transfer-user">New Program Leader</label>
+          <select
+            id="pu-transfer-user"
+            className="program-select"
+            value={userId}
+            disabled={busy}
+            aria-invalid={Boolean(errors.user_id) || undefined}
+            aria-describedby={errors.user_id ? 'pu-transfer-user-error' : undefined}
+            onChange={(event) => { setUserId(event.target.value); setLocal({ ...local, user_id: '' }); }}
+          >
+            <option value="">Choose an active account</option>
+            {(candidates ?? []).map((person) => (
+              <option key={person.id} value={String(person.id)}>
+                {person.name}{person.role_label ? ` · ${person.role_label}` : ''}
+              </option>
+            ))}
+          </select>
+          <FieldError id="pu-transfer-user-error" message={errors.user_id} />
+        </div>
+        {chosen && (
+          <p className="pu-confirm" role="status">
+            <span aria-hidden="true">ℹ</span>{' '}
+            {projectCount > 0
+              ? `${chosen.name} is removed from ${projectCount === 1 ? 'their project team' : `their ${projectCount} project teams`}, because a Program Leader oversees every project. Their records and history are kept. If they are the only Project Leader of an ongoing project, choose a new Project Leader in that project's set-up first.`
+              : `${chosen.name} has no project assignments.`}
+          </p>
+        )}
+        <div className="program-field">
+          <label htmlFor="pu-transfer-password">Your password</label>
+          <input
+            id="pu-transfer-password"
+            type="password"
+            className="program-input"
+            autoComplete="current-password"
+            value={password}
+            disabled={busy}
+            aria-invalid={Boolean(errors.password) || undefined}
+            aria-describedby={errors.password ? 'pu-transfer-password-error' : undefined}
+            onChange={(event) => { setPassword(event.target.value); setLocal({ ...local, password: '' }); }}
+          />
+          <FieldError id="pu-transfer-password-error" message={errors.password} />
+        </div>
+        <div className="program-modal-actions">
+          <button type="button" className="program-btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="program-btn danger" disabled={busy}>
+            {busy ? 'Transferring…' : 'Transfer and sign out'}
+          </button>
         </div>
       </form>
     </Dialog>

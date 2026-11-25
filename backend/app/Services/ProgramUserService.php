@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Notifications\AccountApprovedNotification;
 use App\Notifications\AccountRejectedNotification;
 use App\Notifications\AccountSetupNotification;
+use App\Notifications\ProgramLeaderTransferredNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -29,7 +30,7 @@ class ProgramUserService
         'finance-admin',
     ];
 
-    /** Roles a Program Leader can grant to a directly-created account. */
+    /** Every account role (directory filter and labels). */
     public const ACCOUNT_ROLES = [
         'program-leader',
         'project-leader',
@@ -37,6 +38,20 @@ class ProgramUserService
         'researcher',
         'finance-admin',
     ];
+
+    /**
+     * Roles that can be given through registration approval, Add user or a
+     * role change. The system has one Program Leader: that role moves only
+     * through transferProgramLeader().
+     */
+    public const ASSIGNABLE_ROLES = [
+        'project-leader',
+        'research-assistant',
+        'researcher',
+        'finance-admin',
+    ];
+
+    public const PROGRAM_LEADER_NOT_ASSIGNABLE = 'The Program Leader role cannot be assigned. The current Program Leader hands it over with "Transfer Program Leader role".';
 
     public const ROLE_LABELS = [
         'program-leader' => 'Program Leader',
@@ -78,7 +93,11 @@ class ProgramUserService
             throw ValidationException::withMessages(['remarks' => 'A reason for rejection is required.']);
         }
 
-        if ($decision === 'approved' && ! in_array($roleSlug, self::ACCOUNT_ROLES, true)) {
+        if ($decision === 'approved' && $roleSlug === 'program-leader') {
+            throw ValidationException::withMessages(['role' => self::PROGRAM_LEADER_NOT_ASSIGNABLE]);
+        }
+
+        if ($decision === 'approved' && ! in_array($roleSlug, self::ASSIGNABLE_ROLES, true)) {
             throw ValidationException::withMessages(['role' => 'Choose a valid role for this account.']);
         }
 
@@ -220,6 +239,12 @@ class ProgramUserService
 
     public function addUser(array $data, User $actor): User
     {
+        if (! in_array($data['role'] ?? null, self::ASSIGNABLE_ROLES, true)) {
+            throw ValidationException::withMessages(['role' => ($data['role'] ?? null) === 'program-leader'
+                ? self::PROGRAM_LEADER_NOT_ASSIGNABLE
+                : 'Choose a valid role for this account.']);
+        }
+
         $role = Role::where('slug', $data['role'])->firstOrFail();
         $email = strtolower(trim($data['email']));
         $employeeId = strtoupper(trim($data['employee_id']));
@@ -323,6 +348,8 @@ class ProgramUserService
             }
         }
 
+        $activeLeaders = $this->activeProgramLeaderCount();
+
         $users = $query
             ->with(['primaryRole', 'projectUsers.project', 'projectUsers.role'])
             ->orderBy('name')
@@ -332,7 +359,7 @@ class ProgramUserService
             ->get();
 
         return [
-            'users' => $users->map(fn (User $user) => $this->directoryRow($user, $actor))->values()->all(),
+            'users' => $users->map(fn (User $user) => $this->directoryRow($user, $actor, $activeLeaders))->values()->all(),
             // Project Leaders leading more than one active project (older data, never fixed automatically).
             'leader_conflicts' => ProjectLeaderRule::conflicts(),
             'meta' => [
@@ -405,9 +432,10 @@ class ProgramUserService
             ->all();
     }
 
-    protected function directoryRow(User $user, User $actor): array
+    protected function directoryRow(User $user, User $actor, int $activeLeaders): array
     {
         $slug = $user->primaryRole?->slug;
+        $isLeader = $slug === 'program-leader';
 
         return [
             'id' => $user->id,
@@ -425,6 +453,11 @@ class ProgramUserService
             // Program Leaders oversee all projects; any assignment rows they
             // still have are kept (and returned) but not shown as their scope.
             'program_wide' => $slug === 'program-leader',
+            // One Program Leader: the last active one cannot be deactivated
+            // or have their role changed, and an inactive one cannot come
+            // back while another is active (see setActive()).
+            'is_last_program_leader' => $isLeader && $user->is_active && $activeLeaders <= 1,
+            'can_reactivate' => ! $user->is_active && (! $isLeader || $activeLeaders === 0),
             'assignments' => $user->projectUsers
                 ->filter(fn (ProjectUser $assignment) => $assignment->project !== null)
                 ->sortBy(fn (ProjectUser $assignment) => $assignment->project->title)
@@ -717,6 +750,8 @@ class ProgramUserService
 
             if (! $isActive) {
                 $this->ensureNotLastProgramLeader($locked);
+            } else {
+                $this->ensureNoOtherActiveProgramLeader($locked);
             }
 
             $locked->update(['is_active' => $isActive]);
@@ -747,6 +782,10 @@ class ProgramUserService
 
     public function updatePrimaryRole(User $user, string $roleSlug, ?string $reason, User $actor): User
     {
+        if ($roleSlug === 'program-leader') {
+            throw ValidationException::withMessages(['role' => self::PROGRAM_LEADER_NOT_ASSIGNABLE]);
+        }
+
         $role = Role::where('slug', $roleSlug)->firstOrFail();
 
         $updated = AuditLogger::transaction(function () use ($user, $role, $reason, $actor) {
@@ -921,6 +960,144 @@ class ProgramUserService
         if ($otherLeaders === 0) {
             abort(422, 'At least one active Program Leader is required.');
         }
+    }
+
+    protected function activeProgramLeaderCount(): int
+    {
+        return User::query()
+            ->where('is_active', true)
+            ->whereHas('primaryRole', fn ($query) => $query->where('slug', 'program-leader'))
+            ->count();
+    }
+
+    /** One Program Leader: an inactive one is not reactivated while another is active. */
+    protected function ensureNoOtherActiveProgramLeader(User $user): void
+    {
+        if ($user->primaryRole?->slug !== 'program-leader') {
+            return;
+        }
+
+        $others = User::query()
+            ->where('is_active', true)
+            ->whereKeyNot($user->id)
+            ->whereHas('primaryRole', fn ($query) => $query->where('slug', 'program-leader'))
+            ->count();
+
+        if ($others > 0) {
+            abort(422, 'The system has one Program Leader and another Program Leader account is active, so this account cannot be reactivated.');
+        }
+    }
+
+    /**
+     * Hand the Program Leader role to another active account, confirmed with
+     * the current Program Leader's password. One transaction:
+     *  - the target's project memberships are removed (a Program Leader
+     *    oversees every project and holds no project rows). Refused, naming
+     *    the project, when the target is the only Project Leader of an
+     *    ongoing project: choose a replacement in that project's set-up
+     *    first. Expenses, payroll, personnel records and audit entries keep
+     *    pointing at the person.
+     *  - the target becomes Program Leader;
+     *  - the current Program Leader becomes inactive and is signed out.
+     * Both people are notified after the commit (a mailer failure is logged).
+     *
+     * @return array{user: User, removed_assignments: array<int, array{project_id: int, project: ?string, role: ?string}>}
+     */
+    public function transferProgramLeader(User $actor, User $target, string $password): array
+    {
+        if (! Hash::check($password, (string) $actor->password)) {
+            throw ValidationException::withMessages(['password' => 'The password is incorrect.']);
+        }
+
+        $leaderRole = Role::where('slug', 'program-leader')->firstOrFail();
+
+        $result = AuditLogger::transaction(function () use ($actor, $target, $leaderRole) {
+            // Lock both rows in id order so two transfers cannot deadlock.
+            $locked = User::whereKey([$actor->id, $target->id])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $from = $locked->get($actor->id);
+            $to = $locked->get($target->id);
+
+            if (! $from || ! $from->is_active || $from->primaryRole?->slug !== 'program-leader') {
+                abort(403, 'Only the active Program Leader can transfer the role.');
+            }
+            if (! $to || (int) $to->id === (int) $from->id) {
+                throw ValidationException::withMessages(['user_id' => 'Choose another person.']);
+            }
+            if (! $to->is_active || $to->role_id === null) {
+                throw ValidationException::withMessages(['user_id' => 'Choose an active, approved account.']);
+            }
+            if ($to->primaryRole?->slug === 'program-leader') {
+                throw ValidationException::withMessages(['user_id' => 'This person is already a Program Leader.']);
+            }
+            if ($this->activeProgramLeaderCount() > 1) {
+                abort(422, 'Another Program Leader account is still active. Deactivate it in Users and roles first, then transfer the role.');
+            }
+
+            // Their project rows go (a Program Leader has none); an ongoing
+            // project must keep its Project Leader.
+            $rows = ProjectUser::query()
+                ->where('user_id', $to->id)
+                ->with(['role', 'project'])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $byProject = $rows->groupBy('project_id');
+
+            foreach ($byProject as $projectRows) {
+                $project = $projectRows->first()->project;
+                if ($project && $projectRows->contains(fn (ProjectUser $row) => $row->role?->slug === 'project-leader')) {
+                    $this->ensureNotOnlyProjectLeader($project, $to, true);
+                }
+            }
+
+            $removed = [];
+            foreach ($byProject as $projectId => $projectRows) {
+                $role = $projectRows->first()->role;
+                $title = $projectRows->first()->project?->title;
+                $projectRows->each(fn (ProjectUser $row) => $row->delete());
+                $removed[] = ['project_id' => (int) $projectId, 'project' => $title, 'role' => $role?->slug];
+
+                AuditTrail::record($from, 'assignment_removed', $to, [
+                    'project_id' => (int) $projectId,
+                    'project' => $title,
+                    'role' => $role?->slug,
+                    'role_label' => $role?->name,
+                ], [], 'Became Program Leader (role transfer).');
+            }
+
+            $oldRole = $to->primaryRole;
+            $to->update(['role_id' => $leaderRole->id]);
+            $from->update(['is_active' => false]);
+            $this->revokeSessions($from);
+
+            AuditTrail::record(
+                $from,
+                'program_leader_transferred',
+                $to,
+                ['from_user_id' => (int) $from->id, 'from' => $from->name, 'role' => $oldRole?->slug],
+                ['to_user_id' => (int) $to->id, 'to' => $to->name, 'role' => 'program-leader']
+                    + ($removed ? ['assignments_removed' => $removed] : [])
+            );
+
+            return ['from' => $from->fresh(), 'to' => $to->fresh()->load('primaryRole'), 'removed' => $removed];
+        });
+
+        // A removed Finance/Admin may leave approved expenses with no one to verify them.
+        $this->rerouteProjects(array_values(array_unique(array_column($result['removed'], 'project_id'))), $result['to']);
+
+        $projects = array_values(array_filter(array_column($result['removed'], 'project')));
+        foreach ([$result['from'], $result['to']] as $person) {
+            try {
+                Notification::send($person, new ProgramLeaderTransferredNotification($result['from'], $result['to'], $projects));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Program Leader transfer email could not be sent.', [
+                    'user_id' => $person->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return ['user' => $result['to'], 'removed_assignments' => $result['removed']];
     }
 
     protected function pendingPayload(User $user): array

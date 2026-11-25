@@ -4,14 +4,10 @@ import ContactNumberInput from '../ContactNumberInput';
 import AcademicUnitFields from '../AcademicUnitFields';
 import { academicUnitErrors, academicUnitPayload } from '../../lib/academicUnits';
 import { useAcademicUnits } from '../../lib/useAcademicUnits';
+import { ACCOUNT_ROLE_OPTIONS } from '../../lib/roles';
 
-const ROLES = [
-  ['program-leader', 'Program Leader'],
-  ['project-leader', 'Project Leader'],
-  ['research-assistant', 'Research Assistant'],
-  ['researcher', 'Researcher'],
-  ['finance-admin', 'Finance/Admin Staff'],
-];
+// Never Program Leader (one Program Leader; see lib/roles.js).
+const ROLES = ACCOUNT_ROLE_OPTIONS.map((option) => [option.slug, option.label]);
 
 export default function ProgramAddUserModal({ open, busy = false, error = '', onSave, onClose }) {
   const [form, setForm] = useState({
