@@ -408,13 +408,10 @@ class ProgramDashboardService
             // Same project scope as the Overview (soft-deleted projects are
             // excluded there), so the Pending count matches its KPI.
             ->whereHas('project')
-            // The Type filter matches the row labels: Fund release, Realignment,
-            // Liquidation, Payroll (raw type slugs are accepted too).
+            // The Type filter values come from ApprovalRequest::FILTER_TYPES
+            // (raw type slugs are accepted too).
             ->when($filters['type'] ?? null, function ($query, $type) {
-                $query->where('type', [
-                    'fund-release' => 'disbursement',
-                    'realignment' => 'budget_realignment',
-                ][$type] ?? $type);
+                $query->where('type', ApprovalRequest::storedTypeForFilter($type));
             })
             ->when($filters['project'] ?? null, fn ($query, $project) => $query->where('project_id', $project))
             ->when($filters['funder'] ?? null, function ($query, $funder) {
@@ -463,6 +460,8 @@ class ProgramDashboardService
                 ->values()
                 ->all(),
             'funders' => $this->funderOptions(),
+            // Type filter options (the same list the endpoint validates against).
+            'types' => ApprovalRequest::filterTypeOptions(),
         ];
     }
 

@@ -20,6 +20,57 @@ class ApprovalRequest extends Model implements HasDocuments
         'expense' => 'Expense verification',
     ];
 
+    /**
+     * Type filter of the Program Leader approvals list: filter value =>
+     * [stored type, option label]. The single list of filter types: the
+     * list endpoint validates against it and returns it as `types`, and the
+     * frontend renders its Type options from that. Every key of TYPES must
+     * appear here (tests check it).
+     */
+    public const FILTER_TYPES = [
+        'fund-release' => ['type' => 'disbursement', 'label' => 'Fund release'],
+        'realignment' => ['type' => 'budget_realignment', 'label' => 'Realignment'],
+        'liquidation' => ['type' => 'liquidation', 'label' => 'Liquidation'],
+        'payroll' => ['type' => 'payroll', 'label' => 'Payroll'],
+        'expense' => ['type' => 'expense', 'label' => 'Expense verification'],
+    ];
+
+    /**
+     * Values the Type filter accepts: "all", the filter values, and the raw
+     * stored type slugs (older links).
+     *
+     * @return array<int, string>
+     */
+    public static function filterTypeValues(): array
+    {
+        return array_values(array_unique(array_merge(
+            ['all'],
+            array_keys(self::FILTER_TYPES),
+            array_keys(self::TYPES)
+        )));
+    }
+
+    /** Stored type for a Type filter value (a raw stored slug maps to itself). */
+    public static function storedTypeForFilter(string $value): string
+    {
+        return self::FILTER_TYPES[$value]['type'] ?? $value;
+    }
+
+    /**
+     * Type filter options for the frontend, in display order.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public static function filterTypeOptions(): array
+    {
+        $options = [];
+        foreach (self::FILTER_TYPES as $value => $type) {
+            $options[] = ['value' => $value, 'label' => $type['label']];
+        }
+
+        return $options;
+    }
+
     protected $fillable = [
         'project_id', 'project_tranche_id', 'liquidation_id', 'type', 'title', 'description',
         'justification', 'amount', 'payload', 'requested_by', 'reviewed_by',
