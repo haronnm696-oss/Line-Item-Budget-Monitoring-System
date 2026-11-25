@@ -13,6 +13,8 @@ import { normalizeRole } from '../../lib/roles';
 import { isReadOnlyRole, transactionsEyebrow, transactionsTitle } from '../../lib/pageHead';
 import PageTitle from '../../components/PageTitle';
 import DocumentList from '../../components/leader/DocumentList';
+import DetailModal from '../../components/DetailModal';
+import ProgramPill from '../../components/program/ProgramPill';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
 import { peso } from '../../components/money';
 import { formatDate } from '../../lib/datetime';
@@ -215,20 +217,33 @@ export default function Transactions() {
       )}
 
       {docsFor && (
-        <div className="ld-panel-overlay" role="presentation" onClick={() => setDocsFor(null)}>
-          <aside className="ld-panel" role="dialog" aria-modal="true" aria-labelledby="tx-docs-title" onClick={(e) => e.stopPropagation()}>
-            <div className="ld-panel-head">
-              <div>
-                <div className="ld-panel-eyebrow">{docsFor.kind === 'payroll' ? 'Payroll' : 'Expense'} · {formatDate(docsFor.date)} · {peso(docsFor.amount)}</div>
-                <h2 className="ld-panel-title" id="tx-docs-title">{docsFor.description}</h2>
-              </div>
-              <button type="button" className="program-icon-btn" onClick={() => setDocsFor(null)} aria-label="Close panel">×</button>
-            </div>
-            {docsFor.kind === 'payroll'
-              ? (docsFor.batch_id ? <DocumentList type="payroll" id={docsFor.batch_id} /> : <p className="ld-muted">No payroll files.</p>)
-              : <DocumentList type="expense" id={docsFor.id} />}
-          </aside>
-        </div>
+        <DetailModal
+          titleId="tx-docs-title"
+          title={docsFor.description}
+          eyebrow={`${docsFor.kind === 'payroll' ? 'Payroll' : 'Expense'} · ${formatDate(docsFor.date)}`}
+          icon={docsFor.kind === 'payroll' ? '₱' : '▤'}
+          chips={(
+            <>
+              <ProgramPill value="Verified" />
+              <ProgramPill value={docsFor.kind === 'payroll' ? 'Payroll' : 'Expense'} />
+            </>
+          )}
+          amount={docsFor.amount}
+          amountCaption="Counted in Total spent"
+          onClose={() => setDocsFor(null)}
+        >
+          <dl className="ld-fields">
+            <div><dt>Date</dt><dd>{formatDate(docsFor.date)}</dd></div>
+            <div><dt>Line item</dt><dd>{docsFor.line_item ?? '—'}{docsFor.category ? ` (${docsFor.category})` : ''}</dd></div>
+            <div><dt>Verified by</dt><dd>{docsFor.verified_by ?? '—'}</dd></div>
+            {docsFor.payee && <div><dt>Payee</dt><dd>{docsFor.payee}</dd></div>}
+            {docsFor.reference_no && <div><dt>Reference</dt><dd>{docsFor.reference_no}</dd></div>}
+          </dl>
+          <h3 className="ld-panel-sub">Documents</h3>
+          {docsFor.kind === 'payroll'
+            ? (docsFor.batch_id ? <DocumentList type="payroll" id={docsFor.batch_id} /> : <p className="ld-muted">No payroll files.</p>)
+            : <DocumentList type="expense" id={docsFor.id} />}
+        </DetailModal>
       )}
     </div>
   );
