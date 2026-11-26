@@ -3634,16 +3634,20 @@ select.signin-input:disabled{
   .fin-row-actions{justify-content:flex-start}
   .fin-verify-note{text-align:left}
 }
-.fin-queue-card{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:14px 0;border-top:1px solid var(--pg2-line)}
-.fin-queue-card:first-of-type{border-top:none;padding-top:2px}
-.fin-queue-main{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
-.fin-queue-title{font-size:14px;overflow-wrap:anywhere}
-.fin-queue-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
 .fin-note{margin:12px 0 0;padding:12px 14px;border-radius:10px;background:var(--pg-page);font-size:12.5px;color:var(--pg-muted);line-height:1.5}
 .res-cat{display:inline-block;padding:2px 8px;border-radius:6px;background:var(--pg-neutral-bg);color:var(--pg-neutral);font-size:11.5px;font-weight:700;letter-spacing:.03em}
+/* Finance Overview: 4 KPI cards (To verify is the wider hero), RA-style rows without a pill. */
+.ld-page .pl-kpi-grid.fin-kpi-grid{grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr))}
+.fin-recent-row{grid-template-columns:minmax(0,1fr) 110px 130px}
+.fin-no-receipt{display:inline-block;margin-top:4px;font-size:12px;font-weight:650;color:var(--pg-risk)}
+@media (max-width: 1100px){
+  .ld-page .pl-kpi-grid.fin-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media (max-width: 900px){
-  .fin-queue-card{flex-direction:column}
-  .fin-queue-side{align-items:flex-start}
+  .ld-page .pl-kpi-grid.fin-kpi-grid{grid-template-columns:1fr}
+  .fin-recent-row{grid-template-columns:minmax(0,1fr) auto}
+  .fin-recent-row .ra-recent-date{grid-column:1;grid-row:2}
+  .fin-recent-row .ra-recent-amount{grid-column:2;grid-row:2}
 }
 .ld-file-missing{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:12.5px;font-weight:650;color:var(--pg-watch)}
 .file-size-line{margin-top:4px;overflow-wrap:anywhere}
