@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ENDPOINTS } from '../../api/endpoints';
 import { useApiData } from '../../lib/useApiData';
 import { peso } from '../money';
+import Tip from '../Tip';
 
 /**
  * Balancing query for one line item (ProjectFinancialService::balancing):
@@ -32,30 +33,33 @@ export default function BalancingCheck({ projectId }) {
       {state.status === 'loading' && <p className="ld-muted" aria-busy="true">Loading line items…</p>}
       {state.status === 'ready' && items.length === 0 && <p className="ld-empty">This project has no line items yet.</p>}
       {row && (
-        <>
-          <div className="program-field">
+        <div className="ra-balance-row">
+          <div className="program-field ra-balance-line">
             <label htmlFor="ra-balance-line">Line item</label>
             <select id="ra-balance-line" className="program-select" value={String(row.id)} onChange={(event) => setChoice(event.target.value)}>
               {items.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.type})</option>)}
             </select>
           </div>
-          <BalanceFigures row={row} />
-          <p className="ld-muted">
-            Pending = expenses submitted but not yet verified ({peso(row.pending_expenses)}) plus approved purchase requests not yet fulfilled ({peso(row.pending_purchase_requests)}).
-          </p>
-        </>
+          <BalanceFigures
+            row={row}
+            pendingTip={`Pending = expenses submitted but not yet verified (${peso(row.pending_expenses)}) plus approved purchase requests not yet fulfilled (${peso(row.pending_purchase_requests)}).`}
+          />
+        </div>
       )}
     </section>
   );
 }
 
-export function BalanceFigures({ row }) {
+export function BalanceFigures({ row, pendingTip = null }) {
   const negative = Number(row.available) < 0;
   return (
     <div className="ra-balance-grid">
       <div className="ra-balance"><span>Allocated</span><b>{peso(row.allocated)}</b></div>
       <div className="ra-balance"><span>Spent</span><b>{peso(row.spent)}</b></div>
-      <div className="ra-balance"><span>Pending</span><b>{peso(row.pending)}</b></div>
+      <div className="ra-balance">
+        <span>Pending{pendingTip && <> <Tip icon text={pendingTip} label="What Pending includes" /></>}</span>
+        <b>{peso(row.pending)}</b>
+      </div>
       <div className={`ra-balance ${negative ? 'is-over' : 'is-available'}`}>
         <span>Available</span>
         <b>{negative ? '⚠ ' : ''}{peso(row.available)}</b>

@@ -10,9 +10,13 @@ import LoadState from '../../components/LoadState';
 import ProjectLine from '../../components/ProjectLine';
 import AnimatedNumber from '../../components/program/AnimatedNumber';
 import AssistantRecordPanel from '../../components/assistant/AssistantRecordPanel';
-import SubmissionTable from '../../components/assistant/SubmissionTable';
+import StagePill from '../../components/assistant/StagePill';
 import { useRecordActions } from '../../components/assistant/useRecordActions';
 import BalancingCheck from '../../components/assistant/BalancingCheck';
+import { peso } from '../../components/money';
+import { formatDate } from '../../lib/datetime';
+
+const RECENT_LIMIT = 5;
 
 /**
  * Research Assistant Overview: what they encoded and who has it now, and
@@ -56,11 +60,9 @@ export default function ResearchAssistantDashboard() {
         <LoadState state={overview} loadingText="Loading your submissions…">
           {data && (
             <>
-              <div className="pl-kpi-grid">
-                <Kpi hero to={`/my-submissions${q}${q ? '&' : '?'}tab=drafts`} label="Drafts" value={data.kpis.drafts} />
+              <div className="pl-kpi-grid ra-kpi-grid">
+                <ReturnedKpi value={data.kpis.returned} to={`/my-submissions${q}${q ? '&' : '?'}tab=returned`} />
                 <Kpi to={`/my-submissions${q}`} label="Waiting for Project Leader" value={data.kpis.waiting} />
-                <Kpi alert={data.kpis.returned > 0} to={`/my-submissions${q}${q ? '&' : '?'}tab=returned`} label="Returned to you" value={data.kpis.returned}
-                  sub={data.kpis.returned > 0 ? '⚠ Needs your correction' : null} />
                 <Kpi to={`/expenses${q}`} label="Missing receipts" value={data.kpis.missing_receipts} />
               </div>
 
@@ -71,10 +73,16 @@ export default function ResearchAssistantDashboard() {
                   </div>
                   <Link className="program-card-link" to={`/my-submissions${q}`}>View all</Link>
                 </div>
+                {data.kpis.drafts > 0 && (
+                  <p className="ra-drafts-note">
+                    {data.kpis.drafts} {data.kpis.drafts === 1 ? 'draft' : 'drafts'} not yet submitted ·{' '}
+                    <Link to={`/my-submissions${q}${q ? '&' : '?'}tab=drafts`}>Continue</Link>
+                  </p>
+                )}
                 {data.submissions.length === 0 ? (
                   <p className="ld-empty">You have not encoded anything yet. <Link to={`/expenses${q}`}>Record an expense</Link> to start.</p>
                 ) : (
-                  <SubmissionTable items={data.submissions} caption="My latest submissions" onOpen={(item) => update({ open: item.key })} />
+                  <RecentList items={data.submissions.slice(0, RECENT_LIMIT)} onOpen={(item) => update({ open: item.key })} />
                 )}
               </section>
 
@@ -92,12 +100,46 @@ export default function ResearchAssistantDashboard() {
   );
 }
 
-function Kpi({ label, value, sub = null, to, hero = false, alert = false }) {
+function Kpi({ label, value, to }) {
   return (
-    <Link to={to} className={`program-card pl-kpi ra-kpi${hero ? ' pl-kpi-hero' : ''}${alert ? ' ra-kpi-alert' : ''}`}>
+    <Link to={to} className="program-card pl-kpi ra-kpi">
       <div className="pl-kpi-head"><span className="pl-kpi-label">{label}</span></div>
       <div className="pl-kpi-value"><AnimatedNumber value={value} /></div>
-      {sub && <div className="pl-kpi-sub">{sub}</div>}
     </Link>
+  );
+}
+
+/**
+ * The hero card. It is not a link itself so "Fix now →" can be one (a link
+ * cannot hold another link); the button shows only when something came back.
+ */
+function ReturnedKpi({ value, to }) {
+  const any = value > 0;
+  return (
+    <div className="program-card pl-kpi pl-kpi-hero ra-kpi-returned">
+      <div className="pl-kpi-head"><span className="pl-kpi-label">Returned to you</span></div>
+      <div className="pl-kpi-value"><AnimatedNumber value={value} /></div>
+      {any && <div className="pl-kpi-sub">The Project Leader asked for corrections</div>}
+      {any && <Link to={to} className="program-btn ra-fix-btn">Fix now <span aria-hidden="true">→</span></Link>}
+    </div>
+  );
+}
+
+/** The newest submissions (the server sends them newest first). */
+function RecentList({ items, onOpen }) {
+  return (
+    <ul className="ra-recent" aria-label="My latest submissions">
+      {items.map((item) => (
+        <li key={item.key} className="ra-recent-row">
+          <div className="ra-recent-main">
+            <button type="button" className="ld-link ra-recent-title" onClick={() => onOpen(item)}>{item.title || item.reference}</button>
+            <div className="ra-recent-meta">{item.line_item || item.type_label}</div>
+          </div>
+          <StagePill status={item.workflow_status} type={item.type === 'purchase_request' ? 'purchase_request' : null} fulfilment={item.fulfilment} />
+          <span className="ra-recent-date">{formatDate(item.updated_at ?? item.submitted_at)}</span>
+          <span className="ra-recent-amount">{item.amount != null ? peso(item.amount) : ''}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
