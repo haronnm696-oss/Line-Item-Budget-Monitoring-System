@@ -8,7 +8,8 @@ import { SEARCH_DEBOUNCE_MS, recordLine, searchParam } from '../../lib/auditLogL
 import AuditLogList from '../../components/AuditLogList';
 
 // `q` (the search box) is searched on the server across all entries.
-const FILTERS = ['q', 'action', 'project', 'user', 'from', 'to'];
+// There is no User filter: the search box finds entries by user name.
+const FILTERS = ['q', 'action', 'project', 'from', 'to'];
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
@@ -83,9 +84,12 @@ function auditRow(entry, projects) {
 export default function ProgramAudit() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = Object.fromEntries(FILTERS.map((key) => [key, searchParams.get(key) ?? '']));
+  // An old link's ?user=<id>: used until the user's name is known, then
+  // replaced by that name in the search box (see the effect below).
+  const legacyUser = searchParams.get('user') ?? '';
   // JSON, not a joined string: search text may contain any character.
-  const requestKey = JSON.stringify(FILTERS.map((key) => filters[key]));
-  const hasFilters = FILTERS.some((key) => filters[key] !== '');
+  const requestKey = JSON.stringify([...FILTERS.map((key) => filters[key]), legacyUser]);
+  const hasFilters = FILTERS.some((key) => filters[key] !== '') || legacyUser !== '';
 
   // The search box: typed text is sent as `q` after a short pause. When the
   // URL's q changes from elsewhere (Clear filters, a link), the box follows.
@@ -123,7 +127,7 @@ export default function ProgramAudit() {
     const controller = new AbortController();
     controllerRef.current = controller;
     const values = JSON.parse(requestKey);
-    const params = Object.fromEntries(FILTERS.map((key, index) => [key, values[index]]));
+    const params = { ...Object.fromEntries(FILTERS.map((key, index) => [key, values[index]])), user: values[FILTERS.length] };
     try {
       const data = await fetchProgramAudit({ ...params, page: 1 }, { signal: controller.signal });
       if (controllerRef.current !== controller) return;
@@ -143,13 +147,25 @@ export default function ProgramAudit() {
     return () => controllerRef.current?.abort();
   }, [load, attempt]);
 
+  // ?user=<id> (old links, bookmarks): put that user's name in the search
+  // box instead, so the filter is visible and can be cleared.
+  useEffect(() => {
+    if (!legacyUser) return;
+    const name = (options.users ?? []).find((user) => String(user.id) === legacyUser)?.name;
+    if (!name) return;
+    const next = new URLSearchParams(window.location.search);
+    next.delete('user');
+    next.set('q', name);
+    setSearchParams(next, { replace: true });
+  }, [legacyUser, options.users, setSearchParams]);
+
   async function loadMore() {
     if (!result || moreBusy) return;
     setMoreBusy(true);
     setMoreError('');
     const key = result.key;
     try {
-      const data = await fetchProgramAudit({ ...filters, page: (result.meta.page ?? 1) + 1 });
+      const data = await fetchProgramAudit({ ...filters, user: legacyUser, page: (result.meta.page ?? 1) + 1 });
       setResult((current) => (current && current.key === key
         ? { ...current, entries: [...current.entries, ...(data.entries ?? [])], meta: data.meta ?? current.meta }
         : current));
@@ -172,7 +188,7 @@ export default function ProgramAudit() {
 
   function clearFilters() {
     const next = new URLSearchParams(window.location.search);
-    FILTERS.forEach((key) => next.delete(key));
+    [...FILTERS, 'user'].forEach((key) => next.delete(key));
     setSearchText('');
     setSearchParams(next, { replace: true });
   }
@@ -183,9 +199,8 @@ export default function ProgramAudit() {
   const entries = current?.entries ?? [];
   const total = current?.meta?.total ?? 0;
 
-  // Keep a linked project or user selectable even before options arrive.
+  // Keep a linked project selectable even before options arrive.
   const projectOptions = options.projects ?? [];
-  const userOptions = options.users ?? [];
 
   return (
     <>
@@ -226,18 +241,6 @@ export default function ProgramAudit() {
             )}
             {projectOptions.map((project) => (
               <option key={project.id} value={String(project.id)}>{project.title}</option>
-            ))}
-          </select>
-        </div>
-        <div className="program-field">
-          <label htmlFor="audit-user">User</label>
-          <select id="audit-user" className="program-select" value={filters.user} onChange={(event) => setFilter('user', event.target.value)}>
-            <option value="">All users</option>
-            {filters.user && !userOptions.some((u) => String(u.id) === filters.user) && (
-              <option value={filters.user}>Selected user</option>
-            )}
-            {userOptions.map((user) => (
-              <option key={user.id} value={String(user.id)}>{user.name}</option>
             ))}
           </select>
         </div>
