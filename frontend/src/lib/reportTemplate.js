@@ -150,14 +150,15 @@ function infoHtml(info, e) {
  *   body        the report's tables and notes (HTML)
  *   signatories [{ label, name, role }] (projectSignatories / programSignatories)
  *   landscape   A4 landscape (only reports that need it)
- *   generatedAt the generation time (footer)
  *   docTitle    the browser/PDF file title (defaults to the title)
+ * The page footer is "LIB Monitoring System" (left) and "Page X of Y"
+ * (right); the generation date is the info block's "Date Generated".
  */
 export function reportDocumentHtml({
   title, filters = '', info = [], body = '', signatories = [], landscape = false,
-  generatedAt = new Date(), docTitle, assetBase = defaultAssetBase(),
+  docTitle, assetBase = defaultAssetBase(),
 }, e = escapeHtml) {
-  const footer = `LIB Monitoring System · Generated ${reportGeneratedText(generatedAt)}`;
+  const footer = 'LIB Monitoring System';
   const footerFont = "font-family: 'Times New Roman', Times, Georgia, serif; font-size: 9pt; color: #333;";
   return `<!DOCTYPE html>
 <html lang="en">
