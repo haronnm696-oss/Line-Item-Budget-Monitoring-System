@@ -9,7 +9,6 @@ import { parseOpen } from '../../lib/assistantStatus';
 import { formatDate } from '../../lib/datetime';
 import LoadState from '../../components/LoadState';
 import ProjectLine from '../../components/ProjectLine';
-import ProgramPill from '../../components/program/ProgramPill';
 import FinanceRecordPanel from '../../components/finance/FinanceRecordPanel';
 import LateReceipts from '../../components/finance/LateReceipts';
 import { useVerifyActions } from '../../components/finance/useVerifyActions';
@@ -58,64 +57,85 @@ export default function FinanceDashboard() {
         <LoadState state={overview} loadingText="Loading verification data…">
           {data && (
             <>
-              <div className="pl-kpi-grid">
-                <Kpi to={`/verification-queue${q}`} label="To verify" value={kpis.to_verify}
-                  sub={othersOnly > 0 ? `${othersOnly} need another verifier` : ''} />
+              <div className="pl-kpi-grid fin-kpi-grid">
+                <Kpi hero to={`/verification-queue${q}`} label="To verify" value={kpis.to_verify}
+                  sub={[
+                    kpis.to_verify > 0 ? 'Approved by the Project Leader' : null,
+                    othersOnly > 0 ? `${othersOnly} need another verifier` : null,
+                  ].filter(Boolean).join(' · ')} />
                 <Kpi to={`/verification-queue${q}${q ? '&' : '?'}tab=verified`} label="Verified this month" value={kpis.verified_this_month} format={peso}
-                  sub={`${kpis.month_label} · ${plural(kpis.verified_this_month_expenses, 'expense')} · ${plural(kpis.verified_this_month_payroll, 'payroll batch', 'payroll batches')}`} />
+                  sub={`${plural(kpis.verified_this_month_expenses, 'expense')} · ${kpis.verified_this_month_payroll} payroll`} />
                 <Kpi alert={kpis.missing_receipts > 0} to={`/transaction-history${q}${q ? '&' : '?'}receipt=missing`} label="Missing receipts" value={kpis.missing_receipts}
                   sub={kpis.verified_expenses > 0
-                    ? `Receipt compliance ${formatPct(kpis.receipt_compliance_pct)} · ${kpis.verified_with_receipt} of ${kpis.verified_expenses}`
+                    ? `${formatPct(kpis.receipt_compliance_pct)} compliant`
                     : 'No verified expenses yet'} />
                 <Kpi to={`/transaction-history${q}`} label="Total spent" tip={SPENT_RULE} value={kpis.total_spent} format={peso}
                   sub={`${formatPct(kpis.utilization_pct)} of ${peso(kpis.total_budget)}`} />
               </div>
 
-              <div className="pl-row pl-row-main">
+              <section className="program-card">
+                <div className="program-card-head">
+                  <div>
+                    <div className="program-card-title">Verification queue</div>
+                  </div>
+                  <Link className="program-card-link" to={`/verification-queue${q}`}>View all</Link>
+                </div>
+                {data.queue.length === 0 ? (
+                  <p className="ld-empty">Nothing is waiting for verification.</p>
+                ) : (
+                  <ul className="ra-recent" aria-label="Waiting for verification">
+                    {data.queue.map((item) => (
+                      <Row key={item.key} item={item} onOpen={() => update({ open: item.key })}
+                        meta={[item.line_item || item.details, item.submitted_by?.name ? `${item.type === 'payroll' ? 'prepared' : 'encoded'} by ${item.submitted_by.name}` : null]}
+                        date={item.date ?? item.approved_at ?? item.submitted_at}
+                        note={(
+                          <>
+                            {item.type === 'expense' && !(item.receipts_count > 0) && <div className="fin-no-receipt">⚠ No receipt</div>}
+                            {item.blocked_text && <div className="ra-next fin-blocked">⊘ {item.blocked_text}</div>}
+                            {item.can_verify && (
+                              <div className="fin-row-actions ra-row-resubmit">
+                                <button type="button" className="program-btn sm primary" onClick={() => update({ open: item.key })}>Review</button>
+                              </div>
+                            )}
+                          </>
+                        )} />
+                    ))}
+                  </ul>
+                )}
+                {kpis.to_verify > data.queue.length && (
+                  <Link className="ld-more" to={`/verification-queue${q}`}>{kpis.to_verify - data.queue.length} more waiting</Link>
+                )}
+                <LateReceipts items={data.late_receipts} onOpen={(row) => update({ open: row.key })} />
+              </section>
+
+              {data.returned_to_you?.length > 0 && (
                 <section className="program-card">
                   <div className="program-card-head">
                     <div>
-                      <div className="program-card-title">Verification queue</div>
+                      <div className="program-card-title">Returned to you</div>
                     </div>
-                    <Link className="program-card-link" to={`/verification-queue${q}`}>View all</Link>
                   </div>
-                  {data.queue.length === 0 ? (
-                    <p className="ld-empty">Nothing is waiting for verification.</p>
-                  ) : (
-                    data.queue.map((item) => <QueueCard key={item.key} item={item} onOpen={() => update({ open: item.key })} />)
-                  )}
-                  {kpis.to_verify > data.queue.length && (
-                    <Link className="ld-more" to={`/verification-queue${q}`}>{kpis.to_verify - data.queue.length} more waiting</Link>
-                  )}
-                  <LateReceipts items={data.late_receipts} onOpen={(row) => update({ open: row.key })} />
+                  <ul className="ra-recent" aria-label="Returned to you">
+                    {data.returned_to_you.map((item) => (
+                      <Row key={item.key} item={item}
+                        meta={[`Ref. ${item.reference}`, item.line_item]}
+                        date={item.date ?? item.submitted_at}
+                        note={(
+                          <>
+                            {item.return_reason && <div className="ra-next is-returned">↩ Returned: {item.return_reason}</div>}
+                            {item.can_edit && (
+                              <div className="fin-row-actions ra-row-resubmit">
+                                <button type="button" className="program-btn sm primary" disabled={actions.busyKey === item.key} onClick={() => actions.resubmit(item)}>
+                                  {actions.busyKey === item.key ? 'Opening…' : (item.workflow_status === 'returned' ? 'Edit and resubmit' : 'Edit and submit')}
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )} />
+                    ))}
+                  </ul>
                 </section>
-
-                {data.returned_to_you?.length > 0 && (
-                  <section className="program-card">
-                    <div className="program-card-head">
-                      <div>
-                        <div className="program-card-title">Returned to you</div>
-                      </div>
-                    </div>
-                    <ul className="ld-mini-list">
-                      {data.returned_to_you.map((item) => (
-                        <li key={item.key}>
-                          <div>
-                            <b>{item.reference} · {peso(item.amount)}</b>
-                            <span>{item.title}</span>
-                            {item.return_reason && <span>↩ Returned: {item.return_reason}</span>}
-                          </div>
-                          {item.can_edit && (
-                            <button type="button" className="program-btn sm primary" disabled={actions.busyKey === item.key} onClick={() => actions.resubmit(item)}>
-                              {actions.busyKey === item.key ? 'Opening…' : (item.workflow_status === 'returned' ? 'Edit and resubmit' : 'Edit and submit')}
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-              </div>
+              )}
 
               <section className="program-card">
                 <div className="program-card-head">
@@ -127,33 +147,13 @@ export default function FinanceDashboard() {
                 {data.recently_verified.length === 0 ? (
                   <p className="ld-empty">You have not verified anything on this project yet.</p>
                 ) : (
-                  <div className="ra-table-wrap">
-                    <table className="program-table ld-table ra-table">
-                      <caption className="pa-sr-only">Recently verified</caption>
-                      <thead>
-                        <tr>
-                          <th scope="col">Date</th>
-                          <th scope="col">Reference</th>
-                          <th scope="col">Description</th>
-                          <th scope="col">Category</th>
-                          <th scope="col" className="num">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.recently_verified.map((item) => (
-                          <tr key={item.key}>
-                            <td data-label="Date">{formatDate(item.date ?? item.verified_at)}</td>
-                            <td data-label="Reference">
-                              <button type="button" className="ld-link" onClick={() => update({ open: item.key })}>{item.reference}</button>
-                            </td>
-                            <td data-label="Description">{item.title}</td>
-                            <td data-label="Category">{item.category ? <span className="res-cat">{item.category}</span> : null}</td>
-                            <td data-label="Amount" className="num ld-amount">{peso(item.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="ra-recent" aria-label="Recently verified">
+                    {data.recently_verified.map((item) => (
+                      <Row key={item.key} item={item} onOpen={() => update({ open: item.key })}
+                        meta={[`Ref. ${item.reference}`, item.category]}
+                        date={item.date ?? item.verified_at} />
+                    ))}
+                  </ul>
                 )}
               </section>
             </>
@@ -178,7 +178,7 @@ function plural(n, one, many = `${one}s`) {
  * (Tip); the label then sits outside the link (a link cannot hold a
  * button) and the figure below it opens the page.
  */
-function Kpi({ label, value, sub, to, format, tip = null, alert = false }) {
+function Kpi({ label, value, sub, to, format, tip = null, alert = false, hero = false }) {
   const figure = (
     <>
       <div className="pl-kpi-value">{format ? format(value) : Number(value || 0).toLocaleString('en-PH')}</div>
@@ -194,43 +194,31 @@ function Kpi({ label, value, sub, to, format, tip = null, alert = false }) {
     );
   }
   return (
-    <Link to={to} className={`program-card pl-kpi ra-kpi${alert ? ' ra-kpi-alert' : ''}`}>
+    <Link to={to} className={`program-card pl-kpi ra-kpi${hero ? ' pl-kpi-hero' : ''}${alert ? ' ra-kpi-alert' : ''}`}>
       <div className="pl-kpi-head"><span className="pl-kpi-label">{label}</span></div>
       {figure}
     </Link>
   );
 }
 
-/** One record waiting for verification, with Verify / Reject when this user may verify. */
-function QueueCard({ item, onOpen }) {
-  const receipt = item.type === 'expense'
-    ? (item.receipts_count > 0
-      ? <ProgramPill value="Receipt attached" tone="healthy" icon="✓" />
-      : <ProgramPill value="No receipt" tone="risk" icon="!" />)
-    : null;
-
+/**
+ * One list row in the RA Overview style: title (opens the review panel
+ * when `onOpen` is given), a meta line, date and amount. No status pill:
+ * each list already says what its rows are.
+ */
+function Row({ item, meta, date, onOpen = null, note = null }) {
+  const title = item.title || item.reference;
   return (
-    <div className="fin-queue-card">
-      <div className="fin-queue-main">
-        <button type="button" className="ld-link" onClick={onOpen}>{item.reference}</button>
-        <div className="fin-queue-title">{item.title}</div>
-        {receipt}
-        <div className="ra-details">
-          {[item.line_item ? `Line item: ${item.line_item}` : item.details, item.submitted_by?.name ? `encoded by ${item.submitted_by.name}` : null].filter(Boolean).join(' · ')}
-        </div>
-        <div className="ra-details">
-          {item.approved_by ? `Approved by ${item.approved_by.name}${item.approved_at ? ` · ${formatDate(item.approved_at)}` : ''}` : item.approval_note}
-        </div>
-        {item.blocked_text && <div className="ra-next fin-blocked">⊘ {item.blocked_text}</div>}
+    <li className="ra-recent-row fin-recent-row">
+      <div className="ra-recent-main">
+        {onOpen
+          ? <button type="button" className="ld-link ra-recent-title" onClick={onOpen}>{title}</button>
+          : <div className="ra-recent-title">{title}</div>}
+        <div className="ra-recent-meta">{meta.filter(Boolean).join(' · ')}</div>
+        {note}
       </div>
-      <div className="fin-queue-side">
-        <b className="ld-amount">{peso(item.amount)}</b>
-        {item.can_verify && (
-          <div className="fin-row-actions">
-            <button type="button" className="program-btn sm primary" onClick={onOpen}>Review</button>
-          </div>
-        )}
-      </div>
-    </div>
+      <span className="ra-recent-date">{date ? formatDate(date) : ''}</span>
+      <span className="ra-recent-amount">{item.amount != null ? peso(item.amount) : ''}</span>
+    </li>
   );
 }
