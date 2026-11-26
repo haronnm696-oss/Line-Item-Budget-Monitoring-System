@@ -199,8 +199,8 @@ export function reportDocumentHtml({
   .rt-note { font-style: italic; margin: 6px 0 0; }
   .rt-sigs { display: grid; column-gap: 28px; margin-top: 36px; break-inside: avoid; page-break-inside: avoid; }
   .rt-sig-label { margin-bottom: 30px; }
-  .rt-sig-name { font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; min-height: 1.4em; padding: 0 2px 1px; }
-  .rt-sig-role { margin-top: 2px; }
+  .rt-sig-name { font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; min-height: 1.4em; padding: 0 2px 1px; text-align: center; }
+  .rt-sig-role { margin-top: 2px; text-align: center; }
 </style>
 </head>
 <body>
