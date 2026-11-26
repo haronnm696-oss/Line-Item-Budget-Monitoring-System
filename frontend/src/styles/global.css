@@ -3563,6 +3563,31 @@ select.signin-input:disabled{
 .ra-balance.is-over{border-color:#F1CFCA;background:var(--pg-risk-bg)}
 .ra-balance.is-over b{color:var(--pg-risk)}
 
+/* Overview: 3 KPI cards (Returned to you is the hero), recent list, one-row balancing. */
+.ld-page .pl-kpi-grid.ra-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.program-shell .ra-kpi-returned .ra-fix-btn{
+  margin-top:auto;align-self:flex-start;min-height:44px;display:inline-flex;align-items:center;gap:6px;
+  background:#fff;color:var(--pg-brand);border-color:#fff;font-weight:700;text-decoration:none;
+}
+.program-shell .ra-kpi-returned .ra-fix-btn:hover{background:#FBF3DF}
+.program-shell .ra-kpi-returned .ra-fix-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.ra-drafts-note{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:#FBF3DF;border:1px solid #EFE3C4;font-size:13px;color:var(--pg2-ink)}
+.ra-drafts-note a{color:var(--pg-brand);font-weight:700}
+.ra-recent{list-style:none;margin:0;padding:0}
+.ra-recent-row{display:grid;grid-template-columns:minmax(0,1fr) auto 110px 130px;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--pg2-line)}
+.ra-recent-row:first-child{border-top:none}
+.ra-recent-main{min-width:0}
+.ra-recent-title{font-size:13.5px;font-weight:700;text-align:left;overflow-wrap:anywhere}
+.ra-recent-meta{font-size:12px;color:var(--pg-muted);margin-top:2px;overflow-wrap:anywhere}
+.ra-recent-row .program-pill{margin-top:0;justify-self:start}
+.ra-recent-date{font-size:12.5px;color:var(--pg-muted);white-space:nowrap}
+.ra-recent-amount{font-size:13.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ra-balance-row{display:grid;grid-template-columns:minmax(200px,1.3fr) 4fr;gap:10px;align-items:end}
+.ra-balance-row .ra-balance-line{margin:0}
+.ra-balance-row .ra-balance-grid{margin-top:0}
+.ra-balance-row .ra-balance{padding:8px 12px}
+.ra-balance-row .ra-balance span{display:inline-flex;align-items:center;gap:2px}
+
 .ra-inline-field{min-width:170px}
 .ra-inline-form{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .ra-inline-form .program-field{min-width:240px;margin:0}
@@ -3589,6 +3614,12 @@ select.signin-input:disabled{
   .ra-table td{border:none;padding:3px 0;text-align:left}
   .ra-table td.num{text-align:left}
   .ra-inline-form .program-field{min-width:0;flex:1 1 100%}
+  .ld-page .pl-kpi-grid.ra-kpi-grid{grid-template-columns:1fr}
+  .ra-balance-row{grid-template-columns:1fr}
+  .ra-recent-row{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}
+  .ra-recent-main{grid-column:1 / -1}
+  .ra-recent-date{grid-column:1}
+  .ra-recent-amount{grid-column:2;grid-row:3}
 }
 
 /* ------------------------------------------------------------------
