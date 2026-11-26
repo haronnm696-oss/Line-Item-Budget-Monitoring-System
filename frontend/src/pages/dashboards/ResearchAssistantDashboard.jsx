@@ -109,19 +109,14 @@ function Kpi({ label, value, to }) {
   );
 }
 
-/**
- * The hero card. It is not a link itself so "Fix now →" can be one (a link
- * cannot hold another link); the button shows only when something came back.
- */
+/** The hero card: the whole card opens My submissions → Returned, at any count. */
 function ReturnedKpi({ value, to }) {
-  const any = value > 0;
   return (
-    <div className="program-card pl-kpi pl-kpi-hero ra-kpi-returned">
+    <Link to={to} className="program-card pl-kpi ra-kpi pl-kpi-hero">
       <div className="pl-kpi-head"><span className="pl-kpi-label">Returned to you</span></div>
       <div className="pl-kpi-value"><AnimatedNumber value={value} /></div>
-      {any && <div className="pl-kpi-sub">The Project Leader asked for corrections</div>}
-      {any && <Link to={to} className="program-btn ra-fix-btn">Fix now <span aria-hidden="true">→</span></Link>}
-    </div>
+      {value > 0 && <div className="pl-kpi-sub">The Project Leader asked for corrections</div>}
+    </Link>
   );
 }
 
