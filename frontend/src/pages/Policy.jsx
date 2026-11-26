@@ -54,7 +54,7 @@ const CONTENT = {
       },
       {
         heading: 'Why we use it',
-        body: 'Your information is used to review and approve accounts, assign roles, monitor research budgets, generate reports, maintain audit trails, and protect the system from unauthorized access.',
+        body: 'Your information is used to review and approve accounts, assign roles, monitor research budgets, generate reports, maintain audit logs, and protect the system from unauthorized access.',
       },
       {
         heading: 'Who can access it',

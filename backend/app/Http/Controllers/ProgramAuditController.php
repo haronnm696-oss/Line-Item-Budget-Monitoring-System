@@ -7,12 +7,14 @@ use App\Models\AuditTrail;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\AuditEntryPresenter;
+use App\Support\AuditSearch;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 /**
- * Read-only Audit trail for the Program Leader (/program-audit).
- * Entries are filtered and paged on the server, newest first, and presented
+ * Read-only Audit log for the Program Leader (/program-audit).
+ * Entries are filtered (and searched with `q`, see AuditSearch) and paged
+ * on the server, newest first, and presented
  * as readable rows by AuditEntryPresenter. There is deliberately no route
  * that edits or deletes an entry.
  */
@@ -23,6 +25,7 @@ class ProgramAuditController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
             'action' => ['nullable', 'string', 'max:50'],
             'project' => ['nullable', 'integer'],
             'user' => ['nullable', 'integer'],
@@ -46,6 +49,7 @@ class ProgramAuditController extends Controller
                 '<=',
                 Carbon::createFromFormat('Y-m-d', $to, AuditEntryPresenter::TIMEZONE)->endOfDay()->utc()
             ));
+        AuditSearch::apply($query, $data['q'] ?? null);
 
         $total = (clone $query)->count();
         $page = (int) ($data['page'] ?? 1);

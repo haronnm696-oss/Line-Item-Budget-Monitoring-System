@@ -169,10 +169,11 @@
  *       ledger_pending: [{ kind, date, type, amount }] (expenses and payroll waiting for verification;
  *       the printed Expense Ledger lists verified rows only and notes these),
  *       signatories: { project_leader, finance_admin } (names or null).
- *   GET /api/report-signatories -> { program_leader } ("Approved by" on the Executive report and Audit trail print)
+ *   GET /api/report-signatories -> { program_leader } ("Approved by" on the Executive report and Audit log print)
  *
- * Audit trail:
- *   GET /api/audit?project_id=&action=&type=&date=
+ * Audit log (q: server-side search of user, record, action and project, all entries in scope):
+ *   GET /api/audit?q=&project_id=&action=&type=&date=
+ *   GET /api/program/audit?q=&action=&project=&user=&from=&to=&page=   (Program Leader)
  *
  * Project Leader pages (project-leader of the project; 403 otherwise):
  *   GET /api/projects/:id/leader-overview   -> { project, kpis, review, alerts, monthly_expenses, category_summary, transactions, requests }

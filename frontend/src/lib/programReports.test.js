@@ -27,7 +27,7 @@ test('the Executive report: all projects, funder filter, TOTAL row, Prepared by 
   assert.doesNotMatch(html, /Certified correct:/);
 });
 
-test('the Audit trail print: the filtered entries, filters line, Approved by the Program Leader', () => {
+test('the Audit log print: the filtered entries, filters line, Approved by the Program Leader', () => {
   const html = auditReportHtml({
     entries: [{ ts: 'Nov 1, 2026 9:00 AM', user: 'Fe <Admin>', action: 'verified', record: 'Paper', recordType: 'Expense', change: '—', ip: '1.2.3.4' }],
     actionLabel: (value) => ({ verified: 'Verified' }[value] ?? value),
@@ -36,7 +36,10 @@ test('the Audit trail print: the filtered entries, filters line, Approved by the
     programLeader: null,
     assetBase: '',
   });
-  assert.match(html, /<h1 class="rt-title">Audit Trail<\/h1>/);
+  // Printed upper-case ("AUDIT LOG") by the .rt-title style.
+  assert.match(html, /<h1 class="rt-title">Audit Log<\/h1>/);
+  assert.match(html, /\.rt-title \{[^}]*text-transform: uppercase/);
+  assert.doesNotMatch(html, /audit trail/i);
   assert.match(html, /Fe &lt;Admin&gt;/);
   assert.match(html, /<td>Verified<\/td>/);
   assert.match(html, /Approved by:<\/div>\s*<div class="rt-sig-name">&nbsp;<\/div>\s*<div class="rt-sig-role">Program Leader/);

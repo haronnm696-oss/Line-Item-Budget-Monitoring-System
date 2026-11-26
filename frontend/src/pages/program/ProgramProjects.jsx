@@ -149,7 +149,7 @@ function RowActions({ project, detailState }) {
     { label: 'View details', to: `/program-projects/${project.id}`, state: detailState },
     { label: 'Export Form B', to: `/program-reports?project=${encodeURIComponent(project.code ?? '')}&report=form-b&format=pdf` },
     { label: 'View approvals', to: `/program-approvals?project=${project.id}` },
-    { label: 'View audit trail', to: `/program-audit?project=${project.id}` },
+    { label: 'View audit log', to: `/program-audit?project=${project.id}` },
   ];
 
   return (

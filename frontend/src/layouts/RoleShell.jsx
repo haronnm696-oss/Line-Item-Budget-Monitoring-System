@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../context/AuthContext';
 import { formatInManila } from '../lib/datetime';
 import { greetingText, msUntilNextGreeting } from '../lib/greeting';
+import { PAGE_NAMES } from './roleNav';
 import PageErrorBoundary from '../components/program/PageErrorBoundary';
 import NotificationBell from '../components/NotificationBell';
 import UserAvatar from '../components/UserAvatar';
@@ -235,7 +236,7 @@ export default function RoleShell({ navGroups, navLabel, badges = {}, badgeLabel
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const profileRef = useRef(null);
   const greeting = useGreeting(user?.name);
-  const pageName = currentNavItem(navGroups, location.pathname)?.label ?? null;
+  const pageName = currentNavItem(navGroups, location.pathname)?.label ?? PAGE_NAMES[location.pathname] ?? null;
 
   useEffect(() => {
     const previous = document.title;

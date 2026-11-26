@@ -1,5 +1,5 @@
 /**
- * The program-wide printed reports (Executive report, Audit trail) in the
+ * The program-wide printed reports (Executive report, Audit log) in the
  * official report layout (reportTemplate.js): "Prepared by" the signed-in
  * user, "Approved by" the Program Leader. Kept free of JSX so it can be tested.
  */
@@ -68,7 +68,7 @@ export function executiveReportHtml({ payload, funderLabel, preparedBy, programL
   }, e);
 }
 
-/** Audit trail print: the filtered entries the page shows. */
+/** Audit log print: the filtered entries the page shows. */
 export function auditReportHtml({ entries, actionLabel, filters, preparedBy, programLeader, generatedAt = new Date(), assetBase }, e = escapeHtml) {
   const rows = (entries ?? []).map((a) => ({
     cells: [a.ts, a.user, actionLabel(a.action), a.record, a.recordType, a.change, a.ip],
@@ -83,7 +83,7 @@ export function auditReportHtml({ entries, actionLabel, filters, preparedBy, pro
   }, e);
 
   return reportDocumentHtml({
-    title: 'Audit Trail',
+    title: 'Audit Log',
     filters,
     info: [
       ['Coverage', 'All projects you are assigned to'],

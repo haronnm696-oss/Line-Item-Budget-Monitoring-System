@@ -29,7 +29,7 @@ const FEATURES = [
   {
     icon: 'shield',
     title: 'Approvals you can trace',
-    text: 'Requests, approvals, and rejections with remarks, all recorded in a permanent audit trail.',
+    text: 'Requests, approvals, and rejections with remarks, all recorded in a permanent audit log.',
   },
   {
     icon: 'receipt',

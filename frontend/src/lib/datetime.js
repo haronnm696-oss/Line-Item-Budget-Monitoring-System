@@ -42,6 +42,20 @@ export function formatDateTime(value, fallback = '—') {
   }, fallback);
 }
 
+/**
+ * Short form for compact lists: "Nov 26, 10:55 AM" in Philippine time.
+ * The year is added only when it is not the current Philippine year.
+ */
+export function formatShortDateTime(value, fallback = '—', now = new Date()) {
+  const date = toDate(value);
+  if (!date) return fallback;
+  const year = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: PH_TIME_ZONE, year: 'numeric' }).format(d);
+  return format(value, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    ...(year(date) === year(now) ? {} : { year: 'numeric' }),
+  }, fallback);
+}
+
 /** "Nov 14, 2026". Timestamps use the Philippine date; calendar dates stay as they are. */
 export function formatDate(value, fallback = '—', options = { month: 'short', day: 'numeric', year: 'numeric' }) {
   return format(value, options, fallback);

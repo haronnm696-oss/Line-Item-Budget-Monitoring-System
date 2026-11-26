@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DATE_BOUNDS, inDateRange } from '../lib/dateRange';
-import Chip from '../components/Chip';
+import AuditLogList from '../components/AuditLogList';
 import LoadState from '../components/LoadState';
+import { PH_TIME_LABEL } from '../lib/datetime';
+import { SEARCH_DEBOUNCE_MS, recordLine, searchParam } from '../lib/auditLogList';
 import { ENDPOINTS } from '../api/endpoints';
 import { useApiData } from '../lib/useApiData';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +21,8 @@ const ACTION_TONE = {
   approved: 'ok',
   rejected: 'over',
 };
+/** Chip tones -> Audit log badge tones. */
+const TONE = { ok: 'success', over: 'danger', neutral: 'neutral' };
 const ACTION_LABEL = {
   created: 'Created',
   updated: 'Updated',
@@ -56,29 +60,77 @@ function downloadCSV(content, filename) {
   URL.revokeObjectURL(url);
 }
 
+function actionText(value) {
+  return ACTION_LABEL[value] || String(value ?? '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+/** The change details under an open entry: one line per "field: value", then the IP address. */
+function ChangeDetails({ entry }) {
+  const lines = String(entry.change ?? '').split('; ').filter(Boolean);
+  return (
+    <ul className="au-changes">
+      {lines.map((line, index) => <li key={`${index}-${line}`}>{line}</li>)}
+      {entry.ip && entry.ip !== '—' && <li><span className="au-field">IP address:</span> {entry.ip}</li>}
+    </ul>
+  );
+}
+
+function auditRow(a) {
+  return {
+    id: a.id,
+    time: a.created_at,
+    user: a.user,
+    action: { label: actionText(a.action), tone: TONE[ACTION_TONE[a.action]] ?? 'neutral' },
+    record: (
+      <>
+        <span className="au-strong">{a.record}</span>
+        {a.recordType && <span className="au-sub"> · {a.recordType}</span>}
+      </>
+    ),
+    recordText: recordLine(a.record, a.recordType),
+    project: a.project ? { code: a.project_code, title: a.project } : null,
+    details: a.change || (a.ip && a.ip !== '—') ? <ChangeDetails entry={a} /> : null,
+  };
+}
+
 export default function AuditTrail() {
   const { user } = useAuth();
-  // Entries of the user's assigned projects only (the API scopes the feed).
-  const state = useApiData(ENDPOINTS.audit);
-  const log = Array.isArray(state.data) ? state.data : [];
   const [search, setSearch] = useState('');
+  const [q, setQ] = useState('');
+  // Entries of the user's assigned projects only (the API scopes the feed);
+  // the search box is searched on the server (`q`), after a short pause.
+  const query = searchParam(q);
+  const state = useApiData(query ? `${ENDPOINTS.audit}?${new URLSearchParams({ q: query })}` : ENDPOINTS.audit);
+  const log = Array.isArray(state.data) ? state.data : [];
   const [action, setAction] = useState('All');
   const [recordType, setRecordType] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
   const [toast, setToast] = useState(null); // { msg }
 
-  const actions = ['All', ...new Set(log.map((a) => a.action))];
-  const recordTypes = ['All', ...new Set(log.map((a) => a.recordType))];
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQ(search), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  // Keep a chosen option listed even when a search leaves no entry with it.
+  const actions = ['All', ...new Set([...log.map((a) => a.action), ...(action === 'All' ? [] : [action])])];
+  const recordTypes = ['All', ...new Set([...log.map((a) => a.recordType), ...(recordType === 'All' ? [] : [recordType])])];
+  const hasFilters = search.trim() !== '' || action !== 'All' || recordType !== 'All' || dateFilter !== '';
 
   const filtered = log.filter((a) => {
-    const matchesSearch =
-      a.user.toLowerCase().includes(search.toLowerCase()) ||
-      a.record.toLowerCase().includes(search.toLowerCase());
     const matchesAction = action === 'All' || a.action === action;
     const matchesRecordType = recordType === 'All' || a.recordType === recordType;
     const matchesDate = dateFilter === '' || a.date === dateFilter;
-    return matchesSearch && matchesAction && matchesRecordType && matchesDate;
+    return matchesAction && matchesRecordType && matchesDate;
   });
+
+  function clearFilters() {
+    setSearch('');
+    setQ('');
+    setAction('All');
+    setRecordType('All');
+    setDateFilter('');
+  }
 
   function showToast(msg) {
     setToast({ msg });
@@ -117,14 +169,14 @@ export default function AuditTrail() {
       filters,
       preparedBy: { name: user?.name, role: ROLE_MAP[normalizeRole(user)]?.label },
       programLeader,
-    }), { title: 'Audit trail' });
+    }), { title: 'Audit log' });
   }
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h2>Audit trail</h2>
+          <h2>Audit log</h2>
           <p>Immutable log of every financial action. Entries cannot be edited or deleted.</p>
         </div>
         <div className="actions" style={{ display: 'flex', gap: 8 }}>
@@ -140,16 +192,19 @@ export default function AuditTrail() {
         </div>
       )}
 
-      <div className="filter-row">
+      <div className="filter-row au-filters">
         <input
           type="search"
-          placeholder="Search user or record"
+          className="au-search"
+          aria-label="Search user, record or action"
+          placeholder="Search user, record or action"
+          maxLength={100}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         <select value={action} onChange={(e) => setAction(e.target.value)}>
           {actions.map((a) => (
-            <option key={a} value={a}>{a === 'All' ? 'All actions' : ACTION_LABEL[a] || a[0].toUpperCase() + a.slice(1)}</option>
+            <option key={a} value={a}>{a === 'All' ? 'All actions' : actionText(a)}</option>
           ))}
         </select>
         <select value={recordType} onChange={(e) => setRecordType(e.target.value)}>
@@ -157,49 +212,26 @@ export default function AuditTrail() {
             <option key={rt} value={rt}>{rt === 'All' ? 'All record types' : rt}</option>
           ))}
         </select>
-        <input type="date" {...DATE_BOUNDS} value={dateFilter} onChange={(e) => { if (inDateRange(e.target.value)) setDateFilter(e.target.value); }} />
+        <input type="date" aria-label="Date" {...DATE_BOUNDS} value={dateFilter} onChange={(e) => { if (inDateRange(e.target.value)) setDateFilter(e.target.value); }} />
+        {hasFilters && <button type="button" className="pp-clear" onClick={clearFilters}>Clear filters</button>}
       </div>
 
       <LoadState state={state} loadingText="Loading audit entries…">
-      <div className="panel wide-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>User</th>
-              <th>Action</th>
-              <th>Record</th>
-              <th>Record Type</th>
-              <th>Change</th>
-              <th>IP address</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((a) => (
-              <tr key={a.id}>
-                <td className="num">{a.ts}</td>
-                <td>{a.user}</td>
-                <td>
-                  <Chip tone={ACTION_TONE[a.action] || 'neutral'}>{ACTION_LABEL[a.action] || a.action}</Chip>
-                </td>
-                <td>{a.record}</td>
-                <td>{a.recordType}</td>
-                <td>{a.change}</td>
-                <td className="num">{a.ip}</td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>
-                  No audit log entries match these filters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'flex-end', fontSize: '11.5px', color: 'var(--muted)' }}>
-          {filtered.length} of {log.length} entr{log.length === 1 ? 'y' : 'ies'} displayed
+      <div className="panel au-card">
+        {filtered.length === 0 ? (
+          <div className="pa-empty">
+            <span>{hasFilters ? 'No entries match' : 'No audit entries yet.'}</span>
+            {hasFilters && <button type="button" className="pp-clear" onClick={clearFilters}>Clear filters</button>}
+          </div>
+        ) : (
+          <AuditLogList rows={filtered.map(auditRow)} />
+        )}
+        <div className="au-foot au-foot-end">
+          <span className="au-count" aria-live="polite">
+            {filtered.length} of {log.length} entr{log.length === 1 ? 'y' : 'ies'} displayed
+          </span>
         </div>
+        <p className="au-tz">Times in {PH_TIME_LABEL}.</p>
       </div>
       </LoadState>
     </>

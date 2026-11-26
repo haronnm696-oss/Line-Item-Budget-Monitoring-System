@@ -6,12 +6,14 @@ use App\Rules\DateInRange;
 use App\Models\AuditTrail;
 use App\Models\Project;
 use App\Models\ProjectTranche;
+use App\Support\AuditSearch;
 use App\Support\ReleaseWording;
 use Illuminate\Http\Request;
 
 /**
- * Read-only audit log feed for the Audit Trail page. Entries are written by
+ * Read-only feed for the Audit log page (/audit). Entries are written by
  * the application and seeders; this controller never mutates them.
+ * `q` searches all entries in the user's scope (AuditSearch).
  */
 class AuditTrailController extends Controller
 {
@@ -22,10 +24,11 @@ class AuditTrailController extends Controller
         abort_unless(
             in_array($slug, ['program-leader', 'project-leader', 'finance-admin'], true),
             403,
-            'You do not have permission to view the audit trail.'
+            'You do not have permission to view the audit log.'
         );
 
         $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
             'action' => ['nullable', 'string', 'max:50'],
             'date' => ['bail', 'nullable', new DateInRange(), 'date'],
             'record_type' => ['nullable', 'string', 'max:100'],
@@ -44,6 +47,7 @@ class AuditTrailController extends Controller
 
         $query = AuditTrail::with('user')
             ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds));
+        AuditSearch::apply($query, $validated['q'] ?? null);
         $from = $validated['from'] ?? null;
         $to = $validated['to'] ?? null;
 
@@ -97,6 +101,8 @@ class AuditTrailController extends Controller
     {
         $new = $entry->new_values ?? [];
         $old = $entry->old_values ?? [];
+        $projectId = $new['project_id'] ?? $old['project_id'] ?? null;
+        $project = $projectId !== null ? Project::find($projectId) : null;
 
         return [
             'id' => $entry->id,
@@ -108,7 +114,10 @@ class AuditTrailController extends Controller
             'ip' => $entry->ip_address ?: '—',
             'date' => $entry->created_at?->toDateString(),
             'ts' => $entry->created_at?->format('M j, Y g:i A'),
-            'project' => $this->projectLabel($entry, $old, $new),
+            // ISO time for the short "Nov 26, 10:55 AM" display (Philippine time on screen).
+            'created_at' => $entry->created_at?->toIso8601String(),
+            'project' => $projectId === null ? null : ($project?->title ?? 'Project #' . $projectId),
+            'project_code' => $project?->code,
         ];
     }
 
@@ -144,17 +153,6 @@ class AuditTrailController extends Controller
 
         return $noun . ' #' . $entry->model_id
             . ($label ? ' — ' . ReleaseWording::apply($label, $release) : '');
-    }
-
-    private function projectLabel(AuditTrail $entry, array $old, array $new): ?string
-    {
-        $projectId = $new['project_id'] ?? $old['project_id'] ?? null;
-
-        if ($projectId === null) {
-            return null;
-        }
-
-        return Project::find($projectId)?->title ?? 'Project #' . $projectId;
     }
 
     private function changeSummary(string $action, array $old, array $new, ?string $reason = null): string

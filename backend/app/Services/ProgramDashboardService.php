@@ -1324,7 +1324,7 @@ class ProgramDashboardService
             ->limit(10)
             ->get();
 
-        // Same wording as the Audit trail page ("Release added", "Line item
+        // Same wording as the Audit log page ("Release added", "Line item
         // edited"), never the stored class names.
         return collect((new AuditEntryPresenter())->present($entries))
             ->map(fn (array $row) => [

@@ -1,4 +1,4 @@
-// On-screen display rules for the Program Leader's Audit trail
+// On-screen display rules for the Program Leader's Audit log
 // (pages/program/ProgramAudit.jsx). Display only: the API
 // (AuditEntryPresenter, shared with the project page's Recent activity) and
 // the stored entries are unchanged; these rules only decide what the list

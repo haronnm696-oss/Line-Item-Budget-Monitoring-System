@@ -9,15 +9,15 @@ const approvals = source('./ProgramApprovals.jsx');
 const panel = source('../../components/program/ApprovalPanel.jsx');
 const users = source('./ProgramUsers.jsx');
 
-test('decided approval cards keep "View details" but no audit trail link', () => {
+test('decided approval cards keep "View details" but no audit log link', () => {
   const row = approvals.slice(approvals.indexOf('function DecidedRow'), approvals.indexOf('function ListSkeleton'));
   assert.match(row, />View details</);
-  assert.doesNotMatch(row, /View in audit trail/);
-  assert.doesNotMatch(approvals, /View in audit trail/);
+  assert.doesNotMatch(row, /View in audit (trail|log)/i);
+  assert.doesNotMatch(approvals, /View in audit (trail|log)/i);
 });
 
-test('the approval detail modal has no status history or audit trail link, but keeps the latest return reason', () => {
-  assert.doesNotMatch(panel, /View in audit trail/);
+test('the approval detail modal has no status history or audit log link, but keeps the latest return reason', () => {
+  assert.doesNotMatch(panel, /View in audit (trail|log)/i);
   assert.doesNotMatch(panel, /program-audit/);
   assert.doesNotMatch(panel, /Status history/);
   assert.match(panel, /entry\.event === 'returned' && entry\.reason/);
