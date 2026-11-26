@@ -62,6 +62,10 @@ test('signature blocks: names in bold uppercase over a line, kept on one page; b
   assert.match(html, /Noted by:[\s\S]*Dr\. Lead[\s\S]*Project Leader/);
   assert.match(html, /\.rt-sigs \{[^}]*break-inside: avoid/);
   assert.match(html, /\.rt-sig-name \{[^}]*text-transform: uppercase; border-bottom: 1px solid #000/);
+  // Name and role centered on the line; the label above stays left-aligned.
+  assert.match(html, /\.rt-sig-name \{[^}]*text-align: center/);
+  assert.match(html, /\.rt-sig-role \{[^}]*text-align: center/);
+  assert.doesNotMatch(html, /\.rt-sig-label \{[^}]*text-align/);
 
   const blank = projectSignatories({ preparedBy: { name: 'Ana', role: 'Research Assistant' }, financeAdmin: null, projectLeader: null });
   assert.deepEqual(blank.map((s) => [s.label, s.name ?? null, s.role]), [
