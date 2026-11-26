@@ -165,6 +165,11 @@
  *       VERIFIED payroll batches only; CSV: /reports/payroll-register with the same params.
  *       The Program Leader, and the project's Project Leader, Finance/Admin and Research Assistants;
  *       403 for Researchers (pay per person; also GET /payroll, payroll-batch files) and outsiders.
+ *   GET /api/projects/:id also carries, for the printed reports:
+ *       ledger_pending: [{ kind, date, type, amount }] (expenses and payroll waiting for verification;
+ *       the printed Expense Ledger lists verified rows only and notes these),
+ *       signatories: { project_leader, finance_admin } (names or null).
+ *   GET /api/report-signatories -> { program_leader } ("Approved by" on the Executive report and Audit trail print)
  *
  * Audit trail:
  *   GET /api/audit?project_id=&action=&type=&date=
@@ -344,6 +349,7 @@ export const ENDPOINTS = {
   formB: (projectId) => `/api/projects/${projectId}/form-b`,
   payrollRegister: (projectId) => `/api/projects/${projectId}/payroll-register`,
   audit: '/api/audit',
+  reportSignatories: '/api/report-signatories',
   pendingUsers: '/api/users/pending',
   approveUser: (id) => `/api/users/${id}/approve`,
 };

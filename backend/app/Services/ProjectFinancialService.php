@@ -157,6 +157,48 @@ class ProjectFinancialService
     }
 
     /**
+     * What the Expense Ledger leaves out: expenses and payroll still waiting
+     * for verification (PENDING_STAGES), as [kind, date, type (PS / MOOE /
+     * null), amount]. One entry per expense, and one per payroll batch and
+     * line item like payrollEntries() (dated the last day of the pay period).
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function pendingLedgerEntries(int $projectId): Collection
+    {
+        $expenses = Expense::query()->where('project_id', $projectId)
+            ->whereIn('workflow_status', self::PENDING_STAGES)
+            ->with('libCategory:id,category_type')
+            ->get(['id', 'lib_category_id', 'amount', 'expense_date'])
+            ->map(fn (Expense $e) => [
+                'kind' => 'expense',
+                'date' => $e->expense_date?->toDateString(),
+                'type' => $e->libCategory?->category_type,
+                'amount' => round((float) $e->amount, 2),
+            ]);
+
+        $payroll = self::onlyPendingPayroll(Payroll::query())->where('project_id', $projectId)
+            ->with(['batch', 'libCategory:id,category_type'])
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn (Payroll $row) => ($row->payroll_batch_id ? 'b' . $row->payroll_batch_id : 'r' . $row->id) . ':' . $row->lib_category_id)
+            ->map(function (Collection $rows) {
+                $first = $rows->first();
+                $end = $first->batch ? $first->batch->periodEnd()->copy()->endOfMonth() : Carbon::create($first->pay_year, $first->pay_month, 1)->endOfMonth();
+
+                return [
+                    'kind' => 'payroll',
+                    'date' => $end->toDateString(),
+                    'type' => $first->libCategory?->category_type,
+                    'amount' => round((float) $rows->sum('gross_pay'), 2),
+                ];
+            })
+            ->values();
+
+        return $expenses->concat($payroll)->values();
+    }
+
+    /**
      * Every spent amount of the projects as [kind, project_id,
      * lib_category_id, type (PS / MOOE / null), amount, date]: verified
      * expenses (by expense date) and verified payroll (payrollEntries()).

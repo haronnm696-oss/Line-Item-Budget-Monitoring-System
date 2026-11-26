@@ -54,7 +54,33 @@ test('the printed register lists people, computations and totals', () => {
   assert.match(html, /P44000\.00/);
   assert.match(registerTableHtml({ ...register, months: [] }, escape, money), /No verified payroll/);
 
-  const doc = registerDocumentHtml(register, { escape, money, generated: 'Nov 18, 2026' });
+  // Report template table: money headers carry "(₱)", period totals bold, grand total is TOTAL.
+  assert.match(html, /<th class="r">Gross pay \(₱\)<\/th>/);
+  assert.match(html, /<tr class="rt-subtotal">/);
+  assert.match(html, /<tr class="rt-total"><td>TOTAL<\/td>/);
+  assert.doesNotMatch(html, /style=/);
+});
+
+test('the printed register uses the official report layout (landscape)', () => {
+  const doc = registerDocumentHtml(register, {
+    escape,
+    project: { title: 'Project <one>', code: 'P-1', project_leader: 'Dr. Lead', funding_agency: 'DOST', implementing_agency: 'MSU' },
+    signatories: { project_leader: 'Dr. Lead', finance_admin: null },
+    preparedBy: { name: 'Ria Assistant', role: 'Research Assistant' },
+    generatedAt: new Date('2026-11-18T02:00:00Z'),
+    assetBase: '',
+  });
   assert.match(doc, /Project &lt;one&gt;/);
   assert.match(doc, /no deductions and no allowances/);
+  assert.match(doc, /<h1 class="rt-title">Payroll Register<\/h1>/);
+  assert.match(doc, /Period: All dates/);
+  assert.match(doc, /size: A4 landscape/);
+  assert.match(doc, /44,000\.00/);
+  assert.doesNotMatch(doc, /₱44,000/);
+  assert.match(doc, /Ria Assistant/);
+  assert.match(doc, /Certified correct:/);
+  assert.doesNotMatch(doc, /Mindanao State University–Main Campus · LIB Monitoring System/);
+
+  // Without the project detail it still names the register's project.
+  assert.match(registerDocumentHtml(register, { escape, assetBase: '' }), /Project &lt;one&gt;/);
 });

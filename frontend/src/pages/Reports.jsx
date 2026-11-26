@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { csvPct, formatPct } from '../components/money';
-import { REGISTER_PERIOD, registerTableHtml } from '../lib/payrollRegister';
+import { REGISTER_PERIOD, registerDocumentHtml } from '../lib/payrollRegister';
 import { printHtmlDocument, saveBlob } from '../lib/download';
 import { downloadPayrollRegisterCsv, downloadReportCsv, fetchFormB, fetchPayrollRegister } from '../api/reports';
 import { formBBlocker, formBHtml, formBTitle } from '../lib/formBPrint';
-import { formatDate } from '../lib/datetime';
 import client from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
-import { statusTone } from '../components/Chip';
 import DownloadMenu from '../components/DownloadMenu';
 import { useAuth } from '../context/AuthContext';
-import { normalizeRole } from '../lib/roles';
+import { normalizeRole, ROLE_MAP } from '../lib/roles';
+import { filterReportRows, isPsRow, ledgerPendingNote, REPORT_CATEGORIES, REPORT_PERIODS, verifiedRows } from '../lib/reportRows';
+import {
+  projectInfo, projectSignatories, reportDocumentHtml, reportGeneratedText, reportNoteHtml, reportTableHtml,
+} from '../lib/reportTemplate';
 import { canSeePayrollRegister, reportDownloadOptions, reportTypesFor, showReportProjectField } from '../lib/reportDownloads';
 import { isReadOnlyRole } from '../lib/pageHead';
 import PageTitle from '../components/PageTitle';
@@ -51,13 +53,8 @@ const REPORT_TYPES = [
   },
 ];
 
-const PERIODS = [
-  'All dates',
-  'Current year',
-  'Last 90 days',
-];
-
-const CATEGORIES = ['PS and MOOE', 'PS only', 'MOOE only'];
+const PERIODS = REPORT_PERIODS;
+const CATEGORIES = REPORT_CATEGORIES;
 
 function toCSV(rows, headers) {
   const headerRow = headers.join(',');
@@ -88,11 +85,6 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function money(value) {
-  return `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-
 function downloadCSV(content, filename) {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -104,15 +96,6 @@ function downloadCSV(content, filename) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-/**
- * PS or MOOE from the row's line item type (Form B). Only a row without a
- * line item falls back to its name. "Professional Services" is MOOE.
- */
-function isPsRow(row) {
-  if (row.type) return row.type === 'PS';
-  return /honoraria|salaries/i.test(row.category || '');
 }
 
 export default function Reports({ programMode = false, initialCode = '' }) {
@@ -233,30 +216,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     : null;
 
   // ---------- Filtering ----------
-  function filterExpenses() {
-    let result = [...expenseRows];
-    const today = new Date();
-
-    if (selectedPeriod === 'Current year') {
-      const yearStart = `${today.getFullYear()}-01-01`;
-      result = result.filter((e) => e.date >= yearStart);
-    } else if (selectedPeriod === 'Last 90 days') {
-      const cutoff = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      result = result.filter((e) => e.date >= cutoff);
-    }
-
-    if (selectedCategory === 'PS only') {
-      result = result.filter((e) => isPsRow(e));
-    } else if (selectedCategory === 'MOOE only') {
-      result = result.filter((e) => !isPsRow(e));
-    }
-
-    return result.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }
-
-  const expensesForPreview = filterExpenses();
+  const expensesForPreview = filterReportRows(expenseRows, { period: selectedPeriod, category: selectedCategory });
 
   // ---------- Report data builders ----------
   function buildUtilizationRows() {
@@ -316,7 +276,7 @@ export default function Reports({ programMode = false, initialCode = '' }) {
   function buildMonthlySummaryRows() {
     const data = {};
     // Spent only (verified expenses and verified payroll), like every other screen.
-    expensesForPreview.filter((e) => e.status === 'Verified').forEach((e) => {
+    verifiedRows(expensesForPreview).forEach((e) => {
       const key = (e.date || '').slice(0, 7);
       if (!key) return;
       if (!data[key]) data[key] = { ps: 0, mooe: 0 };
@@ -425,133 +385,73 @@ export default function Reports({ programMode = false, initialCode = '' }) {
     printHtmlDocument(buildPrintHTML(type, title));
   }
 
-  // ---------- Print-ready HTML ----------
+  // ---------- Print-ready HTML (lib/reportTemplate.js: the official layout) ----------
   function buildPrintHTML(key, title) {
-    let tableHtml = '';
-    let subtitle = '';
+    const generatedAt = new Date();
+    const preparedBy = { name: user?.name, role: ROLE_MAP[roleCode]?.label };
 
-    if (key === 'utilization') {
-      const rows = buildUtilizationRows();
-      subtitle = 'Allocated vs spent vs remaining per LIB line item, with PS/MOOE subtotals';
-      tableHtml = `
-        <table>
-          <thead>
-            <tr><th>Category Type</th><th>Line Item</th><th class="r">Allocated</th><th class="r">Spent</th><th class="r">Remaining</th><th class="r">Utilization</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map((r) => `
-              <tr${r.bold ? ' style="font-weight:700;background:#F7F6F2"' : ''}>
-                <td>${escapeHtml(r.group)}</td>
-                <td>${escapeHtml(r.item)}</td>
-                <td class="r">${money(r.allocated)}</td>
-                <td class="r">${money(r.spent)}</td>
-                <td class="r">${money(r.remaining)}</td>
-                <td class="r">${formatPct(r.util)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
-    } else if (key === 'ledger') {
-      const rows = buildLedgerRows();
-      subtitle = 'Chronological list of expenses and verified payroll with reference numbers. Spent = verified expenses and verified payroll';
-      tableHtml = `
-        <table>
-          <thead>
-            <tr><th>Date</th><th>Reference</th><th>Description</th><th>Category</th><th class="r">Amount</th><th>Status</th><th>Recorded By</th><th>Verified By</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map((r) => `
-              <tr>
-                <td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.ref)}</td><td>${escapeHtml(r.description)}</td><td>${escapeHtml(r.category)}</td>
-                <td class="r">${money(r.amount)}</td>
-                <td><span style="display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;background:#${statusTone(r.status)==='ok'?'E9F3EE':statusTone(r.status)==='warn'?'F8EFD8':'F8E7E4'};color:#${statusTone(r.status)==='ok'?'2F7D5B':statusTone(r.status)==='warn'?'9A6B10':'B3382C'}">${escapeHtml(r.status)}</span></td>
-                <td>${escapeHtml(r.recordedBy)}</td><td>${escapeHtml(r.verifiedBy)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
-    } else if (key === 'payroll-register') {
-      subtitle = `Verified payroll batches only · per month and per person · ${register?.period_label ?? selectedPeriod}`;
-      tableHtml = registerTableHtml(register, escapeHtml, money);
-    } else {
-      const rows = buildMonthlySummaryRows();
-      subtitle = 'Expense trend, category comparison, and alerts for the selected month';
-      tableHtml = `
-        <table>
-          <thead>
-            <tr><th>Month</th><th class="r">Personnel Services (PS)</th><th class="r">Maintenance & Other Operating Expenses (MOOE)</th><th class="r">Total</th></tr>
-          </thead>
-          <tbody>
-            ${rows.map((r) => `
-              <tr>
-                <td>${escapeHtml(r.month)}</td><td class="r">${money(r.ps)}</td>
-                <td class="r">${money(r.mooe)}</td><td class="r">${money(r.total)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
+    if (key === 'payroll-register') {
+      return registerDocumentHtml(register, {
+        project: selectedProject, signatories: detail?.signatories, preparedBy, generatedAt, escape: escapeHtml,
+      });
     }
 
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>${escapeHtml(title)}</title>
-        <style>
-          @page { size: A4${key === 'payroll-register' ? ' landscape' : ''}; margin: 1.5cm; }
-          body { font-family: 'Public Sans', system-ui, sans-serif; font-size: 11px; color: #221D1A; line-height: 1.4; }
-          .no-print { display: none !important; }
-          .letterhead { border-bottom: 3px solid #5E1B25; padding-bottom: 10px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
-          .seal { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #BE9A3E, #8a6d12); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: #3d2f06; font-size: 12px; }
-          .org h1 { font-size: 17px; font-weight: 800; margin: 0; color: #5E1B25; }
-          .org p { font-size: 10px; color: #6E655E; margin: 2px 0 0; }
-          .report-title { font-size: 15px; font-weight: 700; margin: 10px 0 4px; color: #221D1A; }
-          .report-sub { font-size: 10.5px; color: #6E655E; margin-bottom: 14px; }
-          .meta { font-size: 10px; color: #6E655E; margin-bottom: 14px; display: flex; gap: 24px; flex-wrap: wrap; }
-          table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-          th { background: #F7F6F2; color: #6E655E; font-weight: 600; text-align: left; padding: 6px 8px; border: 1px solid #CFC9BC; }
-          td { padding: 5px 8px; border: 1px solid #E4E0D7; vertical-align: top; }
-          td.r { text-align: right; }
-          tr:nth-child(even) td { background: #FAF9F7; }
-          .total-row { font-weight: 700; background: #E4E0D7 !important; }
-          .rates-label { border: 1px solid #9A6B10; background: #F8EFD8; color: #9A6B10; font-weight: 700; padding: 6px 10px; margin: 0 0 12px; }
-          .footer { margin-top: 20px; font-size: 9px; color: #6E655E; border-top: 1px solid #CFC9BC; padding-top: 8px; }
-        </style>
-      </head>
-      <body>
-        <div class="letterhead">
-          <div class="seal">MSU</div>
-          <div class="org">
-            <h1>Mindanao State University–Main Campus</h1>
-            <p>Office of the Vice Chancellor for Research & Extension · LIB Monitoring System</p>
-            <p>Monitoring Agency: <b>${escapeHtml(selectedProject.funding_agency || 'External funder')}</b> · Implementing Agency: <b>${escapeHtml(selectedProject.implementing_agency || 'MSU-Marawi')}</b></p>
-          </div>
-        </div>
+    let body = '';
+    if (key === 'utilization') {
+      body = reportTableHtml({
+        columns: [
+          { label: 'Category Type' }, { label: 'Line Item' }, { label: 'Allocated', amount: true },
+          { label: 'Spent', amount: true }, { label: 'Remaining', amount: true }, { label: 'Utilization (%)' },
+        ],
+        rows: buildUtilizationRows().map((r) => (r.group === 'Total'
+          ? { kind: 'total', cells: [{ span: 2, text: 'TOTAL (PS + MOOE)' }, null, r.allocated, r.spent, r.remaining, formatPct(r.util)] }
+          : { kind: r.bold ? 'subtotal' : undefined, cells: [r.group, r.item, r.allocated, r.spent, r.remaining, formatPct(r.util)] })),
+      }, escapeHtml);
+    } else if (key === 'ledger') {
+      // Verified expenses and verified payroll only; the note counts the rest.
+      const rows = verifiedRows(expensesForPreview);
+      const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      const pending = filterReportRows(detail?.ledger_pending, { period: selectedPeriod, category: selectedCategory });
+      body = reportTableHtml({
+        columns: [
+          { label: 'Date' }, { label: 'Reference No.' }, { label: 'Particulars' }, { label: 'Line Item' },
+          { label: 'Recorded By' }, { label: 'Verified By' }, { label: 'Amount', amount: true },
+        ],
+        rows: [
+          ...rows.map((r) => ({ cells: [r.date, r.ref || '—', r.desc, r.category, r.recorded_by || '—', r.verified_by || '—', r.amount] })),
+          ...(rows.length ? [{ kind: 'total', cells: [{ span: 6, text: 'TOTAL' }, null, null, null, null, null, total] }] : []),
+        ],
+        empty: 'No verified expenses or payroll for these filters.',
+      }, escapeHtml) + reportNoteHtml(ledgerPendingNote(pending), escapeHtml);
+    } else {
+      const rows = buildMonthlySummaryRows();
+      const sum = (field) => rows.reduce((total, r) => total + r[field], 0);
+      body = reportTableHtml({
+        columns: [
+          { label: 'Month' }, { label: 'Personnel Services (PS)', amount: true },
+          { label: 'Maintenance & Other Operating Expenses (MOOE)', amount: true }, { label: 'Total', amount: true },
+        ],
+        rows: [
+          ...rows.map((r) => ({ cells: [r.month, r.ps, r.mooe, r.total] })),
+          ...(rows.length ? [{ kind: 'total', cells: ['TOTAL', sum('ps'), sum('mooe'), sum('total')] }] : []),
+        ],
+        empty: 'No verified expenses or payroll for these filters.',
+      }, escapeHtml);
+    }
 
-        <div class="report-title">${escapeHtml(title)}</div>
-        <div class="report-sub">${escapeHtml(subtitle)}</div>
-
-        <div class="meta">
-          <span><b>Project:</b> ${escapeHtml(selectedProject.title)} (${escapeHtml(selectedProject.code)})</span>
-          <span><b>Project Leader:</b> ${escapeHtml(selectedProject.project_leader)}</span>
-          <span><b>Period:</b> ${escapeHtml(selectedPeriod)}</span>
-          <span><b>Category:</b> ${escapeHtml(selectedCategory)}</span>
-          <span><b>Generated:</b> ${escapeHtml(formatDate(new Date()))}</span>
-        </div>
-
-        ${tableHtml}
-
-        <div class="footer">
-          This report was generated from verified expenses and verified payroll. <br />
-          Mindanao State University–Main Campus · Form B · Line-Item Budget Monitoring System.
-        </div>
-      </body>
-      </html>
-    `;
+    return reportDocumentHtml({
+      title,
+      docTitle: `${title} · ${selectedProject.code ?? ''}`,
+      filters: `Period: ${selectedPeriod} · Category: ${selectedCategory}`,
+      info: projectInfo(selectedProject, reportGeneratedText(generatedAt)),
+      body,
+      signatories: projectSignatories({
+        preparedBy,
+        financeAdmin: detail?.signatories?.finance_admin,
+        projectLeader: detail?.signatories?.project_leader,
+      }),
+      generatedAt,
+    }, escapeHtml);
   }
 
   // Direct CSV export for one report type (same rows as the preview).

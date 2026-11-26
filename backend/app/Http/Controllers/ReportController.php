@@ -9,6 +9,7 @@ use App\Services\DashboardService;
 use App\Services\FormBReportService;
 use App\Services\PayrollRegisterService;
 use App\Support\Csv;
+use App\Support\ReportSignatories;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -40,6 +41,16 @@ class ReportController extends Controller
     public function formB(Project $project)
     {
         return response()->json($this->formB->build($project));
+    }
+
+    /**
+     * GET /api/report-signatories
+     * "Approved by" on the program-wide printed reports (Executive report,
+     * Audit trail): the Program Leader's name, or null (a blank line).
+     */
+    public function signatories()
+    {
+        return response()->json(['program_leader' => ReportSignatories::programLeader()]);
     }
 
     private function requirePayAccess(Request $request, Project $project): void

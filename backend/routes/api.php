@@ -187,6 +187,8 @@ Route::middleware(['auth:sanctum', 'active.account', 'project.access'])->group(f
     Route::get('/projects/{project}/payroll-register', [ReportController::class, 'payrollRegister']);
     Route::get('/projects/{project}/form-b', [ReportController::class, 'formB']);
     Route::get('/projects/{project}/reports/{type}', [ReportController::class, 'export']);
+    // Signature block names of the program-wide printed reports.
+    Route::get('/report-signatories', [ReportController::class, 'signatories']);
 
     // Program-wide dashboard: all projects visible to a Program Leader.
     Route::middleware('role.program-leader')->group(function () {

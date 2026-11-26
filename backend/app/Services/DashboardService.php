@@ -7,6 +7,7 @@ use App\Models\ApprovalRequest;
 use App\Models\Project;
 use App\Models\ProjectTranche;
 use App\Support\ReleaseLiquidation;
+use App\Support\ReportSignatories;
 use Illuminate\Http\Request;
 
 class DashboardService
@@ -164,6 +165,14 @@ class DashboardService
                 'mooe' => $mooe,
             ],
             'expenses' => $this->expenseRows($project),
+            // The printed Expense Ledger lists verified rows only; these are
+            // the records it leaves out (its "still pending" note).
+            'ledger_pending' => ProjectFinancialService::pendingLedgerEntries((int) $project->id)->all(),
+            // Signature blocks of the printed reports (null: a blank line).
+            'signatories' => [
+                'project_leader' => $this->projectLeaderName($project),
+                'finance_admin' => ReportSignatories::financeAdmin($project),
+            ],
             'tranches' => $tranches,
             'burn_rate' => $burnRate,
             'approvals' => $approvals,

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ENDPOINTS } from '../../api/endpoints';
-import { apiWrite } from '../../api/http';
+import { apiGet, apiWrite } from '../../api/http';
 import { errorText } from '../../api/leader';
 import { useAuth } from '../../context/AuthContext';
 import { useApiData } from '../../lib/useApiData';
@@ -8,7 +8,8 @@ import { useAssignedProject } from '../../lib/useAssignedProject';
 import { notAssignedText } from '../../lib/myProjects';
 import { useUrlQuery } from '../../lib/useUrlQuery';
 import { parseOpen, returnedLine } from '../../lib/assistantStatus';
-import { formatDate, todayInManila } from '../../lib/datetime';
+import { todayInManila } from '../../lib/datetime';
+import { ROLE_MAP } from '../../lib/roles';
 import { downloadPayrollRegisterCsv, fetchPayrollRegister } from '../../api/reports';
 import { printHtmlDocument, saveBlob } from '../../lib/download';
 import { registerDocumentHtml } from '../../lib/payrollRegister';
@@ -114,8 +115,15 @@ export default function AssistantPayroll() {
     }
   }
   const registerPdf = () => download('register-pdf', async () => {
-    const register = await fetchPayrollRegister(projectId, { month: from });
-    printHtmlDocument(registerDocumentHtml(register, { escape: escapeHtml, money: peso, generated: formatDate(new Date()) }));
+    // The project detail carries the info block and signature names.
+    const [register, detail] = await Promise.all([
+      fetchPayrollRegister(projectId, { month: from }),
+      apiGet(ENDPOINTS.project(projectId)),
+    ]);
+    printHtmlDocument(registerDocumentHtml(register, {
+      project: detail?.project, signatories: detail?.signatories,
+      preparedBy: { name: user?.name, role: ROLE_MAP.RA.label }, escape: escapeHtml,
+    }));
   }, `Payroll register for ${label} opened for printing. Choose "Save as PDF" to keep a copy.`);
   const registerCsv = () => download('register-csv', async () => {
     const { blob, filename } = await downloadPayrollRegisterCsv(projectId, { month: from });
