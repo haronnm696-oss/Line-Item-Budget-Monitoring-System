@@ -48,7 +48,8 @@ test('title, filters, info block, serif A4 portrait and the page footer', () => 
   assert.match(html, /size: A4 portrait/);
   assert.match(html, /margin: 14mm/);
   assert.match(html, /font-family: 'Times New Roman'/);
-  assert.match(html, /@bottom-left \{ content: "LIB Monitoring System · Generated November 26, 2026 at 3:04 PM"|@bottom-left \{ content: "LIB Monitoring System · Generated November 26, 2026, 3:04 PM"/);
+  assert.match(html, /@bottom-left \{ content: "LIB Monitoring System";/);
+  assert.doesNotMatch(html, /Generated November/);
   assert.match(html, /"Page " counter\(page\) " of " counter\(pages\)/);
   assert.match(html, /thead \{ display: table-header-group; \}/);
   assert.match(doc({ landscape: true }), /size: A4 landscape/);
