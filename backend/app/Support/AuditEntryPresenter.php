@@ -24,7 +24,7 @@ use Illuminate\Support\Collection;
 use Throwable;
 
 /**
- * Turns raw audit entries into readable rows for the Audit trail.
+ * Turns raw audit entries into readable rows for the Audit log.
  *
  * All names (people, roles, projects, line items, records) are loaded in a
  * fixed number of batched queries per page, so presenting 50 entries costs
@@ -475,7 +475,19 @@ class AuditEntryPresenter
 
     private function actionLabel(string $action, string $type): string
     {
-        $noun = self::TYPE_LABELS[$type] ?? self::humanize($type);
+        return self::actionLabelFor($action, $type);
+    }
+
+    /** The record type as the Audit log words it ("LibCategory" -> "Line item"). */
+    public static function typeLabel(string $type): string
+    {
+        return self::TYPE_LABELS[$type] ?? self::humanize($type);
+    }
+
+    /** The action badge text for an action on a record type ("verified", "Expense" -> "Expense verified"). */
+    public static function actionLabelFor(string $action, string $type): string
+    {
+        $noun = self::typeLabel($type);
 
         return match ($action) {
             'approved' => $type === 'User' ? 'Account approved' : ($type === 'ApprovalRequest' ? 'Request approved' : "{$noun} approved"),

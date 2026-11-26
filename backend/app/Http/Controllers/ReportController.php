@@ -46,7 +46,7 @@ class ReportController extends Controller
     /**
      * GET /api/report-signatories
      * "Approved by" on the program-wide printed reports (Executive report,
-     * Audit trail): the Program Leader's name, or null (a blank line).
+     * Audit log): the Program Leader's name, or null (a blank line).
      */
     public function signatories()
     {

@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DATE_MAX, DATE_MIN, inDateRange } from '../../lib/dateRange';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchProgramAudit } from '../../api/program';
-import { PH_TIME_LABEL, formatDateTime } from '../../lib/datetime';
+import { PH_TIME_LABEL } from '../../lib/datetime';
 import { projectCode, recordTypeLine, visibleChanges, visibleEntries } from '../../lib/auditDisplay';
-import Tip from '../../components/Tip';
+import { SEARCH_DEBOUNCE_MS, recordLine, searchParam } from '../../lib/auditLogList';
+import AuditLogList from '../../components/AuditLogList';
 
-const FILTERS = ['action', 'project', 'user', 'from', 'to'];
-
-const TONE_ICON = { success: '✓', danger: '✕', neutral: '•' };
+// `q` (the search box) is searched on the server across all entries.
+const FILTERS = ['q', 'action', 'project', 'user', 'from', 'to'];
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
@@ -48,61 +48,65 @@ function ChangeList({ changes, reason }) {
   );
 }
 
-// Display only (lib/auditDisplay.js): the API and the stored entries are unchanged.
-function AuditRow({ entry, projects }) {
+// One compact list row (components/AuditLogList.jsx). Display only
+// (lib/auditDisplay.js): the API and the stored entries are unchanged.
+function auditRow(entry, projects) {
   const href = recordHref(entry.record?.link);
   const code = projectCode(entry.project, projects);
-  return (
-    <tr>
-      <td className="au-time">
-        <time dateTime={entry.created_at}>{formatDateTime(entry.created_at)}</time>
-      </td>
-      <td>
-        {entry.actor ? (
-          <>
-            <Link className="au-link" to={`/program-users?user=${entry.actor.id}`}>{entry.actor.name}</Link>
-            <Tip icon label={`Role of ${entry.actor.name}`} text={entry.actor.role ?? 'No role'} />
-          </>
-        ) : (
-          <Tip text="Automated">System</Tip>
-        )}
-      </td>
-      <td>
-        <span className={`au-pill ${entry.action.tone}`}>
-          <span aria-hidden="true">{TONE_ICON[entry.action.tone] ?? '•'}</span>
-          {entry.action.label}
-        </span>
-      </td>
-      <td>
+  const type = recordTypeLine(entry.record?.type);
+  const changes = visibleChanges(entry);
+  return {
+    id: entry.id,
+    time: entry.created_at,
+    user: entry.actor
+      ? <Link className="au-link" to={`/program-users?user=${entry.actor.id}`}>{entry.actor.name}</Link>
+      : <span className="au-muted" title="Automated">System</span>,
+    action: entry.action,
+    record: (
+      <>
         {href ? (
           <Link className="au-link" to={href}>{entry.record.label}</Link>
         ) : (
           <span className="au-strong">{entry.record?.label}</span>
         )}
-        <div className="au-sub">{recordTypeLine(entry.record?.type)}</div>
-      </td>
-      <td>
-        {entry.project && (
-          code ? (
-            <>
-              <Link className="au-link" to={`/program-projects/${entry.project.id}`}>{code}</Link>
-              <Tip icon label={`Project title for ${code}`} text={entry.project.title} />
-            </>
-          ) : (
-            <Link className="au-link" to={`/program-projects/${entry.project.id}`}>{entry.project.title}</Link>
-          )
-        )}
-      </td>
-      <td><ChangeList changes={visibleChanges(entry)} reason={entry.reason} /></td>
-    </tr>
-  );
+        {type && <span className="au-sub"> · {type}</span>}
+      </>
+    ),
+    recordText: recordLine(entry.record?.label, type),
+    project: entry.project
+      ? { code, title: entry.project.title, href: `/program-projects/${entry.project.id}` }
+      : null,
+    details: (changes.length || entry.reason) ? <ChangeList changes={changes} reason={entry.reason} /> : null,
+  };
 }
 
 export default function ProgramAudit() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = Object.fromEntries(FILTERS.map((key) => [key, searchParams.get(key) ?? '']));
-  const requestKey = FILTERS.map((key) => filters[key]).join('|');
+  // JSON, not a joined string: search text may contain any character.
+  const requestKey = JSON.stringify(FILTERS.map((key) => filters[key]));
   const hasFilters = FILTERS.some((key) => filters[key] !== '');
+
+  // The search box: typed text is sent as `q` after a short pause. When the
+  // URL's q changes from elsewhere (Clear filters, a link), the box follows.
+  const [searchText, setSearchText] = useState(filters.q);
+  const [syncedQ, setSyncedQ] = useState(filters.q);
+  if (filters.q !== syncedQ) {
+    setSyncedQ(filters.q);
+    if ((searchParam(searchText) ?? '') !== filters.q) setSearchText(filters.q);
+  }
+  useEffect(() => {
+    const value = searchParam(searchText) ?? '';
+    if (value === filters.q) return undefined;
+    const timer = window.setTimeout(() => {
+      // From the live URL, like setFilter below.
+      const next = new URLSearchParams(window.location.search);
+      if (value) next.set('q', value);
+      else next.delete('q');
+      setSearchParams(next, { replace: true });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchText, filters.q, setSearchParams]);
 
   // Each result is tagged with the filters it was requested for, so a page
   // of the previous filter is never shown under new filters.
@@ -118,7 +122,8 @@ export default function ProgramAudit() {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    const params = Object.fromEntries(requestKey.split('|').map((value, index) => [FILTERS[index], value]));
+    const values = JSON.parse(requestKey);
+    const params = Object.fromEntries(FILTERS.map((key, index) => [key, values[index]]));
     try {
       const data = await fetchProgramAudit({ ...params, page: 1 }, { signal: controller.signal });
       if (controllerRef.current !== controller) return;
@@ -128,7 +133,7 @@ export default function ProgramAudit() {
       setMoreError('');
     } catch (error) {
       if (controller.signal.aborted || controllerRef.current !== controller) return;
-      setFailure({ key: requestKey, message: messageFor(error, 'Unable to load the audit trail.') });
+      setFailure({ key: requestKey, message: messageFor(error, 'Unable to load the audit log.') });
     }
   }, [requestKey]);
 
@@ -168,6 +173,7 @@ export default function ProgramAudit() {
   function clearFilters() {
     const next = new URLSearchParams(window.location.search);
     FILTERS.forEach((key) => next.delete(key));
+    setSearchText('');
     setSearchParams(next, { replace: true });
   }
 
@@ -185,11 +191,23 @@ export default function ProgramAudit() {
     <>
       <div className="program-page-head">
         <div>
-          <h1 className="program-h1">Audit trail</h1>
+          <h1 className="program-h1">Audit log</h1>
         </div>
       </div>
 
-      <div className="program-filter-row au-filters" role="group" aria-label="Audit trail filters">
+      <div className="program-filter-row au-filters" role="group" aria-label="Audit log filters">
+        <div className="program-field au-search">
+          <label htmlFor="audit-search">Search</label>
+          <input
+            id="audit-search"
+            className="program-input"
+            type="search"
+            placeholder="Search user, record or action"
+            maxLength={100}
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+          />
+        </div>
         <div className="program-field">
           <label htmlFor="audit-action">Action</label>
           <select id="audit-action" className="program-select" value={filters.action} onChange={(event) => setFilter('action', event.target.value)}>
@@ -254,28 +272,12 @@ export default function ProgramAudit() {
           <div className="program-empty">Loading audit entries…</div>
         ) : error ? null : entries.length === 0 ? (
           <div className="pa-empty">
-            <span>{hasFilters ? 'No audit entries match these filters.' : 'No audit entries yet.'}</span>
+            <span>{hasFilters ? 'No entries match' : 'No audit entries yet.'}</span>
             {hasFilters && <button type="button" className="pp-clear" onClick={clearFilters}>Clear filters</button>}
           </div>
         ) : (
           <>
-            <div className="program-scroll">
-              <table className="program-table au-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Time</th>
-                    <th scope="col">User</th>
-                    <th scope="col">Action</th>
-                    <th scope="col">Record</th>
-                    <th scope="col">Project</th>
-                    <th scope="col">Change</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleEntries(entries).map((entry) => <AuditRow key={entry.id} entry={entry} projects={projectOptions} />)}
-                </tbody>
-              </table>
-            </div>
+            <AuditLogList rows={visibleEntries(entries).map((entry) => auditRow(entry, projectOptions))} />
 
             <div className="au-foot">
               <span className="au-count" aria-live="polite">Showing {entries.length} of {total} entries</span>

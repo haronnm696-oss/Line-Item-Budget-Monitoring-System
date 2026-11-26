@@ -46,8 +46,9 @@ export async function fetchProgramProject(id) {
 }
 
 /**
- * Audit trail page (read-only): readable entries, 50 per page, newest first.
- * Filters: action, project, user, from, to (Philippine dates), page.
+ * Audit log page (read-only): readable entries, 50 per page, newest first.
+ * Filters: q (search, on the server), action, project, user, from, to
+ * (Philippine dates), page.
  */
 export async function fetchProgramAudit(params = {}, { signal } = {}) {
   const response = await client.get(ENDPOINTS.programAudit, {

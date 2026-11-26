@@ -3275,11 +3275,69 @@ select.signin-input:disabled{
 .rp-error-block{display:flex;margin-top:12px;padding:10px 14px;border-radius:10px;background:#FDECEC;border:1px solid #F3C4C4}
 .rp-note{margin:4px 0 0;font-size:12.5px;color:#92400E}
 
-/* Program Audit trail (/program-audit) */
+/* Audit log (/program-audit and /audit): compact list, components/AuditLogList.jsx */
 .au-filters .program-field{min-width:170px}
 .au-filters .au-date{min-width:150px}
-.au-table{min-width:1040px}
-.au-table td{vertical-align:top}
+.au-filters .au-search{min-width:220px;flex:1 1 240px;max-width:340px}
+.filter-row.au-filters{align-items:center}
+.filter-row .au-search{flex:1 1 240px;min-width:200px;max-width:340px}
+/* Scrolls inside the card so the header row stays in view. */
+.au-scroll{max-height:min(70vh,760px);overflow:auto;border-radius:8px}
+.au-table{min-width:860px;table-layout:fixed}
+.au-col-time{width:150px}
+.au-col-user{width:170px}
+.au-col-action{width:210px}
+.au-col-project{width:120px}
+.au-col-toggle{width:52px}
+.au-table thead th{position:sticky;top:0;z-index:1;background:#fff}
+.program-shell .au-table td{padding:12px 10px;line-height:20px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.program-shell .au-table td.au-c-toggle{padding:0;text-align:center;overflow:visible}
+.au-table tbody:nth-of-type(even) .au-row td{background:#FCFAF6}
+.program-shell .au-table tbody .au-row:hover td{background:#F7F1E8}
+.program-shell .au-table tbody tr:hover{background:transparent}
+.au-row.can-open{cursor:pointer}
+.au-c-time{font-variant-numeric:tabular-nums;color:#2B2023}
+.au-pill-text{overflow:hidden;text-overflow:ellipsis}
+.au-c-action .au-pill{max-width:100%}
+.au-toggle{
+  display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;
+  border:0;border-radius:8px;background:none;color:#6F1D2A;font-size:14px;cursor:pointer;
+}
+.au-toggle span{display:inline-block;transition:transform .15s ease}
+.au-toggle[aria-expanded="true"] span{transform:rotate(90deg)}
+.au-toggle:hover{background:#F1ECE4}
+.au-toggle:focus-visible{outline:3px solid rgba(111,29,42,.4);outline-offset:-2px}
+.is-open .au-row td{background:#FBF3DF}
+.program-shell .au-table .au-detail td{
+  white-space:normal;overflow:visible;padding:10px 14px 14px 22px;background:#FDFBF7;
+  border-bottom:1px solid var(--pg2-line);box-shadow:inset 3px 0 0 #6F1D2A;
+}
+.au-detail .au-changes{min-width:0}
+.au-foot-end{justify-content:flex-end;padding:10px 16px 0}
+.au-card .pa-empty{padding:18px 16px}
+.au-card > .au-tz{padding:0 16px 12px}
+/* Narrow screens: each entry is a two-line card (time + action, then user · record · project). */
+@media (max-width: 720px){
+  .au-scroll{max-height:none;overflow:visible}
+  .au-table{min-width:0;table-layout:auto}
+  .au-table colgroup,.au-table thead{display:none}
+  .au-table,.au-table tbody{display:block}
+  .au-table .au-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;position:relative;padding:10px 52px 10px 12px;border-bottom:1px solid var(--pg2-line)}
+  .au-table .au-row::after{content:'';order:3;flex-basis:100%;height:0}
+  .program-shell .au-table .au-row td{display:block;padding:0;border:0;background:none;min-width:0}
+  .au-table tbody:nth-of-type(even) .au-row{background:#FCFAF6}
+  .au-table .is-open .au-row{background:#FBF3DF}
+  .au-table .au-c-time{order:1;font-size:12px;color:#6B5F5F}
+  .au-table .au-c-action{order:2;margin-left:auto;max-width:60%}
+  .au-table .au-c-user{order:4;flex:0 1 auto;max-width:40%}
+  .au-table .au-c-record{order:5;flex:1 1 0}
+  .au-table .au-c-project{order:6;flex:0 0 auto}
+  .au-table .au-c-record::before,.au-table .au-c-project:not(:empty)::before{content:'· ';color:#6B5F5F}
+  .program-shell .au-table td.au-c-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%)}
+  .au-table .au-detail{display:block}
+  .au-table .au-detail[hidden]{display:none}
+  .program-shell .au-table .au-detail td{display:block}
+}
 .au-time{white-space:nowrap;font-variant-numeric:tabular-nums;color:#2B2023}
 .au-link{color:#6F1D2A;font-weight:650;text-decoration:none}
 .au-link:hover{text-decoration:underline;text-underline-offset:2px}

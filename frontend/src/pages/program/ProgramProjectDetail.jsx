@@ -441,7 +441,7 @@ export default function ProgramProjectDetail() {
           <div>
             <div className="program-card-title">Recent activity</div>
           </div>
-          <Link className="program-card-link" to={`/program-audit?project=${project.id}`}>Audit trail</Link>
+          <Link className="program-card-link" to={`/program-audit?project=${project.id}`}>Audit log</Link>
         </div>
         {activity.length === 0 ? (
           <p className="pl-inbox-empty">No recorded activity yet.</p>

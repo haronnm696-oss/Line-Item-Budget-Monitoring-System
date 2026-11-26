@@ -54,7 +54,7 @@ export function menuOptions(actions, open) {
 }
 
 /**
- * One "Recent activity" line, worded like the Audit trail page
+ * One "Recent activity" line, worded like the Audit log page
  * (AuditEntryPresenter): "Release added — Release 1".
  */
 export function activityTitle(entry) {

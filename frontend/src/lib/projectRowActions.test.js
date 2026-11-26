@@ -65,7 +65,7 @@ test('menuOptions: choosing an option opens exactly its dialog', () => {
   assert.ok(options.every((option) => !('dialog' in option)));
 });
 
-test('recent activity reads like the Audit trail, never class names', () => {
+test('recent activity reads like the Audit log, never class names', () => {
   assert.equal(activityTitle({ action_label: 'Release added', record_label: 'Release 1' }), 'Release added — Release 1');
   assert.equal(activityTitle({ action_label: 'Line item added', record_label: null }), 'Line item added');
   const legacy = activityTitle({ action: 'created', record_type: 'ProjectTranche' });

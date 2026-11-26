@@ -70,7 +70,7 @@ function DecidedRow({ approval, onOpen, showProject }) {
         <RemarkBox text={approval.review_notes} />
       </div>
       <div className="pa-decided-side">
-        {/* The audit trail link lives in the detail panel. */}
+        {/* The audit log link lives in the detail panel. */}
         <button type="button" className="program-btn sm" onClick={() => onOpen(approval)}>View details</button>
       </div>
     </li>

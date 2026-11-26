@@ -14,7 +14,7 @@ export const PROGRAM_NAV = [
     items: [
       { to: '/program-approvals', label: 'Approvals', icon: 'approvals', badge: 'approvals' },
       { to: '/program-reports', label: 'Reports', icon: 'reports' },
-      { to: '/program-audit', label: 'Audit trail', icon: 'audit' },
+      { to: '/program-audit', label: 'Audit log', icon: 'audit' },
     ],
   },
   {
@@ -91,6 +91,11 @@ export const ROLE_NAV = {
       ],
     },
   ],
+};
+
+/** Browser tab names for pages that have no sidebar item (opened by link). */
+export const PAGE_NAMES = {
+  '/audit': 'Audit log',
 };
 
 /** Paths that have no page yet; they open the "Coming soon" page. */
