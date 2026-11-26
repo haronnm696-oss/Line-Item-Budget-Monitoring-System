@@ -3565,12 +3565,6 @@ select.signin-input:disabled{
 
 /* Overview: 3 KPI cards (Returned to you is the hero), recent list, one-row balancing. */
 .ld-page .pl-kpi-grid.ra-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-.program-shell .ra-kpi-returned .ra-fix-btn{
-  margin-top:auto;align-self:flex-start;min-height:44px;display:inline-flex;align-items:center;gap:6px;
-  background:#fff;color:var(--pg-brand);border-color:#fff;font-weight:700;text-decoration:none;
-}
-.program-shell .ra-kpi-returned .ra-fix-btn:hover{background:#FBF3DF}
-.program-shell .ra-kpi-returned .ra-fix-btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .ra-drafts-note{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:#FBF3DF;border:1px solid #EFE3C4;font-size:13px;color:var(--pg2-ink)}
 .ra-drafts-note a{color:var(--pg-brand);font-weight:700}
 .ra-recent{list-style:none;margin:0;padding:0}
