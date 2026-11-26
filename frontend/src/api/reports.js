@@ -13,6 +13,17 @@ export function downloadPayrollRegisterCsv(projectId, params = {}) {
   return downloadReportCsv(projectId, 'payroll-register', params);
 }
 
+/** { program_leader }: the "Approved by" name on program-wide printed reports (null when unknown). */
+export async function fetchProgramLeaderName() {
+  try {
+    const data = await apiGet(ENDPOINTS.reportSignatories);
+    return data?.program_leader ?? null;
+  } catch {
+    // The report still prints, with a blank signature line.
+    return null;
+  }
+}
+
 /** R&D Form B in the official layout (the PDF print view). */
 export function fetchFormB(projectId) {
   return apiGet(ENDPOINTS.formB(projectId));

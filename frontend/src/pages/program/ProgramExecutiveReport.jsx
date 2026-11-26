@@ -5,6 +5,10 @@ import { fetchProgramOverview } from '../../api/program';
 import { formatPct, peso } from '../../components/money';
 import { formatInManila } from '../../lib/datetime';
 import ProgramPill from '../../components/program/ProgramPill';
+import { fetchProgramLeaderName } from '../../api/reports';
+import { printHtmlDocument } from '../../lib/download';
+import { executiveReportHtml } from '../../lib/programReports';
+import { ROLE_MAP } from '../../lib/roles';
 
 function messageFor(error, fallback) {
   return error?.response?.data?.message || fallback;
@@ -47,21 +51,6 @@ export default function ProgramExecutiveReport() {
   const ready = result?.key === requestKey;
   const error = failure?.key === requestKey ? failure.message : '';
 
-  // "Download PDF" on the Reports page opens this view with ?print=1.
-  // Print once, after the report has rendered, then drop the flag so a
-  // reload does not print again.
-  useEffect(() => {
-    if (!autoPrint || !ready || printedRef.current) return;
-    printedRef.current = true;
-    const timer = window.setTimeout(() => {
-      window.print();
-      const next = new URLSearchParams(searchParams);
-      next.delete('print');
-      setSearchParams(next, { replace: true });
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [autoPrint, ready, searchParams, setSearchParams]);
-
   const payload = ready ? result.payload : null;
   const kpis = payload?.kpis ?? {};
   const projects = Array.isArray(payload?.projects) ? payload.projects : [];
@@ -70,6 +59,31 @@ export default function ProgramExecutiveReport() {
   const funderLabel = funder
     ? (funders.find((agency) => String(agency.id) === String(funder))?.label ?? `Funder #${funder}`)
     : 'All funders';
+
+  // The printed report: the official layout (lib/programReports.js), with
+  // the Program Leader as "Approved by" (a blank line if it cannot load).
+  async function printReport() {
+    if (!payload) return;
+    const programLeader = await fetchProgramLeaderName();
+    printHtmlDocument(executiveReportHtml({
+      payload,
+      funderLabel,
+      preparedBy: { name: user?.name, role: ROLE_MAP.PRG.label },
+      programLeader,
+    }), { title: `Executive report · ${funderLabel}` });
+  }
+
+  // "Download PDF" on the Reports page opens this view with ?print=1.
+  // Print once, after the report has loaded, then drop the flag so a
+  // reload does not print again.
+  useEffect(() => {
+    if (!autoPrint || !ready || printedRef.current) return;
+    printedRef.current = true;
+    printReport();
+    const next = new URLSearchParams(searchParams);
+    next.delete('print');
+    setSearchParams(next, { replace: true });
+  });
 
   // Same fields and fallbacks as the Overview KPI cards.
   const budget = Number(kpis.portfolio_budget) || 0;
@@ -95,7 +109,7 @@ export default function ProgramExecutiveReport() {
         <button
           type="button"
           className="program-btn primary"
-          onClick={() => window.print()}
+          onClick={printReport}
           disabled={!ready}
         >
           Print / Save as PDF
