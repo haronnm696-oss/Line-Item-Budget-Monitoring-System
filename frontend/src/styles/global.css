@@ -38,6 +38,10 @@
   --landing-on-brand-muted:#EDE4D6;
   --landing-on-gold:#3A0F19;
   --landing-focus:rgba(111,29,42,.4);
+  /* Motion (see "Motion" at the end of this file) */
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --dur-fast:150ms;
+  --dur:220ms;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -2001,13 +2005,13 @@ select.signin-input:disabled{
 .program-shell .program-btn:active,
 .program-shell .program-icon-btn:active{transform:translateY(0)}
 @media (prefers-reduced-motion: no-preference){
-  .program-shell .program-modal-overlay{animation:programFade .18s ease-out}
-  .program-shell .program-modal{animation:programPop .22s cubic-bezier(.2,.8,.25,1)}
-  .program-shell .program-user-dropdown{animation:programDrop .16s ease-out}
+  .program-shell .program-modal-overlay{animation:programFade var(--dur) var(--ease)}
+  .program-shell .program-modal{animation:programPop var(--dur) var(--ease)}
+  .program-shell .program-user-dropdown{transform-origin:top right;animation:programDrop var(--dur-fast) var(--ease)}
 }
 @keyframes programFade{from{opacity:0}to{opacity:1}}
-@keyframes programPop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-@keyframes programDrop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@keyframes programPop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+@keyframes programDrop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
 
 /* Reports KPI strip and tabs */
 .program-shell .program-kpi{
@@ -3883,3 +3887,154 @@ select.signin-input:disabled{
 .program-shell .ra-kpi-link{display:block;color:inherit;text-decoration:none;border-radius:6px}
 .program-shell .ra-kpi-link:focus-visible{outline:2px solid var(--pg-brand);outline-offset:2px}
 .program-shell .ra-kpi-split:hover{border-color:#D9C9B0}
+
+/* ==========================================================================
+   Motion. Presentation only: opacity/transform animations and color/shadow
+   transitions, using --ease / --dur-fast / --dur from :root. Nothing here
+   changes layout, sizes, spacing or colors at rest. Everything is turned off
+   under prefers-reduced-motion (block at the end); focus outlines are
+   untouched.
+   Overlays that unmount when closed (modals, menus, the notifications panel)
+   animate in only: an exit animation would need them to stay mounted.
+   ========================================================================== */
+
+/* Hover / focus / press: smooth state changes. */
+:where(.program-shell) :where(a){
+  transition:color var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease),
+    text-decoration-color var(--dur-fast) var(--ease);
+}
+.program-shell .program-btn,
+.program-shell .program-icon-btn,
+.program-shell .program-tab,
+.program-shell .program-nav a,
+.program-shell .program-collapse,
+.program-user-chip,
+.program-user-menu-item,
+.pu-menu-item,
+.pp-menu-item,
+.notif-item,
+.au-toggle,
+.btn,
+.auth-btn,
+.link-btn,
+.project-switch-btn,
+.file-field-button{
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.program-shell .program-table tbody tr,
+.program-pill,
+.au-pill{
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+.program-shell .program-card,
+.program-shell .program-kpi{
+  transition:box-shadow var(--dur) var(--ease),border-color var(--dur) var(--ease),transform var(--dur) var(--ease);
+}
+.au-toggle span,
+.program-user-caret{transition:transform var(--dur-fast) var(--ease)}
+
+/* Sidebar: the active background and gold bar cross-fade to the new item. */
+.program-shell .program-nav a{
+  transition:background-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),
+    color var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease);
+}
+@media (min-width: 901px){
+  .program-shell .program-sidebar{transition:width var(--dur) var(--ease)}
+}
+
+@media (prefers-reduced-motion: no-preference){
+  /* Buttons press in slightly. */
+  .program-shell .program-btn:active:not(:disabled),
+  .program-shell .program-icon-btn:active:not(:disabled),
+  .program-shell .program-tab:active,
+  .btn:active:not(:disabled),
+  .auth-btn:active:not(:disabled),
+  .project-switch-btn:active:not(:disabled),
+  .file-field-button:active:not(:disabled){transform:scale(.98)}
+
+  /* Clickable cards lift with a softer shadow. */
+  .program-shell a.program-card:hover,
+  .program-shell button.program-card:hover:not(:disabled),
+  .program-shell .ra-kpi-link:hover > .program-card{
+    transform:translateY(-2px);
+    box-shadow:0 1px 2px rgba(34,29,26,.04),0 14px 30px -20px rgba(34,29,26,.30);
+  }
+
+  /* Page change: the page (remounted per route) fades in and rises 6px.
+     The sidebar and header are outside .program-content and stay still.
+     Zero specificity, so an overlay or toast rendered at the page's top
+     level keeps its own animation. */
+  :where(.program-shell .program-content) > :where(*){animation:motionPageIn var(--dur) var(--ease)}
+
+  /* Sidebar labels fade back in when the sidebar expands. */
+  .program-sidebar:not(.is-collapsed) .program-brand-text,
+  .program-sidebar:not(.is-collapsed) .program-nav-text,
+  .program-sidebar:not(.is-collapsed) .program-collapse-text,
+  .program-sidebar:not(.is-collapsed) .program-nav-label span{animation:programFade var(--dur) var(--ease)}
+
+  /* Overlays fade + scale in from .97; backdrops fade. */
+  .program-backdrop{animation:programFade var(--dur) var(--ease)}
+  .notif-panel{transform-origin:top right;animation:programDrop var(--dur-fast) var(--ease)}
+  .pp-menu{transform-origin:top right;animation:programDrop var(--dur-fast) var(--ease)}
+  .pu-menu{transform-origin:top right;animation:programDrop var(--dur-fast) var(--ease)}
+  .pu-menu.is-start{transform-origin:top left}
+  /* A fixed ActionMenu measures its own size to place itself: a starting
+     scale would misplace it, so it only fades. */
+  .pu-menu[style*="fixed"]{animation-name:programFade}
+
+  /* Tooltip: fades in and out (it toggles display, so CSS can run the exit
+     too). Opacity only: Tip.jsx measures the bubble when it opens, and a
+     starting transform would shift where it lands. While fading out it
+     never takes clicks. */
+  .tip > .tip-bubble[role="tooltip"]{
+    opacity:0;
+    transition:opacity var(--dur-fast) var(--ease),display var(--dur-fast) allow-discrete;
+  }
+  .tip > .tip-bubble[role="tooltip"].is-open{opacity:1}
+  @starting-style{
+    .tip > .tip-bubble[role="tooltip"].is-open{opacity:0}
+  }
+
+  /* Audit log: an opened details row fades in and settles. */
+  .program-shell .au-table .au-detail:not([hidden]) > td{animation:motionReveal var(--dur) var(--ease)}
+}
+.tip > .tip-bubble[role="tooltip"]:not(.is-open){pointer-events:none}
+
+@keyframes motionPageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes motionReveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+/* Reduced motion: every change above is instant. */
+@media (prefers-reduced-motion: reduce){
+  :where(.program-shell) :where(a),
+  .program-shell .program-btn,
+  .program-shell .program-icon-btn,
+  .program-shell .program-tab,
+  .program-shell .program-nav a,
+  .program-shell .program-collapse,
+  .program-user-chip,
+  .program-user-menu-item,
+  .pu-menu-item,
+  .pp-menu-item,
+  .notif-item,
+  .au-toggle,
+  .au-toggle span,
+  .program-user-caret,
+  .btn,
+  .auth-btn,
+  .link-btn,
+  .project-switch-btn,
+  .file-field-button,
+  .program-shell .program-table tbody tr,
+  .program-pill,
+  .au-pill,
+  .program-shell .program-card,
+  .program-shell .program-kpi,
+  .program-shell .program-sidebar,
+  .program-sidebar{transition:none}
+  .program-shell .program-btn:hover,
+  .program-shell .program-icon-btn:hover{transform:none}
+}
