@@ -107,18 +107,32 @@ test('the search box comes first and is sent to the server as q after ~300 ms', 
   assert.equal(searchParam('   '), undefined);
 
   // Program Leader: q is the first filter, read from the URL and sent with paging.
-  assert.match(program, /const FILTERS = \['q', 'action', 'project', 'user', 'from', 'to'\]/);
+  assert.match(program, /const FILTERS = \['q', 'action', 'project', 'from', 'to'\]/);
   assert.match(program, /placeholder="Search user, record or action"/);
   assert.ok(program.indexOf('id="audit-search"') < program.indexOf('id="audit-action"'));
   assert.match(program, /next\.set\('q', value\);[\s\S]*?\}, SEARCH_DEBOUNCE_MS\);/);
   assert.match(program, /fetchProgramAudit\(\{ \.\.\.params, page: 1 \}/);
-  assert.match(program, /fetchProgramAudit\(\{ \.\.\.filters, page:/);
+  assert.match(program, /fetchProgramAudit\(\{ \.\.\.filters, user: legacyUser, page:/);
 
   // Project Leader / Finance: q on /api/audit, no search on the client.
   assert.match(leader, /placeholder="Search user, record or action"/);
   assert.match(leader, /new URLSearchParams\(\{ q: query \}\)/);
   assert.match(leader, /setTimeout\(\(\) => setQ\(search\), SEARCH_DEBOUNCE_MS\)/);
   assert.doesNotMatch(leader, /toLowerCase\(\)\.includes\(search/);
+});
+
+test('there is no User dropdown; links to a user put the name in the search box', () => {
+  for (const page of [program, leader]) {
+    assert.doesNotMatch(page, /audit-user|All users|<label[^>]*>User<\/label>/);
+  }
+  // "View in audit log" from Users and roles opens the search for that name.
+  const manage = source('components/program/ProgramUserManage.jsx');
+  assert.match(manage, /to=\{`\/program-audit\?q=\$\{encodeURIComponent\(user\.name\)\}`\}/);
+  assert.doesNotMatch(manage, /program-audit\?user=/);
+  // An old ?user=<id> URL still filters until the name is known, then becomes q=<name>.
+  assert.match(program, /const legacyUser = searchParams\.get\('user'\) \?\? ''/);
+  assert.match(program, /next\.delete\('user'\);\s*next\.set\('q', name\);/);
+  assert.match(program, /\[\.\.\.FILTERS, 'user'\]\.forEach\(\(key\) => next\.delete\(key\)\)/);
 });
 
 test('an empty result says "No entries match" with Clear filters; paging text stays', () => {

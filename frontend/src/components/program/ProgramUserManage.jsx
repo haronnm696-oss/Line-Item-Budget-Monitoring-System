@@ -121,7 +121,7 @@ export function ManageMenu({ user, onEdit, onRole, onAssignments, onStatus }) {
           >
             Edit project assignments
           </button>
-          <Link role="menuitem" className="pu-menu-item" to={`/program-audit?user=${user.id}`} onClick={() => setOpen(false)}>
+          <Link role="menuitem" className="pu-menu-item" to={`/program-audit?q=${encodeURIComponent(user.name)}`} onClick={() => setOpen(false)}>
             View in audit log
           </Link>
           <div className="pu-menu-sep" role="separator" />
