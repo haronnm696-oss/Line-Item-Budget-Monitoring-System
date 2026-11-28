@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import UserAvatar from '../components/UserAvatar';
 import FileField from '../components/FileField';
@@ -10,11 +10,14 @@ import {
   AVATAR_READ_ERROR,
   avatarFileError,
   prepareAvatarFile,
+  anchoredOffset,
   centeredOffset,
   clampOffset,
+  clampZoom,
   coverScale,
   cropRect,
-  zoomOffset,
+  framePoint,
+  wheelZoomFactor,
 } from '../lib/avatar';
 
 const FRAME = 240; // crop square on screen (px)
@@ -39,37 +42,112 @@ function errorText(error, fallback) {
   return failureMessage(response?.data, response?.status ?? error?.status ?? 0, fallback);
 }
 
-/** Square crop with zoom: drag or use the arrow keys to move, the slider to zoom. */
+const CENTER = { x: FRAME / 2, y: FRAME / 2 };
+
+/**
+ * Square crop with zoom. Drag (one finger or the mouse) or the arrow keys move
+ * the photo; the wheel, a trackpad or touch pinch, the slider and +/- zoom.
+ * Wheel and pinch zoom keep the point under the cursor / pinch center still.
+ */
 function AvatarCropper({ image, onCancel, onSave, saving }) {
   const width = image.naturalWidth;
   const height = image.naturalHeight;
   const base = coverScale(width, height, FRAME);
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState(() => centeredOffset(width, height, base, FRAME));
-  const drag = useRef(null);
+  // One state object so wheel/pinch/slider/keys always start from the latest view.
+  const [view, setView] = useState(() => ({ zoom: 1, offset: centeredOffset(width, height, base, FRAME) }));
+  const { zoom, offset } = view;
+  const frameRef = useRef(null);
+  const pointers = useRef(new Map()); // pointerId -> last { x, y } (client px)
   const scale = base * zoom;
 
-  function changeZoom(next) {
-    const value = Math.min(MAX_ZOOM, Math.max(1, next));
-    setOffset((current) => zoomOffset(current, scale, base * value, width, height, FRAME));
-    setZoom(value);
-  }
+  // Zoom to `next(currentZoom)`, keeping `point` (frame px) in place.
+  const zoomTo = useCallback((next, point = CENTER, pan = { x: 0, y: 0 }) => {
+    setView((current) => {
+      const value = clampZoom(next(current.zoom), MAX_ZOOM);
+      const moved = anchoredOffset(current.offset, base * current.zoom, base * value, point);
+      const nextOffset = clampOffset({ x: moved.x + pan.x, y: moved.y + pan.y }, width, height, base * value, FRAME);
+      return { zoom: value, offset: nextOffset };
+    });
+  }, [base, width, height]);
 
   function move(dx, dy) {
-    setOffset((current) => clampOffset({ x: current.x + dx, y: current.y + dy }, width, height, scale, FRAME));
+    setView((current) => ({
+      ...current,
+      offset: clampOffset({ x: current.offset.x + dx, y: current.offset.y + dy }, width, height, base * current.zoom, FRAME),
+    }));
   }
+
+  // Wheel and trackpad pinch (ctrl+wheel). Native listener: React's onWheel is
+  // passive, and the page must not scroll (or browser-zoom) over the frame.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return undefined;
+    function onWheel(event) {
+      event.preventDefault();
+      const point = framePoint(event.clientX, event.clientY, frame.getBoundingClientRect(), FRAME);
+      const factor = wheelZoomFactor(event.deltaY, event.deltaMode, event.ctrlKey);
+      zoomTo((current) => current * factor, point);
+    }
+    // Safari's trackpad pinch sends gesture events instead of ctrl+wheel.
+    let gestureScale = 1;
+    function onGestureStart(event) {
+      event.preventDefault();
+      gestureScale = 1;
+    }
+    function onGestureChange(event) {
+      event.preventDefault();
+      const factor = event.scale / gestureScale;
+      gestureScale = event.scale;
+      const point = framePoint(event.clientX, event.clientY, frame.getBoundingClientRect(), FRAME);
+      zoomTo((current) => current * factor, point);
+    }
+    frame.addEventListener('wheel', onWheel, { passive: false });
+    frame.addEventListener('gesturestart', onGestureStart);
+    frame.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      frame.removeEventListener('wheel', onWheel);
+      frame.removeEventListener('gesturestart', onGestureStart);
+      frame.removeEventListener('gesturechange', onGestureChange);
+    };
+  }, [zoomTo]);
 
   function onPointerDown(event) {
     event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { x: event.clientX, y: event.clientY };
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
   }
 
   function onPointerMove(event) {
-    if (!drag.current) return;
-    const dx = event.clientX - drag.current.x;
-    const dy = event.clientY - drag.current.y;
-    drag.current = { x: event.clientX, y: event.clientY };
-    move(dx, dy);
+    const active = pointers.current;
+    const last = active.get(event.pointerId);
+    if (!last) return;
+    const now = { x: event.clientX, y: event.clientY };
+
+    if (active.size === 1) {
+      active.set(event.pointerId, now);
+      move(now.x - last.x, now.y - last.y);
+      return;
+    }
+
+    // Two fingers: zoom by the change in distance, anchored at their midpoint,
+    // and pan by how far the midpoint moved.
+    const [a, b] = [...active.keys()].slice(0, 2);
+    if (event.pointerId !== a && event.pointerId !== b) return;
+    const before = [active.get(a), active.get(b)];
+    active.set(event.pointerId, now);
+    const after = [active.get(a), active.get(b)];
+    const distance = (p) => Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    const middle = (p) => ({ x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 });
+    const oldDistance = distance(before);
+    if (oldDistance < 1) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const from = framePoint(middle(before).x, middle(before).y, rect, FRAME);
+    const to = framePoint(middle(after).x, middle(after).y, rect, FRAME);
+    const factor = distance(after) / oldDistance;
+    zoomTo((current) => current * factor, from, { x: to.x - from.x, y: to.y - from.y });
+  }
+
+  function onPointerEnd(event) {
+    pointers.current.delete(event.pointerId);
   }
 
   function onKeyDown(event) {
@@ -79,10 +157,10 @@ function AvatarCropper({ image, onCancel, onSave, saving }) {
       move(...moves[event.key]);
     } else if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      changeZoom(zoom + 0.1);
-    } else if (event.key === '-') {
+      zoomTo((current) => current + 0.1);
+    } else if (event.key === '-' || event.key === '_') {
       event.preventDefault();
-      changeZoom(zoom - 0.1);
+      zoomTo((current) => current - 0.1);
     }
   }
 
@@ -105,11 +183,12 @@ function AvatarCropper({ image, onCancel, onSave, saving }) {
         style={{ width: FRAME, height: FRAME }}
         tabIndex={0}
         role="group"
-        aria-label="Photo position. Drag, or use the arrow keys to move it; plus and minus to zoom."
+        aria-label="Photo position. Drag, or use the arrow keys to move it; scroll, pinch, or plus and minus to zoom."
+        ref={frameRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={() => { drag.current = null; }}
-        onPointerCancel={() => { drag.current = null; }}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
         onKeyDown={onKeyDown}
       >
         <img
@@ -119,7 +198,7 @@ function AvatarCropper({ image, onCancel, onSave, saving }) {
           style={{ width: width * scale, height: height * scale, transform: `translate(${offset.x}px, ${offset.y}px)` }}
         />
       </div>
-      <p className="profile-hint">Drag the photo to choose what shows inside the square.</p>
+      <p className="profile-hint">Drag to move · scroll or pinch to zoom</p>
 
       <label className="profile-zoom" htmlFor="profile-zoom">
         <span>Zoom</span>
@@ -130,7 +209,7 @@ function AvatarCropper({ image, onCancel, onSave, saving }) {
           max={MAX_ZOOM}
           step="0.01"
           value={zoom}
-          onChange={(event) => changeZoom(Number(event.target.value))}
+          onChange={(event) => { const value = Number(event.target.value); zoomTo(() => value); }}
         />
       </label>
 
