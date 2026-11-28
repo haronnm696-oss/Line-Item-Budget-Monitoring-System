@@ -59,17 +59,48 @@ export function centeredOffset(width, height, scale, frame) {
   return { x: (frame - width * scale) / 2, y: (frame - height * scale) / 2 };
 }
 
+/** Zoom stays between 1 (image just covers the frame) and `max`. */
+export function clampZoom(zoom, max) {
+  if (!Number.isFinite(zoom)) return 1;
+  return Math.min(max, Math.max(1, zoom));
+}
+
+/**
+ * Offset after a scale change that keeps the image point under `point`
+ * (frame px) under that same point. Not clamped.
+ */
+export function anchoredOffset(offset, oldScale, newScale, point) {
+  const ratio = newScale / oldScale;
+  return { x: point.x - (point.x - offset.x) * ratio, y: point.y - (point.y - offset.y) * ratio };
+}
+
+/** New offset after a zoom change anchored at `point` (frame px), clamped. */
+export function zoomAt(offset, oldScale, newScale, point, width, height, frame) {
+  return clampOffset(anchoredOffset(offset, oldScale, newScale, point), width, height, newScale, frame);
+}
+
 /** New offset after a zoom change, keeping the frame's center in place. */
 export function zoomOffset(offset, oldScale, newScale, width, height, frame) {
   const center = frame / 2;
-  const ratio = newScale / oldScale;
-  return clampOffset(
-    { x: center - (center - offset.x) * ratio, y: center - (center - offset.y) * ratio },
-    width,
-    height,
-    newScale,
-    frame,
-  );
+  return zoomAt(offset, oldScale, newScale, { x: center, y: center }, width, height, frame);
+}
+
+/** A screen point (clientX/Y) in frame px, for a frame drawn at `rect`. */
+export function framePoint(clientX, clientY, rect, frame) {
+  const sx = rect.width ? frame / rect.width : 1;
+  const sy = rect.height ? frame / rect.height : 1;
+  return { x: (clientX - rect.left) * sx, y: (clientY - rect.top) * sy };
+}
+
+/**
+ * Zoom multiplier for one wheel event. Scrolling up/away (negative deltaY)
+ * zooms in. ctrlKey marks a trackpad pinch, whose deltas are small, so it
+ * zooms faster per pixel. deltaMode 1 = lines, 2 = pages.
+ */
+export function wheelZoomFactor(deltaY, deltaMode = 0, ctrlKey = false) {
+  const pixels = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 240 : deltaY;
+  const step = Math.max(-120, Math.min(120, Number(pixels) || 0));
+  return Math.exp(-step * (ctrlKey ? 0.01 : 0.0015));
 }
 
 /** The square of the source image (image px) that the frame shows. */
