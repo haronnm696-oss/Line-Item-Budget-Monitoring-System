@@ -1,4 +1,4 @@
-# Deployment: Vercel (frontend) + Render (backend) + Aiven MySQL
+# Deployment: Vercel (frontend) + Render (backend) + TiDB Cloud Starter
 
 This project deploys as a **same-origin** app:
 
@@ -7,13 +7,102 @@ Browser
   -> Vercel (React/Vite)
        -> /api/* and /sanctum/* rewritten to Render
             -> Laravel 8 (Docker) on Render
-                 -> Aiven MySQL (free tier)
+                 -> TiDB Cloud Starter (MySQL-compatible, free)
 ```
 
 The Vercel proxy keeps Sanctum cookies first-party, avoiding cross-site cookie
 blocking in modern browsers.
 
-## 1. Free database on Aiven
+## 1. Free database on TiDB Cloud Starter
+
+Production moved from Aiven MySQL (trial ended) to TiDB Cloud Starter on
+2026-11-28, starting from an empty database.
+
+1. Create a **Starter** cluster in the region closest to Render (Singapore,
+   `ap-southeast-1`, for the Philippines).
+2. Under **Connect**, note the host, port (`4000`) and user (it looks like
+   `<prefix>.root`), and generate a password. Create the database
+   `lib_monitoring` (`CREATE DATABASE lib_monitoring;` in the SQL editor).
+3. TiDB Starter only accepts TLS, and its certificate is publicly trusted
+   (ISRG Root X1). No CA file needs to be downloaded: set `DB_SSL=true` and the
+   app uses the system CA bundle (`/etc/ssl/certs/ca-certificates.crt` in the
+   Docker image, from the `ca-certificates` package).
+4. The tables are created by `php artisan migrate`, which the container runs
+   on boot. The five roles are seeded by the roles migration. Do **not** run
+   `php artisan db:seed` on production: `DatabaseSeeder` loads demo users and
+   projects. Funders are added by the Program Leader under Funders, and the
+   college/department list is built into the app (`config/academic_units.php`).
+5. Create the first Program Leader (registration can never create one):
+
+   ```bash
+   cd backend
+   php artisan lib:create-program-leader --env=tidb
+   ```
+
+   It asks for first name, last name and email, then the password twice with
+   hidden input. It refuses if an active Program Leader already exists and
+   writes a `created` audit entry. Every other account registers through the
+   app and is approved by the Program Leader.
+
+### TiDB compatibility notes
+
+- TiDB rejects an `ALTER TABLE` whose `AFTER` names a column added in the same
+  statement. MySQL connections therefore use `App\Database\MySqlSchemaGrammar`,
+  which sends one `ALTER TABLE ... ADD` per column (same result on MySQL).
+- TiDB Starter runs in strict mode with `max_allowed_packet` = 64 MB, and
+  `document_contents.content` is a `mediumblob`, as on MySQL.
+- A single TiDB row is limited to about 6 MB; documents are capped at 5 MB, so
+  uploads fit.
+
+### Running artisan against TiDB from a Windows laptop
+
+Put the TiDB values in `backend/.env.tidb` (git-ignored by `backend/.env.*`;
+never commit it). Laravel reads it with `--env=tidb`:
+
+```text
+DB_CONNECTION=mysql
+DB_HOST=gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+DB_PORT=4000
+DB_DATABASE=lib_monitoring
+DB_USERNAME=<prefix>.root
+DB_PASSWORD=<password, without < > around it>
+DB_SSL=true
+DB_SSL_CA=C:\xampp\apache\bin\curl-ca-bundle.crt
+```
+
+Windows has no `/etc/ssl/certs`, so `DB_SSL_CA` points at a PEM bundle that
+contains ISRG Root X1. XAMPP ships one at `C:\xampp\apache\bin\curl-ca-bundle.crt`
+(Git for Windows has `C:\Program Files\Git\mingw64\etc\ssl\certs\ca-bundle.crt`).
+Reference the file in place; do not copy a CA bundle into the repository.
+
+```bash
+cd backend
+php -d extension=gd artisan migrate --env=tidb
+```
+
+(`-d extension=gd` is needed only if XAMPP's `php.ini` leaves `extension=gd`
+commented out.) Laravel prints the `PDO` constructor arguments, including the
+password, in the stack trace of a connection error, so do not paste that
+output anywhere.
+
+### Database TLS variables
+
+| Variable | Example | Meaning |
+|---|---|---|
+| `DB_SSL` | `true` | Connect over TLS and verify the server certificate against a CA bundle. |
+| `DB_SSL_CA` | `C:\xampp\apache\bin\curl-ca-bundle.crt` | Optional CA file. With `DB_SSL=true` and nothing set, the system bundle (`/etc/ssl/certs/ca-certificates.crt`) is used. |
+| `AIVEN_CA_CERT_BASE64` | base64 of a CA `.pem` | Legacy, for a server with a private CA such as Aiven. The entrypoint decodes it into `MYSQL_ATTR_SSL_CA`, which wins over the system bundle, so **leave it unset for TiDB**. |
+| `MYSQL_ATTR_SSL_CA` | `/path/ca.pem` | Legacy explicit CA path; same precedence as above. |
+
+CA lookup order (`backend/config/database.php`): `DB_SSL_CA`, then
+`MYSQL_ATTR_SSL_CA` (or the decoded `AIVEN_CA_CERT_BASE64`), then, with
+`DB_SSL=true` only, the system bundle. Without `DB_SSL`, the entrypoint still
+falls back to the Aiven `ca.pem` bundled in the image, as before.
+
+## 1a. Legacy: Aiven MySQL
+
+The Aiven service is powered off. These steps are kept for restoring an old
+dump into a MySQL server.
 
 1. Create an Aiven account and a **MySQL** service on the **Free** plan.
 2. Pick the region closest to your Render region (Singapore is a good default
@@ -87,15 +176,15 @@ LOG_CHANNEL=stderr
 LOG_LEVEL=error
 
 DB_CONNECTION=mysql
-DB_HOST=<aiven-host>
-DB_PORT=<aiven-port>
-DB_DATABASE=lib_monitoring_system
-DB_USERNAME=<aiven-user>
-DB_PASSWORD=<aiven-password>
+DB_HOST=<tidb-host, e.g. gateway01.ap-southeast-1.prod.aws.tidbcloud.com>
+DB_PORT=4000
+DB_DATABASE=lib_monitoring
+DB_USERNAME=<tidb-user, e.g. xxxxxxxx.root>
+DB_PASSWORD=<tidb-password>
 
-# Aiven TLS. Optional: a CA certificate is already bundled with the image.
-# Override it by pasting the base64-encoded ca.pem here.
-AIVEN_CA_CERT_BASE64=<base64 of ca.pem>
+# TiDB TLS: verify against the image's system CA bundle.
+# Do not set AIVEN_CA_CERT_BASE64 or MYSQL_ATTR_SSL_CA (see section 1).
+DB_SSL=true
 
 SESSION_DRIVER=database
 SESSION_SECURE_COOKIE=true
@@ -157,7 +246,7 @@ Generate `APP_KEY` locally:
 php artisan key:generate --show
 ```
 
-Encode the Aiven CA certificate:
+Legacy (Aiven only): encode the Aiven CA certificate:
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("ca.pem"))
@@ -172,10 +261,12 @@ base64 -w 0 ca.pem
 The container entrypoint will:
 
 - Bind Apache to Render's `$PORT`.
-- Resolve a usable Aiven CA certificate (from `MYSQL_ATTR_SSL_CA`, the decoded
-  `AIVEN_CA_CERT_BASE64`, or the certificate bundled with the image).
-- Run `php artisan migrate --force` (with a short retry loop for Aiven idle
-  power-off), creating the `sessions` table.
+- Resolve the database CA: `MYSQL_ATTR_SSL_CA` or the decoded
+  `AIVEN_CA_CERT_BASE64` if set; otherwise, with `DB_SSL=true`, the system CA
+  bundle (logged as `[db-tls] DB_SSL=true, using the system CA bundle`);
+  otherwise the Aiven certificate bundled with the image.
+- Run `php artisan migrate --force` (with a short retry loop), creating all
+  tables on a fresh database.
 - Start Apache.
 
 Because the entrypoint caches Laravel configuration, changing an environment
@@ -340,9 +431,9 @@ start. Confirm that the next boot log has no `[demo-assign]` or
 
 - Render Free sleeps after 15 minutes idle. The first request can take about a
   minute; upgrading the backend to Render Starter removes the sleep.
-- Aiven Free may power off after inactivity; power it back on in the Aiven
-  console before redeploying. `max_connections` is capped at 76, so keep the
-  worker count low (the shipped `mpm_prefork.conf` uses 15 workers).
+- TiDB Cloud Starter is free up to its monthly request-unit and storage
+  quota; check usage in the TiDB Cloud console. Keep the worker count low
+  (the shipped `mpm_prefork.conf` uses 15 workers).
 - For local testing, `MAIL_MAILER=log` writes the reset link to
   `storage/logs/laravel.log`. Production should use `MAIL_MAILER=brevo` (SMTP is blocked on Render's free tier).
 - Render's filesystem is ephemeral. Uploaded documents are safe because
@@ -370,10 +461,11 @@ start. Confirm that the next boot log has no `[demo-assign]` or
 Never commit:
 
 
-- `backend/.env`
+- `backend/.env`, `backend/.env.tidb` (any `backend/.env.*` except `.env.example`)
+- `backend/phpunit.mysql.xml`
 - `backups/`
 - the SQL dump
-- Aiven passwords
+- TiDB and Aiven passwords
 - the base64 CA secret
 
 The repository root `.gitignore` already excludes these paths.

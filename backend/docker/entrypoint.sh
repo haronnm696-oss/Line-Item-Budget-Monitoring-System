@@ -39,8 +39,23 @@ if [ -z "${CA_FILE}" ] && [ -n "${AIVEN_CA_CERT_BASE64:-}" ]; then
         fi
     fi
 fi
-# 3. Fall back to the CA certificate bundled with the image.
-if [ -z "${CA_FILE}" ]; then
+# 3. Fall back to the CA certificate bundled with the image (Aiven's), unless
+#    DB_SSL=true: then config/database.php uses the system CA bundle, which
+#    publicly trusted servers such as TiDB Cloud need.
+DB_SSL_ON=0
+case "$(printf '%s' "${DB_SSL:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) DB_SSL_ON=1 ;;
+esac
+if [ -z "${CA_FILE}" ] && [ "${DB_SSL_ON}" = "1" ]; then
+    if [ -n "${DB_SSL_CA:-}" ] && is_pem_cert "${DB_SSL_CA}"; then
+        echo "[db-tls] DB_SSL=true, using DB_SSL_CA"
+    elif is_pem_cert /etc/ssl/certs/ca-certificates.crt; then
+        echo "[db-tls] DB_SSL=true, using the system CA bundle"
+    else
+        echo "[db-tls] WARNING: DB_SSL=true but no CA bundle found; TLS connections will fail."
+    fi
+fi
+if [ -z "${CA_FILE}" ] && [ "${DB_SSL_ON}" != "1" ]; then
     if is_pem_cert /var/www/html/ca.pem; then
         CA_FILE=/var/www/html/ca.pem
     fi
@@ -71,7 +86,7 @@ max_attempts=5
 until php artisan migrate --force; do
     if [ "$attempt" -ge "$max_attempts" ]; then
         echo "FATAL: database migrations failed after $max_attempts attempts."
-        echo "Ensure the Aiven import is complete and the service is powered on."
+        echo "Check the DB_* variables and that the database service is reachable."
         exit 1
     fi
     echo "Migration attempt $attempt failed; retrying in 5s..."

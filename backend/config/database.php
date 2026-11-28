@@ -2,6 +2,31 @@
 
 use Illuminate\Support\Str;
 
+/*
+| MySQL TLS. The CA file is picked in this order:
+|   1. DB_SSL_CA, when it points at a PEM file.
+|   2. MYSQL_ATTR_SSL_CA, when it points at a PEM file (the Docker entrypoint
+|      sets it from AIVEN_CA_CERT_BASE64 for a private CA such as Aiven's).
+|   3. With DB_SSL=true only: the system CA bundle, for servers whose
+|      certificate is publicly trusted (TiDB Cloud).
+| DB_SSL=true also makes PDO verify the server certificate.
+*/
+$isPemFile = static function ($path): bool {
+    return is_string($path) && $path !== '' && is_file($path)
+        && strpos((string) @file_get_contents($path, false, null, 0, 65536), 'BEGIN CERTIFICATE') !== false;
+};
+$dbSsl = filter_var(env('DB_SSL', false), FILTER_VALIDATE_BOOLEAN);
+$dbSslCa = null;
+foreach (array_merge(
+    [env('DB_SSL_CA'), env('MYSQL_ATTR_SSL_CA')],
+    $dbSsl ? ['/etc/ssl/certs/ca-certificates.crt', '/etc/pki/tls/certs/ca-bundle.crt', '/etc/ssl/cert.pem'] : []
+) as $candidate) {
+    if ($isPemFile($candidate)) {
+        $dbSslCa = $candidate;
+        break;
+    }
+}
+
 return [
 
     /*
@@ -59,7 +84,8 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => ($sslCa = env('MYSQL_ATTR_SSL_CA')) && is_string($sslCa) && file_exists($sslCa) && strpos((string) @file_get_contents($sslCa), 'BEGIN CERTIFICATE') !== false ? $sslCa : null,
+                PDO::MYSQL_ATTR_SSL_CA => $dbSslCa,
+                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => $dbSsl && $dbSslCa ? true : null,
                 // Aiven requires sql_require_primary_key = 0 for tables without a
                 // primary key (e.g. password_resets). Disable it per connection.
                 PDO::MYSQL_ATTR_INIT_COMMAND => 'SET SESSION sql_require_primary_key = 0',
