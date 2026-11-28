@@ -46,14 +46,14 @@ const CENTER = { x: FRAME / 2, y: FRAME / 2 };
 
 /**
  * Square crop with zoom. Drag (one finger or the mouse) or the arrow keys move
- * the photo; the wheel, a trackpad or touch pinch, the slider and +/- zoom.
+ * the photo; the wheel, a trackpad or touch pinch, and +/- (or =/_) zoom.
  * Wheel and pinch zoom keep the point under the cursor / pinch center still.
  */
 function AvatarCropper({ image, onCancel, onSave, saving }) {
   const width = image.naturalWidth;
   const height = image.naturalHeight;
   const base = coverScale(width, height, FRAME);
-  // One state object so wheel/pinch/slider/keys always start from the latest view.
+  // One state object so wheel/pinch/keys always start from the latest view.
   const [view, setView] = useState(() => ({ zoom: 1, offset: centeredOffset(width, height, base, FRAME) }));
   const { zoom, offset } = view;
   const frameRef = useRef(null);
@@ -183,7 +183,7 @@ function AvatarCropper({ image, onCancel, onSave, saving }) {
         style={{ width: FRAME, height: FRAME }}
         tabIndex={0}
         role="group"
-        aria-label="Photo position. Drag, or use the arrow keys to move it; scroll, pinch, or plus and minus to zoom."
+        aria-label="Photo position. Drag or use the arrow keys to move it. Scroll, pinch, or use the + and − keys to zoom."
         ref={frameRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -199,19 +199,6 @@ function AvatarCropper({ image, onCancel, onSave, saving }) {
         />
       </div>
       <p className="profile-hint">Drag to move · scroll or pinch to zoom</p>
-
-      <label className="profile-zoom" htmlFor="profile-zoom">
-        <span>Zoom</span>
-        <input
-          id="profile-zoom"
-          type="range"
-          min="1"
-          max={MAX_ZOOM}
-          step="0.01"
-          value={zoom}
-          onChange={(event) => { const value = Number(event.target.value); zoomTo(() => value); }}
-        />
-      </label>
 
       <div className="profile-actions">
         <button type="button" className="program-btn primary" onClick={save} disabled={saving}>

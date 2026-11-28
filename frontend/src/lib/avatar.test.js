@@ -170,13 +170,17 @@ test('screen points map to frame px even when the frame is drawn smaller', () =>
   assert.deepEqual(framePoint(160, 110, { left: 100, top: 50, width: 120, height: 120 }, 240), { x: 120, y: 120 });
 });
 
-test('the cropper zooms with the wheel and pinch, keeps the slider in sync, and shows the hint', () => {
+test('the cropper zooms with the wheel, pinch and +/- keys (no slider), and shows the hint', () => {
   const page = source('../pages/Profile.jsx');
   assert.match(page, /addEventListener\('wheel', onWheel, \{ passive: false \}\)/);
   assert.match(page, /event\.preventDefault\(\);\s*const point = framePoint/);
-  assert.match(page, /value=\{zoom\}/);
-  assert.match(page, /event\.key === '\+'/);
-  assert.match(page, /event\.key === '-'/);
+  assert.doesNotMatch(page, /type="range"/);
+  assert.doesNotMatch(page, /profile-zoom/);
+  assert.doesNotMatch(source('../styles/global.css'), /\.profile-zoom/);
+  // The crop area takes focus so keyboard users can zoom and move.
+  assert.match(page, /className="profile-crop-frame"[\s\S]*?tabIndex=\{0\}[\s\S]*?aria-label="[^"]*\+ and − keys to zoom[^"]*"[\s\S]*?onKeyDown=\{onKeyDown\}/);
+  assert.match(page, /event\.key === '\+' \|\| event\.key === '='/);
+  assert.match(page, /event\.key === '-' \|\| event\.key === '_'/);
   assert.match(page, /Drag to move · scroll or pinch to zoom/);
   assert.match(page, /const OUTPUT = 512;/);
 });

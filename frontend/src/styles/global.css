@@ -1416,8 +1416,6 @@ select.signin-input:disabled{
   box-shadow:0 0 0 999px rgba(43,32,35,.35);
 }
 .profile-hint{margin:0;font-size:12.5px;color:var(--pg-muted)}
-.profile-zoom{display:flex;align-items:center;gap:12px;min-height:44px;width:100%;max-width:240px;font-size:13px;font-weight:600;color:var(--pg-ink)}
-.profile-zoom input{flex:1;accent-color:#6F1D2A}
 
 .program-main{display:flex;flex-direction:column;min-width:0}
 .program-topbar{
