@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Database\MySqlConnection;
 use App\Mail\Transport\BrevoTransport;
 use App\Models\Expense;
 use App\Models\LibCategory;
@@ -11,6 +12,7 @@ use App\Models\ProjectTranche;
 use App\Models\ProjectUser;
 use App\Models\User;
 use App\Observers\AuditObserver;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -23,7 +25,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        // MySQL connections use a schema grammar that also works on TiDB
+        // (one ALTER TABLE per added column; see App\Database\MySqlSchemaGrammar).
+        Connection::resolverFor('mysql', function ($connection, $database, $prefix, $config) {
+            return new MySqlConnection($connection, $database, $prefix, $config);
+        });
     }
 
     /**

@@ -59,7 +59,8 @@ Local mail testing: set `MAIL_MAILER=log` in `backend/.env`; reset links land in
 ### Deployment (see `DEPLOYMENT.md`)
 - Same-origin setup: Vercel serves the frontend and rewrites `/api/*`, `/sanctum/*`, `/storage/*` to the Render backend (`frontend/vercel.json`), keeping Sanctum cookies first-party. Production uses `VITE_API_URL=/`.
 - Backend runs as a Docker image on Render (`backend/Dockerfile`, `backend/docker/entrypoint.sh`): binds Apache to `$PORT`, resolves the Aiven CA cert, runs `php artisan migrate --force`, caches config (env changes need a redeploy). Health check `/up`.
-- Aiven MySQL has `sql_require_primary_key = 1`; SQL dumps in `backups/` need it disabled on import.
+- Production database is TiDB Cloud Starter (MySQL-compatible, TLS via `DB_SSL=true`); the old Aiven MySQL is powered off. TiDB rejects an `ALTER TABLE` whose `AFTER` names a column added in the same statement, so MySQL connections use `App\Database\MySqlSchemaGrammar` (one `ADD` per statement). The first Program Leader is created with `php artisan lib:create-program-leader`.
+- Aiven MySQL had `sql_require_primary_key = 1`; SQL dumps in `backups/` need it disabled on import.
 
 ## Conventions
 
